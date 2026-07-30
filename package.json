@@ -1,0 +1,18 @@
+{
+  "scripts": {
+    "lint": "eslint .",
+    "test": "bun test",
+    "yafsd": "bun run src/yafsd.ts",
+    "yash": "bun run src/yash.ts"
+  },
+  "dependencies": {
+    "ohm-js": "^17.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
+    "jiti": "^2.7.0",
+    "typescript-eslint": "^8.65.0"
+  }
+}

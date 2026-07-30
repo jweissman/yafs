@@ -1,0 +1,33 @@
+Yash {
+  Command = CoreExp ">" path        -- redirect
+          | CoreExp                 -- plain
+  CoreExp = FunCall
+  FunCall = identifier Arg*
+  Arg = ShellEscape
+      | variable
+      | doubleQuoted
+      | singleQuoted
+      | path
+      | identifier
+  ShellEscape = "$(" Exp ")"
+
+  Exp = AddExp
+  AddExp = AddExp "+" PriExp  -- plus
+           | AddExp "-" PriExp  -- minus
+           | PriExp
+  PriExp = "(" Exp ")"  -- paren
+           | number
+
+  path = "/"? pathSegment ("/" pathSegment)* "/"?  -- segments
+       | "/"                                  -- root
+  pathSegment = pathChar+
+  pathChar = letter | digit | "." | "-" | "_"
+  identifier = letter (letter | digit)*
+  variable = "$" identifier
+  singleQuoted = "'" singleChar* "'"
+  singleChar = ~"'" any
+  doubleQuoted = "\"" doublePart* "\""
+  doublePart = variable | doubleChar
+  doubleChar = ~("\"" | "$") any
+  number = digit+
+}
