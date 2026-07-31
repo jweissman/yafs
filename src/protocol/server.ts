@@ -2,16 +2,13 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 
 import Yafs from '../index'
-import { type ExecutionResult } from '../types/ExecutionResult'
 import { NodeStore } from '../vfs/NodeStore'
 import { VfsOperation } from '../vfs/VfsOperation'
 import { Journal } from './Journal'
 import { MountManager } from '../mounts/MountManager'
-import { PROTOCOL_VERSION } from './version'
+import { attachLines, parseRequest, persistenceFailure, requestFailure, respond,
+  Request } from './Framing'
 
-type Request = { version: number, id: number, command: string }
-type Response = { version: number, id: number, result: ExecutionResult }
-type ProtocolFailure = { version: number, id: number, error: { code: string, message: string } }
 type StartOptions = { walPath?: string, dataDir?: string, port?: number, host?: string }
 
 export class YafsServer {
@@ -70,12 +67,12 @@ export class YafsServer {
   private async executeLine(session: Yafs, line: string, socket: Socket) {
     const request = this.requestOrClose(line, socket); if (!request) return
     try { await this.executeRequest(session, request, socket) }
-    catch (error) { this.respondFailure(socket, request.id, error) }
+    catch (error) { respond(socket, persistenceFailure(request.id, error)) }
   }
 
   private async executeRequest(session: Yafs, request: Request, socket: Socket) {
     const plan = session.plan(request.command); await this.commit(session, plan.operations)
-    this.respond(socket, { version: PROTOCOL_VERSION, id: request.id, result: plan.result })
+    respond(socket, { version: 1, id: request.id, result: plan.result })
   }
 
   private requestOrClose(line: string, socket: Socket): Request | undefined {
@@ -83,29 +80,12 @@ export class YafsServer {
   }
 
   private rejectRequest(error: unknown, socket: Socket): undefined {
-    if (this.isRequestError(error)) { this.rejectVersion(error, socket); return undefined }
+    const failure = requestFailure(error)
+    if (failure) { respond(socket, failure); return undefined }
     socket.destroy(); return undefined
   }
 
-  private isRequestError(error: unknown): error is RequestError {
-    return error instanceof RequestError && Number.isInteger(error.id)
-  }
-
-  private rejectVersion(error: RequestError, socket: Socket) {
-    this.respond(socket, failure(error.id, error.code, error.message))
-  }
-
-  private respond(socket: Socket, response: Response | ProtocolFailure) {
-    if (!socket.destroyed) socket.write(JSON.stringify(response) + '\n')
-  }
-
-  private respondFailure(socket: Socket, id: number, error: unknown) {
-    const message = error instanceof Error ? error.message : String(error)
-    this.respond(socket, { version: PROTOCOL_VERSION, id, error: { code: 'persistence_error', message } })
-  }
-
   private async commit(session: Yafs, operations: VfsOperation[]) {
-    this.store.validate(operations)
     await this.journal.commit(operations); session.apply(operations)
     try { await this.journal.compact(this.store) } catch (error) { console.error('Journal compaction failed:', error) }
   }
@@ -128,35 +108,6 @@ async function openServices(options: StartOptions) {
 
 function listen(server: Server, options: { port?: number, host?: string }): Promise<void> {
   return new Promise((resolve, reject) => { server.once('error', reject); server.listen(options.port || 0, options.host || '127.0.0.1', resolve) })
-}
-
-function attachLines(socket: Socket, onLine: (line: string) => void) {
-  let buffer = ''; socket.on('data', chunk => { buffer += chunk; if (buffer.length > 1_048_576) return socket.destroy(); const lines = buffer.split('\n'); buffer = lines.pop() || ''; lines.filter(Boolean).forEach(onLine) })
-}
-
-function parseRequest(line: string): Request {
-  const request = JSON.parse(line) as Request; verifyRequest(request); return request
-}
-
-function verifyRequest(request: Request) {
-  verifyRequestShape(request)
-  if (request.version !== PROTOCOL_VERSION) throw unsupportedVersion(request)
-}
-
-function verifyRequestShape(request: Request) {
-  if (!Number.isInteger(request.id) || typeof request.command !== 'string') throw new Error('Expected request')
-}
-
-function unsupportedVersion(request: Request) {
-  return new RequestError(request.id, 'unsupported_version', `Unsupported protocol version: ${request.version}`)
-}
-
-class RequestError extends Error {
-  constructor(readonly id: number, readonly code: string, message: string) { super(message) }
-}
-
-function failure(id: number, code: string, message: string): ProtocolFailure {
-  return { version: PROTOCOL_VERSION, id, error: { code, message } }
 }
 
 function journalPath(options: { walPath?: string, dataDir?: string }): string {

@@ -1,7 +1,7 @@
-import { CommandContext } from './CommandContext'
+import type { CommandContext } from './CommandContext'
 
-export abstract class BuiltinCommand {
-  abstract readonly name: string
-  abstract readonly synopsis: string
-  abstract execute(context: CommandContext, args: string[]): string
+export interface BuiltinCommand {
+  readonly name: string
+  readonly synopsis: string
+  execute(context: CommandContext, args: string[]): string
 }

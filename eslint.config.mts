@@ -22,11 +22,25 @@ export default defineConfig([
         }
       ],
       '@stylistic/max-len': ['error', {
-        code: 100,
+        code: 120,
         tabWidth: 2,
         ignoreUrls: true,
         ignoreStrings: true,
         ignoreTemplateLiterals: true
+      }],
+      "max-lines": ["error", {
+        "max": 100,
+        "skipBlankLines": true,
+        "skipComments": true
+      }]
+    }
+  },
+  {
+    files: ["test/**/*.test.ts"],
+    rules: {
+      "max-lines-per-function": ["error", {
+        "max": 30, "skipBlankLines": true,
+        "skipComments": true, "IIFEs": true
       }]
     }
   },

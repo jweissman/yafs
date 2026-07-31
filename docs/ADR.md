@@ -56,6 +56,66 @@ provenance remain inspectable through the tree.**
    apply: a read-only mirror cannot be mutated by an incidental file write.
    Public endpoints use a distinct, least-privileged service identity.
 
+## M5 namespace semantics
+
+**Decision:** M5 will use one provider-neutral namespace resolver. Local nodes,
+provider snapshots, and ordered unions are alternative sources of *logical
+nodes*, not separate filesystem implementations. Every pathname operation,
+including symlink traversal, re-enters that resolver.
+
+This is deliberately more precise than the current fixture implementation.
+The fixture is a useful M4 proof, but its mount paths are currently intercepted
+outside the local `NodeStore`; consequently, it cannot yet be a union layer or
+the target of a local symlink. M5 may not add GitHub until that distinction is
+removed and covered by acceptance tests.
+
+### Terms and resolution
+
+- A **mount** attaches one provider snapshot at an otherwise unoccupied
+  namespace path. It never replaces or silently hides a local node. Overlap
+  with another mount, a local node, or a union target is an activation error.
+  Ancestor directories remain ordinary namespace directories and show mounted
+  children during listing.
+- A **logical node** has a type, a stable source identity, a read/list operation
+  where applicable, a writability decision, and structured provenance. It is
+  not necessarily an in-memory `FSNode`.
+- A **symlink** stores a path string exactly as written. Resolution follows that
+  string relative to the link's parent (or from `/` for an absolute target),
+  then asks the namespace resolver again. Links may therefore cross from local
+  state into a provider or union, subject to the same 40-link loop limit.
+- A **union** is a newly created, read-only logical directory with an ordered
+  list of existing logical-directory layer paths. Lookup is left-to-right: the
+  first layer containing a name supplies that child. Listing is the stable
+  union of names. `inspect` reports the winner and every shadowed candidate.
+  A union itself has no backing provider and does not mutate its layers.
+- A write, create, delete, or rename through any union path fails. Copy-up,
+  tombstones, and merge behavior are a later, separate design; no command may
+  infer them.
+
+The present `union NAME LAYER...` builtin is a small syntax for this operation:
+`NAME` is the newly created union directory and the remaining arguments are
+layers in precedence order. It is **not** a Plan 9 `bind` implementation: it
+does not attach a source over an arbitrary existing target, modify a namespace
+per process, or adopt Plan 9's union-write behavior. We retain the name only
+while this limited ordered-directory composition is useful; a future public
+configuration syntax may call the operation `compose` if that is clearer.
+
+### Mount lifecycle commands
+
+`mount` is a control-plane builtin, with equivalent structured RPC operations;
+it is not the POSIX host-mount command.
+
+| Command | Meaning | Side effects |
+| --- | --- | --- |
+| `mount validate MANIFEST [ID]` | Parse strict `.yafsmeta`, select exactly one declaration when `ID` is supplied, validate its provider configuration, and report the proposed mount record. | None: no provider activation, network activity, secret access, or durable state. |
+| `mount activate MANIFEST [ID]` | Validate and authorize the declaration, prepare a read-only snapshot if needed, then durably attach that exact snapshot at its declared path. | A private read cache may be prepared before commit; it becomes visible only after the mount operation is durable. |
+| `mount unmount ID` | Durably detach the active mount. | It does not delete a provider's private cache or remote data; cache retention is provider policy. |
+
+For M5, a mounted provider view is an immutable snapshot. Explicit refresh is a
+later lifecycle operation that obtains a new snapshot and atomically replaces
+the active view with a new revision/freshness record. It never changes local
+review artifacts; those artifacts must record the source revision they address.
+
 ## Product horizon and extension hypotheses
 
 The committed product horizon is a useful local workspace service through the
@@ -69,6 +129,45 @@ make its intended seams concrete, but each needs a separate go/no-go decision
 after M5. No later milestone should expand the delivery commitment by existing
 in this document.
 
+## Namespace execution models and long-term direction
+
+Yafs has two deliberately distinct provider shapes:
+
+1. A **collection projection** makes bounded external state inspectable as an
+   immutable namespace snapshot. The GitHub PR collection is the first and
+   weakest example: it has no provider write authority and no reconciliation.
+2. A **reconciled resource** maps durable desired state to observed state and
+   history. An eventual machine, agent, cache, or infrastructure controller
+   may expose `desired`, `status`, logs, and artifacts beneath one resource
+   path, but it may act only after durable authorization and must record its
+   outcome.
+
+M5 proves collection projection, provenance, and shared local artifacts. It
+does not prove that Yafs should provision infrastructure; it keeps the required
+seams—desired versus observed state, explicit authority, idempotent lifecycle
+actions, and durable history—available for a later decision gate.
+
+The lineage is Plan 9's useful namespace idea, not Plan 9 compatibility:
+composition should make remote and local state feel like one tree. Yafs adds
+the constraints modern automation needs: explicit capability grants, durable
+provenance, auditable lifecycle actions, and no ambient authority. It does not
+promise Plan 9 bind semantics, POSIX semantics, or transparent network mounts.
+
+### Historical views and federation
+
+Historical inspection is a valuable future product feature, but current WAL
+compaction deliberately preserves recoverability, not history: it retains the
+latest snapshot and discards compacted journal records. `inspect --revision` or
+`yash --at` therefore needs retained checkpoints/event segments, retention and
+redaction policy, and references to the exact provider snapshots that supplied
+external content. It is a distinct time-travel design increment, not a free
+consequence of the current journal.
+
+Mounting one Yafs instance from another is explicitly deferred. Federation
+requires authenticated service identities, delegated grants, loop prevention,
+cross-instance revision semantics, failure policy, and audit correlation. It
+belongs no earlier than the remote/multi-user decision gate.
+
 ## Primary use cases
 
 ### Review workspace — first product wedge
@@ -77,22 +176,23 @@ This proves read-only providers, composition, caching, provenance, and
 human/agent collaboration without unrestricted execution.
 
 ```text
-/reviews/482/
-  repo/              # pinned source revision
-  pull-request/      # title, files, diff, comments, checks
-  notes/             # writable review notes
-  workspace/         # union(notes, pull-request, repo)
+/reviews/acme/widget/
+  source/            # read-only, explicit GitHub collection snapshot
+    pulls/482/        # metadata, changed files, diff, revision/freshness
+  notes/482/          # durable local review artifacts for that source revision
 ```
 
 ```sh
-yash:/reviews/482$ cat pull-request/summary.json
-yash:/reviews/482$ origins workspace/src/auth.ts
-yash:/reviews/482$ echo "check token expiry" > notes/auth-review.md
+yash:/reviews/acme/widget$ cat source/pulls/482/metadata.json
+yash:/reviews/acme/widget$ echo "check token expiry" > notes/482/alice.md
+yash:/reviews/acme/widget$ inspect source/pulls/482/diff.patch
 ```
 
-The first GitHub provider may be deliberately narrow: a repository and PR
-number yield read-only metadata, changed-file views, and a diff. That is enough
-for basic human or agent review.
+The first GitHub provider is deliberately narrow: a repository plus query
+produces a read-only collection snapshot. A PR number is a child of that
+collection, never a mount declaration. The review workspace can use an
+explicit ordered union when composition is genuinely useful; it is not needed
+merely to place source and notes next to one another.
 
 ### Cache-like service — valuable, but not a Redis clone
 
@@ -212,6 +312,14 @@ manifest validation, explicit validate/activate/unmount lifecycle, durable
 mount state, structured provenance, and append-only activation/unmount audit. Provider
 writes, non-empty capability grants, refresh, and external providers remain
 subsequent M4 extensions.
+
+The VFS journal authoritatively orders mount/unmount intent. `mounts.json` is a
+durably-synced materialized index required to restore mount policy after journal
+compaction; it is rebuilt or corrected by journal replay. `audit.ndjson` is a
+durably-synced append-only ledger, but it is not yet atomically committed in the
+same durable envelope as a lifecycle operation. M5 must add durable lifecycle
+event IDs and replay reconciliation before a provider can use a capability or
+perform an external side effect.
 
 The complete provider model introduces this lifecycle, not arbitrary executable
 directories:

@@ -265,9 +265,11 @@ Design checkpoints for every plugin:
 
 ### Current status
 
-- M0 and M1 are complete: the in-memory tree supports canonical paths,
-  symbolic links (including loop detection), read-only ordered unions, and
-  `origins` inspection; commands return typed result/error/session data.
+- M0 and M1 are complete for local nodes: the in-memory tree supports canonical
+  paths, symbolic links (including loop detection), read-only ordered unions,
+  and `origins` inspection; commands return typed result/error/session data.
+  Provider-backed paths are not yet logical union layers or symlink targets;
+  that M5 foundation remains deliberately open.
 - M2 is substantially implemented: Yash has client-local persisted history,
   readline up/down navigation, Ctrl-R lookup, last-token virtual-path
   completion, `PROMPT`, `-c`, and `--json` result output. Completion and JSON
@@ -379,6 +381,15 @@ notes keyed by PR. Two independent sessions—human or model client—must be ab
 to inspect the same source revision, write separate review artifacts, and leave
 an inspectable source revision/freshness trail. Do not depend on host Git,
 GitHub writes, autonomous agent loops, or public MCP.
+
+Entry foundation: replace the fixture-specific overlay with a provider-neutral
+logical-node resolver. A mount must never shadow a local node; ordered unions
+must accept provider-backed directories; and symlink traversal must re-enter
+the resolver. `union NAME LAYER...` remains a read-only, left-to-right
+composition of a newly created directory, not a Plan 9 bind or a writable
+overlay. Tests cover direct provider access, provider paths through links and
+unions, collision rejection, selected/shadowed provenance, and snapshot
+replacement only through explicit refresh.
 
 Pipes remain a language increment after typed stream contracts are designed.
 

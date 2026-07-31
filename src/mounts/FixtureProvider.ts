@@ -16,5 +16,7 @@ export class FixtureProvider {
     throw new Error(`No such file: ${path}`)
   }
 
+  entries() { return Object.entries(this.files) }
+
   static from(config: FixtureConfig) { return new FixtureProvider(config.files) }
 }

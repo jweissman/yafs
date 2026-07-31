@@ -2,9 +2,9 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
     "yafsd": "bun run src/yafsd.ts",
-    "yash": "bun run src/yash.ts"
+    "yash": "bun run src/yash.ts",
+    "check": "bun test && bun lint && bun typecheck"
   },
   "dependencies": {
     "ohm-js": "^17.5.0",
