@@ -207,12 +207,14 @@ automation; `date` exists primarily for interactive and script convenience.
 
 ## Provider boundary
 
-**Status:** M4 contract decisions are documented below; no manifest parser,
-mount runtime, provider fixture, provenance records, or audit stream exists in
-code yet. M4 remains pending until those acceptance artifacts are implemented
-and tested.
+**Status:** M4 implements the zero-capability, read-only fixture slice: strict
+manifest validation, explicit validate/activate/unmount lifecycle, durable
+mount state, structured provenance, and append-only activation/unmount audit. Provider
+writes, non-empty capability grants, refresh, and external providers remain
+subsequent M4 extensions.
 
-M4 introduces a mount lifecycle, not arbitrary executable directories:
+The complete provider model introduces this lifecycle, not arbitrary executable
+directories:
 
 ```text
 declared → validated → authorized → activating → active → refreshing | failed → unmounted
@@ -221,9 +223,9 @@ declared → validated → authorized → activating → active → refreshing |
 Discovery only finds `.yafsmeta`; it must not load code, contact a provider, or
 create a mount. Validation parses a strict declarative manifest. Authorization
 compares each requested capability with daemon-held grants. Only then may the
-kernel create an `activating` mount and call its provider. Every transition is
-an audit event and remains visible through `mounts`/`inspect`, including a
-failed activation.
+kernel create an `activating` mount and call its provider. The full model audits
+every transition and makes it visible through `mounts`/`inspect`, including a
+failed activation. The M4 fixture implements only its active/unmounted subset.
 
 The provider receives a mount-relative path only. It cannot resolve arbitrary
 VFS paths, follow links outside its mount, pick union precedence, or write the
@@ -243,7 +245,10 @@ interface Provider {
 }
 ```
 
-M4 implements only `read-only` through a deterministic fixture provider.
+M4 implements only `read-only` through a deterministic fixture provider. Its
+grant policy is intentionally deny-by-default: an empty requested capability
+list activates; any non-empty request is rejected before activation
+until daemon-held grant policy is implemented.
 `authoritative` means a provider's successful write is immediately its own
 source of truth; `staged` means it returns a proposal that requires a later,
 explicit commit. Neither mode is implied by merely implementing `write`.
@@ -283,7 +288,7 @@ the winner plus shadowed candidates. Provider values may be cached, but their
 last known revision and freshness are never hidden.
 
 Audit is append-only, sequenced, and separate from human-readable provider
-files. The minimum event envelope is:
+files. The full provider model's minimum event envelope is:
 
 ```text
 sequence, at, actor, mountId, provider, action, relativePath,
@@ -294,6 +299,12 @@ Actions include declaration validation, grant/deny, activation, read, refresh,
 write proposal, write commit, failure, and unmount. Never place secret values,
 tokens, prompt contents, or file payloads in the generic audit log; record
 content digests or provider-specific redacted references when needed.
+
+The fixture currently emits activation and unmount events with this envelope:
+the mount-relative path is empty for those mount-level events, and revision
+fields describe the fixture revision before or after the transition. Validation,
+denials, reads, and provider I/O acquire audit events with the relevant future
+provider and authorization work.
 
 The mount record and audit stream are kernel data: a provider may contribute
 facts, but it cannot erase, forge, or silently omit its own capability use.
@@ -307,7 +318,7 @@ facts, but it cannot erase, forge, or silently omit its own capability use.
 | M1 — command/session contract | Yash and RPC describe the same safe operation. | Typed result (`stdout`, `stderr`, status, structured error, session state); `help`, `version`, `whoami`, `mounts`, and `inspect`; documented built-ins and deterministic error codes. |
 | M2 — usable Yash | A human can comfortably explore a persistent workspace. | Prompt templates, persisted local history, up/down, Ctrl-R, basic final-token path completion, `yash -c`, and JSON result output. **Baseline complete; polish remains.** |
 | M3 — durable local service | Work survives restart and recovery is principled. | Versioned bounded loopback protocol; checksummed, sync-before-apply VFS operations; torn-final-record recovery; corruption refusal; snapshots/compaction; exclusive data-dir lock; `yash --local`; and managed `yafsd serve/start/stop/restart/status` lifecycle. **Complete for the single-tenant local appliance.** |
-| M4 — mount/provider contract | External state enters without special cases. | Provider interface, strict schema-validated YAML mounts, capability grants, fixture provider, provenance/audit. |
+| M4 — mount/provider contract | External state enters without special cases. | Strict schema-validated YAML mounts, explicit validate/activate/unmount lifecycle, durable zero-capability fixture mount, structured provenance, and activation audit. **Read-only fixture slice complete.** |
 | M5 — review workspace | The product helps with a real task. | Git/GitHub read-only mounts plus composed review workspace, explicit refresh, source revision. |
 | M6 — cache provider *(decision gate)* | Yafs is useful as an observable state service. | Durable local TTL cache, atomic replacement, expiry metadata, eviction/limit policy, concurrent-write tests. |
 | M7 — agent workspace *(decision gate)* | An agent can work visibly and safely. | Durable runs, scoped context/capabilities, artifacts, restart behavior, audit trail. |
@@ -350,6 +361,110 @@ and transaction semantics are designed.
   the automation transport.
 - Defer multi-user ACLs until the per-user service model is designed, while
   provider capabilities are explicit from the beginning.
+
+## Provider and adapter contract decisions
+
+These decisions are required before a real external provider or adapter. The
+fixture proves mount mechanics, not these broader contracts.
+
+### Paths and file data
+
+- **Path names:** kernel paths are Unicode scalar-value strings normalized to
+  NFC at every kernel/provider boundary. A component cannot contain NUL or
+  `/`. Providers encode names as UTF-8 unless their upstream has a documented
+  adapter rule. This prevents visually identical names from becoming different
+  paths across clients. The current string-based implementation must add this
+  canonicalization before an external provider is accepted.
+- **File data:** the VFS/provider data plane is bytes. Yash is initially a
+  UTF-8 text client: `cat`, `echo`, redirection, and command output work on
+  text, while later binary APIs carry arbitrary bytes. This prevents images,
+  archives, patches, and model artifacts from being silently corrupted by a
+  string-only interface.
+- **Limits and flow control:** no streaming shell pipeline is promised yet.
+  Before streaming reads are exposed, the daemon must set an inline response
+  limit and use pull-based byte streams so a slow client cannot cause an
+  unbounded provider read or memory buffer. This is both a large-file rule and
+  a cancellation/resource-control rule.
+
+### Writes and external side effects
+
+- **Local write v1:** each user-visible local file write is a whole-file,
+  atomic replacement represented by one durable VFS operation. There is no
+  streaming write or multi-operation transaction promise.
+- **Read-only provider fetch:** a provider may fetch or prepare a private cache
+  before a mount record is committed. If the WAL commit fails, it exposes no
+  mount; the cache may be discarded or reused on retry.
+- **External provider write:** a remote mutation must use a durable intent,
+  an idempotency key, provider execution, and a durable outcome record. WAL
+  alone cannot atomically commit a GitHub/API mutation and a local journal.
+  M5 is read-only specifically to avoid claiming this protocol early.
+
+```text
+read-only: fetch/prepare → durable mount record → expose
+remote write: durable intent → idempotent provider call → durable outcome → expose
+```
+
+### Revisions, freshness, and commands
+
+- **Content revision:** every provider-backed origin names the source content
+  version, such as a Git commit SHA, PR head SHA/ETag, cache generation, or
+  model/context snapshot digest. It is not the provider package version.
+- **Freshness:** `inspect` must eventually report the content revision plus
+  fetched/refreshed time and applicable expiry/staleness state. Provider build
+  provenance is separate metadata.
+- **Control plane:** provider commands and RPC use structured request/results;
+  file reads/writes use bytes. Yash adapts simple UTF-8 commands to that model.
+  The current string-only fixture is deliberately not a final provider API.
+
+### Capabilities, distribution, and adapters
+
+- **Capabilities:** grants are kernel-owned, deny-by-default, and audited.
+  The initial vocabulary is a narrowly configured model endpoint
+  (`model.invoke`), named network destinations, and named secret references.
+  Writes remain mount-relative; "write outside this mount" is not a grant.
+  Host execution stays the separate, allowlisted M9 bridge.
+- **Provider distribution:** M0–M5 use built-in trusted providers while the
+  ABI changes. Later, `yash add @org/provider` may use GitHub as a registry,
+  but must resolve an immutable revision, record it in a lockfile, inspect a
+  declarative manifest without executing code, and require explicit enablement
+  and grants. Discovery is never installation or execution.
+- **MCP:** `yafs-mcp` is an adapter executable and a client of `yafsd`, not a
+  mount provider. Its first local-only surface is narrow read/introspection
+  tools; unrestricted shell execution and public access wait for identity and
+  authorization design.
+- **FUSE:** FUSE is a possible local, read-only adapter after provider read
+  semantics stabilize. It is not an M5 prerequisite, a POSIX-conformance
+  promise, or a bypass for mount capabilities/provider write policy.
+
+## M5 demo: bounded collaborative review room
+
+The M5 proof is not "an agent platform" or one mount per PR. It is a filtered
+GitHub PR collection that independent humans or model clients can inspect and
+annotate through one durable tree:
+
+```text
+/reviews/acme/widget/
+  source/pulls/482/       # read-only PR metadata, changed files, diff, revision
+  source/pulls/483/
+  notes/                  # durable local writable files
+    482/alice.md
+    482/reviewer-b.md
+    482/safety.json
+```
+
+The demo succeeds when two independent sessions inspect a PR from the same
+filtered source collection, add separate notes without provider write authority,
+and a later reader can answer which revision they saw, which artifacts each
+produced, and when the source was fetched. A local LM Studio client may
+participate as one such reviewer, but it is not yet an agent runtime provider.
+This is the product proof for provenance, composition, and shared inspectable
+state.
+
+M5 implementation may begin only after the external-read path has a named
+GitHub network grant, an explicit secret-reference policy if authentication is
+needed, and revision/freshness fields in the provider record. It remains
+read-only; no GitHub write, autonomous loop, host execution, or public MCP
+endpoint is part of the demo.
 
 ## Questions that need product answers
 

@@ -22,7 +22,7 @@ export default defineConfig([
         }
       ],
       '@stylistic/max-len': ['error', {
-        code: 120,
+        code: 100,
         tabWidth: 2,
         ignoreUrls: true,
         ignoreStrings: true,

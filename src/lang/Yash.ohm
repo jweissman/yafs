@@ -4,12 +4,14 @@ Yash {
   CoreExp = FunCall
   FunCall = identifier Arg*
   Arg = ShellEscape
+      | CommandSubstitution
       | variable
-      | doubleQuoted
+      | DoubleQuoted
       | singleQuoted
       | path
       | identifier
   ShellEscape = "$" "(" "(" Exp ")" ")"
+  CommandSubstitution = "$" "(" FunCall ")"
 
   Exp = AddExp
   AddExp = AddExp "+" PriExp  -- plus
@@ -26,8 +28,8 @@ Yash {
   variable = "$" identifier
   singleQuoted = "'" singleChar* "'"
   singleChar = ~"'" any
-  doubleQuoted = "\"" doublePart* "\""
-  doublePart = variable | doubleChar
-  doubleChar = ~("\"" | "$") any
+  DoubleQuoted = "\"" DoublePart* "\""
+  DoublePart = variable | CommandSubstitution | doubleLiteral
+  doubleLiteral = (~("\"" | "$") any)+
   number = digit+
 }

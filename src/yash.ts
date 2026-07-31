@@ -44,7 +44,8 @@ try {
     const interruption = new AbortController()
     readline.on('SIGINT', () => interruption.abort())
     while (true) {
-      const line = await question(readline, promptTemplate, session, serverName, interruption)
+      const prompt = renderPrompt(promptTemplate, session, serverName)
+      const line = await question(readline, prompt, interruption)
       if (line === undefined) break
       if (line === 'exit' || line === 'quit') break
       if (line === 'history') {
@@ -68,11 +69,9 @@ try {
 }
 
 type Readline = ReturnType<typeof createInterface>
-type Session = { user: string, cwd: string }
 
-async function question(readline: Readline, template: string, session: Session,
-  server: string, interruption: AbortController) {
-  try { return await readline.question(renderPrompt(template, session, server), { signal: interruption.signal }) }
+async function question(readline: Readline, prompt: string, interruption: AbortController) {
+  try { return await readline.question(prompt, { signal: interruption.signal }) }
   catch (error) { if (interruption.signal.aborted) return undefined; throw error }
 }
 
@@ -80,7 +79,8 @@ function print(output: string) {
   if (output) console.log(output)
 }
 
-function installReverseSearch(readline: ReturnType<typeof createInterface>, history: CommandHistory) {
+function installReverseSearch(readline: ReturnType<typeof createInterface>,
+  history: CommandHistory) {
   if (!stdin.isTTY) return; emitKeypressEvents(stdin)
   stdin.on('keypress', (_text, key) => { if (key?.ctrl && key.name === 'r') replaceLine(readline, history.search(readline.line)) })
 }

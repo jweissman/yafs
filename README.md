@@ -18,5 +18,6 @@ and locks its data directory. `yafsd serve` runs in the foreground; `start`,
 data directory. Authenticated remote access and plugin activation are not
 implemented yet.
 
-See the [ADR](docs/ADR.md) for product decisions and acceptance criteria, and
+See the [product spec](docs/PRODUCT-SPEC.md) for the provider-backed workspace
+experience, the [ADR](docs/ADR.md) for decisions and acceptance criteria, and
 the [feature roadmap](docs/FEATURE-ROADMAP.md) for implementation sequencing.

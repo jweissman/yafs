@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { access, appendFile, mkdtemp } from "node:fs/promises";
+import { access, appendFile, mkdtemp, readFile } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +18,12 @@ test("arithmetic expansion uses double parentheses", () => {
   expect(new Yafs().execute("echo $(2+2)").error?.code).toBe("parse_error")
 });
 
+test("command substitution builds a nested AST and captures deferred output", () => {
+  const yafs = new Yafs(); expect(yafs.exec("echo $(echo hello)")).toBe("hello"); expect(yafs.interpreter.parse("echo $(cat note)").args[0]).toEqual({ kind: "substitution", command: { kind: "command", name: "cat", args: [{ kind: "literal", value: "note" }] } });
+  expect(yafs.exec('echo "value=$(echo hello)"')).toBe("value=hello")
+  expect(yafs.exec("echo $(touch transient)")).toBe(""); expect(yafs.execute("stat transient").error?.code).toBe("not_found"); expect(yafs.execute("echo $(false)").error?.code).toBe("command_error");
+});
+
 test("command execution reports output, status, errors, and session state", () => {
   const yafs = new Yafs();
   expect(yafs.execute("pwd")).toEqual({ stdout: "/home/root", stderr: "", status: 0, session: { user: "root", cwd: "/home/root" } });
@@ -27,7 +33,7 @@ test("command execution reports output, status, errors, and session state", () =
 test("introspection commands describe the session and mounted unions", () => {
   const yafs = new Yafs(); expect(yafs.exec("whoami")).toBe("root"); expect(yafs.exec("version")).toBe("yafs 0.1.0"); expect(yafs.exec("help")).toContain("whoami");
   yafs.exec("mkdir lower"); yafs.exec("mkdir upper"); yafs.exec("echo lower > lower/value"); yafs.exec("union workspace upper lower");
-  expect(yafs.exec("mounts")).toBe("/home/root/workspace union /home/root/upper /home/root/lower"); expect(yafs.exec("inspect workspace/value")).toBe('{"path":"/home/root/workspace/value","type":"file","origins":["/home/root/lower/value"]}');
+  expect(yafs.exec("mounts")).toBe("/home/root/workspace union /home/root/upper /home/root/lower"); expect(yafs.exec("inspect workspace/value")).toBe('{"path":"/home/root/workspace/value","type":"file","origins":[{"kind":"local","path":"/home/root/lower/value"}]}');
 });
 
 test("execution errors have stable machine-readable codes", () => {
@@ -145,6 +151,51 @@ test("yafsd has managed start, status, and stop lifecycle", async () => {
 test("a local yash client offers an in-process development mode", async () => {
   const client = new LocalYashClient(); expect(await client.exec("touch local")).toBe(""); expect(await client.exec("stat local")).toBe("file"); await client.close();
 });
+
+test("a validated manifest activates a read-only fixture mount with provenance", () => {
+  const yafs = new Yafs(); yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
+  verifyFixture(yafs)
+  expect(JSON.parse(yafs.exec("inspect fixture/hello.txt")).origins[0]).toMatchObject({ kind: "provider", mountId: "demo", provider: "fixture" });
+});
+
+test("mount activation persists state, audit, and fixture content across restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "yafs-mount-")); const server = await YafsServer.start({ dataDir: directory }); const client = await YashClient.connect(server.address()); await client.exec(`printf '${fixtureManifest()}' > .yafsmeta`); await client.exec("mount activate .yafsmeta"); await client.close(); await server.close();
+  await access(join(directory, "mounts.json")); await access(join(directory, "audit.ndjson")); expect(await readFile(join(directory, "audit.ndjson"), "utf8")).toContain('"afterRevision":"fixture:'); const restarted = await YafsServer.start({ dataDir: directory }); const restored = await YashClient.connect(restarted.address()); expect(await restored.exec("cat /home/root/fixture/hello.txt")).toBe("hello"); await restored.exec("mount unmount demo"); await restored.exec("mount activate .yafsmeta"); await restored.close(); await restarted.close(); expect(auditSequences(await readFile(join(directory, "audit.ndjson"), "utf8"))).toEqual([1, 2, 3]);
+});
+
+test("mount manifests reject unknown fields and unmount removes the provider view", () => {
+  const yafs = new Yafs(); yafs.store.write("/home/root/.yafsmeta", "{version: 1, mounts: [], unknown: true}"); expect(yafs.execute("mount validate .yafsmeta").stderr).toBe("Unknown manifest field");
+  yafs.store.write("/home/root/.yafsmeta", fixtureManifest().replace("capabilities: []", "capabilities: [network]")); expect(yafs.execute("mount activate .yafsmeta").stderr).toBe("Capabilities are not granted: network");
+  yafs.store.write("/home/root/.yafsmeta", fixtureManifest()); yafs.exec("mount activate .yafsmeta"); expect(yafs.exec("mount unmount demo")).toBe("demo unmounted"); expect(yafs.execute("cat fixture/hello.txt").error?.code).toBe("not_found");
+});
+
+test("mount manifests reject duplicate keys, YAML tags, aliases, and anchors", () => {
+  const yafs = new Yafs()
+  invalidManifests().forEach(manifest => expectInvalidManifest(yafs, manifest))
+});
+
+function expectInvalidManifest(yafs: Yafs, manifest: string) {
+  yafs.store.write("/home/root/.yafsmeta", manifest)
+  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe("Invalid .yafsmeta YAML")
+}
+
+function invalidManifests() {
+  return ["{version: 1, version: 1, mounts: []}", "!custom {version: 1, mounts: []}",
+    "{version: 1, mounts: *declared}", "{version: 1, mounts: &declared []}"]
+}
+
+function auditSequences(source: string) {
+  return source.trim().split("\n").map(line => JSON.parse(line).sequence)
+}
+
+function fixtureManifest() {
+  return "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}"
+}
+
+function verifyFixture(yafs: Yafs) {
+  expect(yafs.exec("mount validate .yafsmeta")).toContain('"id":"demo"'); expect(yafs.exec("mount activate .yafsmeta")).toBe("demo active");
+  expect(yafs.exec("ls")).toContain("fixture"); expect(yafs.exec("cat fixture/hello.txt")).toBe("hello"); expect(yafs.execute("echo changed > fixture/hello.txt").error?.code).toBe("read_only_mount");
+}
 
 function daemon(command: string, dataDir: string) {
   const child = Bun.spawnSync([process.execPath, join(process.cwd(), "src/yafsd.ts"), command], { env: { ...process.env, YAFS_DATA_DIR: dataDir, YAFS_PORT: "0" }, stdout: "pipe", stderr: "pipe" }); if (child.exitCode) throw new Error(new TextDecoder().decode(child.stderr)); return new TextDecoder().decode(child.stdout)

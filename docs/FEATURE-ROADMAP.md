@@ -104,7 +104,7 @@ the familiar POSIX spelling where it has the same meaning:
 | `echo hello` | Invoke a command with literal words. |
 | `echo "$USER"` | Expand a session variable within a quoted word. |
 | `echo $((2 + 2))` | Planned canonical spelling for integer arithmetic expansion. |
-| `echo $(cat /notes/today.md)` | Planned command substitution; not implemented. |
+| `echo $(cat /notes/today.md)` | Run a nested Yafs command and substitute captured stdout. |
 | `cat /a | select error` | Planned pipeline syntax; not implemented. |
 
 In POSIX, `$()` is command substitution: it runs the enclosed command and
@@ -114,9 +114,11 @@ therefore not a generic `eval` mechanism; the extra pair disambiguates
 arithmetic from a nested command. A parenthesized command group, `( command )`,
 is a separate shell construct. [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html)
 
-Today’s parser builds an arithmetic AST before execution and accepts only
-`$((...))` for arithmetic. `$()` is reserved for a future command-substitution
-AST node and currently does not parse a command within it.
+Today’s parser builds arithmetic and command-substitution AST nodes before
+execution. `$((...))` evaluates integer arithmetic; bare `$(...)` executes a
+nested Yafs command only during word expansion, captures stdout without trailing
+newlines, and discards nested session/VFS mutations. It also works as a part
+of a double-quoted word. Pipes remain later grammar work.
 
 The eventual parser should build this shape before execution:
 
@@ -135,8 +137,8 @@ Implement these, in order:
 
 1. Practical words and paths: `-`, `_`, `.`, absolute paths, whitespace, and
    single/double quotes.
-2. Command AST and word parts: literal, variable expansion, then arithmetic
-   expansion. Add command substitution only as a distinct later AST node.
+2. Command AST and word parts: literal, variable expansion, arithmetic
+   expansion, and bare command substitution as distinct AST nodes.
 3. Built-in command dispatch and useful errors with source locations.
 4. Pipes and redirection only after streams have a settled type/encoding model.
 
@@ -275,6 +277,13 @@ Design checkpoints for every plugin:
   checksummed sync-before-apply operations, recovery, snapshots, and an
   exclusive data-directory lock are covered by integration tests. `yafsd`
   manages foreground and detached lifecycle through its data directory.
+- M4's read-only fixture slice is complete: `.yafsmeta` is strict YAML with
+  unknown-field rejection; `mount validate`, `activate`, and `unmount` are
+  explicit; mount state and activation/unmount audit persist in the data directory;
+  mounted reads have structured provenance. Provider writes, grants, refresh,
+  and external providers remain follow-up work. Command substitution is
+  implemented as a deferred nested-command AST, including inside double quotes;
+  pipes remain later work.
 
 ### M0 — Foundation: composable in-memory filesystem
 
@@ -362,17 +371,16 @@ Checkpoint: a fixture provider is mounted through a strict, schema-validated
 only its configured subtree and granted capabilities. Mount state, refresh,
 unmount, provenance, and capability use are inspectable and auditable.
 
-### M5 — Review workspace
+### M5 — Collaborative review room
 
-Checkpoint: first prove the provider contract with a deterministic fixture
-provider, then expose a pinned Git revision or GitHub repository as a read-only
-mount. Compose the repository, PR metadata/diff, and writable notes in a
-review workspace. Expose freshness, source revision, and explicit refresh;
-do not depend on host Git yet.
+Checkpoint: expose a filtered GitHub PR collection as a read-only source
+subtree, with PR numbers as virtual child paths. Compose it with durable local
+notes keyed by PR. Two independent sessions—human or model client—must be able
+to inspect the same source revision, write separate review artifacts, and leave
+an inspectable source revision/freshness trail. Do not depend on host Git,
+GitHub writes, autonomous agent loops, or public MCP.
 
-Command substitution and pipes remain language increments after their AST and
-stream contracts are designed. They are not prerequisites for the provider or
-review-workspace proof.
+Pipes remain a language increment after typed stream contracts are designed.
 
 ### M6 — Cache provider *(decision gate)*
 
@@ -417,15 +425,9 @@ declared mount—not an implicit host bind mount.
   run/                   # status, logs, ports, artifacts
 ```
 
-## Decisions to make before M4
+## M5 design gate
 
-1. Is `.yafsmeta` YAML, JSON, or a restricted declarative format? YAML is
-   approachable but needs strict schema validation and no custom tags.
-2. Are paths byte strings, UTF-8 strings, or Unicode-normalized names? Choose
-   once; it affects every provider.
-3. Are file writes atomic replacements, streaming writes, or transactions?
-4. Does a plugin command receive byte streams, text streams, or structured
-   values? Starting with UTF-8 text plus explicit binary file operations is a
-   reasonable small answer.
-5. Which capabilities can ever be granted to `agents`: network, host exec,
-   secrets, write outside its subtree? Each should be independently explicit.
+The provider/adapter decisions in [docs/ADR.md](docs/ADR.md) are now explicit.
+Before implementing the GitHub source provider, turn its named network grant,
+secret-reference policy, Unicode path boundary, revision/freshness metadata,
+and bounded response behavior into code and acceptance tests.

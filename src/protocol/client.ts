@@ -9,7 +9,7 @@ type ProtocolFailure = { version: number, id: number, error: { code: string, mes
 export class YashClient {
   private nextId = 1
   private buffer = ''
-  private pending = new Map<number, { resolve: (result: ExecutionResult) => void, reject: (error: Error) => void }>()
+  private pending = new Map<number, PendingRequest>()
 
   private constructor(private readonly socket: Socket) {
     socket.setEncoding('utf8'); socket.on('data', chunk => this.receive(String(chunk)))
@@ -90,6 +90,7 @@ export class YashClient {
 
 type ResultResolver = (result: ExecutionResult) => void
 type ErrorResolver = (error: Error) => void
+type PendingRequest = { resolve: ResultResolver, reject: ErrorResolver }
 
 function completionTarget(input: string) {
   const token = input.trimEnd().split(/\s+/).at(-1) || ''; const slash = token.lastIndexOf('/')

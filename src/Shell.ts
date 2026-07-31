@@ -17,6 +17,8 @@ export class Shell {
     this.pwd = absolutePath;
   }
 
+  enter(path: AbsolutePath) { this.pwd = path }
+
   resolve(path: string): AbsolutePath {
     return PathResolver.resolve(path, this.pwd);
   }

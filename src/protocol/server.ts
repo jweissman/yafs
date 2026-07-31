@@ -1,9 +1,12 @@
 import { createServer, type Server, type Socket } from 'node:net'
+import { dirname } from 'node:path'
 
 import Yafs from '../index'
 import { type ExecutionResult } from '../types/ExecutionResult'
 import { NodeStore } from '../vfs/NodeStore'
+import { VfsOperation } from '../vfs/VfsOperation'
 import { Journal } from './Journal'
+import { MountManager } from '../mounts/MountManager'
 import { PROTOCOL_VERSION } from './version'
 
 type Request = { version: number, id: number, command: string }
@@ -16,14 +19,15 @@ export class YafsServer {
   private queue: Promise<void> = Promise.resolve()
   private sockets = new Set<Socket>()
 
-  private constructor(private readonly store: NodeStore, private readonly journal: Journal) {
+  private constructor(private readonly store: NodeStore, private readonly journal: Journal,
+    private readonly mounts: MountManager) {
     this.server = createServer(socket => this.accept(socket))
   }
 
   static async start(options: StartOptions): Promise<YafsServer> {
-    const store = new NodeStore(); const journal = await Journal.open(journalPath(options), store)
-    const yafsServer = new YafsServer(store, journal); await listen(yafsServer.server, options)
-    return yafsServer
+    const services = await openServices(options)
+    const yafsServer = new YafsServer(services.store, services.journal, services.mounts)
+    await listen(yafsServer.server, options); return yafsServer
   }
 
   address(): { host: string, port: number } {
@@ -34,18 +38,33 @@ export class YafsServer {
 
   async close(): Promise<void> {
     for (const socket of this.sockets) socket.destroy()
-    await new Promise<void>((resolve, reject) => this.server.close(error => error ? reject(error) : resolve()))
+    await this.closeNetwork()
     await this.journal.close()
   }
 
+  private closeNetwork() {
+    return new Promise<void>((resolve, reject) =>
+      this.server.close(error => { if (error) reject(error); else resolve() }))
+  }
+
   private accept(socket: Socket) {
-    this.sockets.add(socket); socket.once('close', () => this.sockets.delete(socket)); socket.on('error', () => socket.destroy()); const session = new Yafs({ store: this.store })
+    this.observe(socket)
+    this.attachSession(socket, new Yafs({ store: this.store, mounts: this.mounts }))
+  }
+
+  private observe(socket: Socket) {
+    this.sockets.add(socket); socket.once('close', () => this.sockets.delete(socket))
+    socket.on('error', () => socket.destroy())
+  }
+
+  private attachSession(socket: Socket, session: Yafs) {
     socket.setEncoding('utf8')
     attachLines(socket, line => this.enqueue(session, line, socket))
   }
 
   private enqueue(session: Yafs, line: string, socket: Socket) {
-    this.queue = this.queue.then(() => this.executeLine(session, line, socket)).catch(() => { socket.destroy() })
+    this.queue = this.queue.then(() => this.executeLine(session, line, socket))
+      .catch(() => { socket.destroy() })
   }
 
   private async executeLine(session: Yafs, line: string, socket: Socket) {
@@ -64,9 +83,12 @@ export class YafsServer {
   }
 
   private rejectRequest(error: unknown, socket: Socket): undefined {
-    if (error instanceof RequestError && Number.isInteger(error.id)) this.rejectVersion(error, socket)
-    else socket.destroy()
-    return undefined
+    if (this.isRequestError(error)) { this.rejectVersion(error, socket); return undefined }
+    socket.destroy(); return undefined
+  }
+
+  private isRequestError(error: unknown): error is RequestError {
+    return error instanceof RequestError && Number.isInteger(error.id)
   }
 
   private rejectVersion(error: RequestError, socket: Socket) {
@@ -82,10 +104,26 @@ export class YafsServer {
     this.respond(socket, { version: PROTOCOL_VERSION, id, error: { code: 'persistence_error', message } })
   }
 
-  private async commit(session: Yafs, operations: import('../vfs/VfsOperation').VfsOperation[]) {
-    this.store.validate(operations); await this.journal.commit(operations); session.apply(operations)
+  private async commit(session: Yafs, operations: VfsOperation[]) {
+    this.store.validate(operations)
+    await this.journal.commit(operations); session.apply(operations)
     try { await this.journal.compact(this.store) } catch (error) { console.error('Journal compaction failed:', error) }
   }
+}
+
+function replay(mounts: MountManager) {
+  return (operation: VfsOperation) => replayMountOperation(mounts, operation)
+}
+
+function replayMountOperation(mounts: MountManager, operation: VfsOperation) {
+  if (operation.type === 'mount') mounts.restoreOperation(operation.record)
+  if (operation.type === 'unmount') mounts.restoreUnmount(operation.id)
+}
+
+async function openServices(options: StartOptions) {
+  const store = new NodeStore(); const paths = mountPaths(options)
+  const mounts = new MountManager(store, paths.state, paths.audit)
+  return { store, mounts, journal: await Journal.open(journalPath(options), store, replay(mounts)) }
 }
 
 function listen(server: Server, options: { port?: number, host?: string }): Promise<void> {
@@ -125,4 +163,9 @@ function journalPath(options: { walPath?: string, dataDir?: string }): string {
   if (options.walPath) return options.walPath
   if (!options.dataDir) throw new Error('walPath or dataDir is required')
   return `${options.dataDir}/journal.ndjson`
+}
+
+function mountPaths(options: StartOptions) {
+  const directory = options.dataDir || dirname(journalPath(options))
+  return { state: `${directory}/mounts.json`, audit: `${directory}/audit.ndjson` }
 }

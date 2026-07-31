@@ -10,14 +10,21 @@ const VERSION = 1
 const SNAPSHOT_INTERVAL = 32
 type Record = { version: 1, sequence: number, operation: VfsOperation, checksum: string }
 type StoredSnapshot = VfsSnapshot & { checksum: string }
+type Replayer = (operation: VfsOperation) => void
 
 export class Journal {
-  private constructor(private readonly walPath: string, private readonly lockPath: string, private sequence: number) {}
+  private constructor(private readonly walPath: string, private readonly lockPath: string,
+    private sequence: number) {}
 
-  static async open(walPath: string, store: NodeStore): Promise<Journal> {
-    await mkdir(dirname(walPath), { recursive: true }); const journal = await Journal.lock(walPath)
-    try { journal.sequence = await journal.restore(store); return journal }
-    catch (error) { await journal.close(); throw error }
+  static async open(walPath: string, store: NodeStore, replay?: Replayer): Promise<Journal> {
+    await mkdir(dirname(walPath), { recursive: true })
+    const journal = await Journal.lock(walPath)
+    return journal.restoreAndReturn(store, replay)
+  }
+
+  private async restoreAndReturn(store: NodeStore, replayOperation?: Replayer): Promise<Journal> {
+    try { this.sequence = await this.restore(store, replayOperation); return this }
+    catch (error) { await this.close(); throw error }
   }
 
   private static async lock(walPath: string): Promise<Journal> {
@@ -36,7 +43,8 @@ export class Journal {
 
   async compact(store: NodeStore) {
     if (this.sequence % SNAPSHOT_INTERVAL) return
-    await writeSnapshot(this.snapshotPath(), store.snapshot(this.sequence)); await truncateAndSync(this.walPath)
+    await writeSnapshot(this.snapshotPath(), store.snapshot(this.sequence))
+    await truncateAndSync(this.walPath)
   }
 
   async close() { await ignoreMissing(() => unlink(this.lockPath)) }
@@ -46,10 +54,10 @@ export class Journal {
     return { ...record, checksum: checksum({ version: record.version, sequence, operation }) }
   }
 
-  private async restore(store: NodeStore): Promise<number> {
+  private async restore(store: NodeStore, replayOperation?: Replayer): Promise<number> {
     const sequence = await restoreSnapshot(this.snapshotPath(), store)
     await discardTornFinalRecord(this.walPath)
-    return replay(this.walPath, store, sequence)
+    return replay(this.walPath, store, sequence, replayOperation)
   }
 
   private snapshotPath() { return `${this.walPath}.snapshot` }
@@ -84,8 +92,9 @@ async function restoreSnapshot(path: string, store: NodeStore): Promise<number> 
   catch (error: unknown) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error }
 }
 
-async function replay(path: string, store: NodeStore, sequence: number): Promise<number> {
-  try { return applyRecords(await readFile(path, 'utf8'), store, sequence) }
+async function replay(path: string, store: NodeStore, sequence: number,
+  replayOperation?: Replayer): Promise<number> {
+  try { return applyRecords(await readFile(path, 'utf8'), store, sequence, replayOperation) }
   catch (error: unknown) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return sequence; throw error }
 }
 
@@ -94,18 +103,28 @@ async function discardTornFinalRecord(path: string) {
   catch (error: unknown) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
 }
 
-function applyRecords(data: string, store: NodeStore, sequence: number): number {
+function applyRecords(data: string, store: NodeStore, sequence: number,
+  replayOperation?: Replayer): number {
   const lines = data.split('\n'); const complete = data.endsWith('\n') ? lines.slice(0, -1) : lines.slice(0, -1)
-  return complete.filter(Boolean).reduce((current, line) => applyRecord(line, store, current), sequence)
+  return applyCompleteRecords(complete, store, sequence, replayOperation)
 }
 
-function applyRecord(line: string, store: NodeStore, sequence: number): number {
-  try { return replayRecord(JSON.parse(line) as Record, store, sequence) }
+function applyCompleteRecords(lines: string[], store: NodeStore, sequence: number,
+  replayOperation?: Replayer) {
+  return lines.filter(Boolean).reduce((current, line) =>
+    applyRecord(line, store, current, replayOperation), sequence)
+}
+
+function applyRecord(line: string, store: NodeStore, sequence: number,
+  replayOperation?: Replayer): number {
+  try { return replayRecord(JSON.parse(line) as Record, store, sequence, replayOperation) }
   catch { throw new Error('Corrupt journal record') }
 }
 
-function replayRecord(record: Record, store: NodeStore, sequence: number) {
-  verifyRecord(record, sequence + 1); store.apply(record.operation); return record.sequence
+function replayRecord(record: Record, store: NodeStore, sequence: number,
+  replayOperation?: Replayer) {
+  verifyRecord(record, sequence + 1); store.apply(record.operation)
+  replayOperation?.(record.operation); return record.sequence
 }
 
 function verifyRecord(record: Record, sequence: number) {

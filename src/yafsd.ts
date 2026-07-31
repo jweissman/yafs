@@ -50,7 +50,8 @@ async function waitForState(child: ChildProcess) {
 }
 
 async function managedState() {
-  const state = await currentState(statePaths.state); if (!state || await responds(state)) return state
+  const state = await currentState(statePaths.state)
+  if (!state || await responds(state)) return state
   throw new Error(`Recorded yafsd PID ${state.pid} is live but its endpoint is unavailable; refuse to signal it`)
 }
 
@@ -65,8 +66,13 @@ async function waitUntil(check: () => Promise<unknown> | unknown, message: strin
   throw new Error(message)
 }
 
-function processAlive(pid: number) { try { process.kill(pid, 0); return true } catch { return false } }
+function processAlive(pid: number) {
+  try { process.kill(pid, 0); return true }
+  catch { return false }
+}
 
-function delay(milliseconds: number) { return new Promise(resolve => setTimeout(resolve, milliseconds)) }
+function delay(milliseconds: number) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
 
 function waitForSignal() { return new Promise<void>(resolve => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve) }) }

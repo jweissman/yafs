@@ -97,48 +97,74 @@ export class UnionCommand extends Command {
 
 export class CatCommand extends Command {
   readonly name = 'cat'; readonly synopsis = 'cat PATH'
-  execute(context: CommandContext, args: string[]): string { return context.store.read(this.path(context, args)) }
+  execute(context: CommandContext, args: string[]): string {
+    return context.read(this.path(context, args))
+  }
 }
 
 export class ReadlinkCommand extends Command {
   readonly name = 'readlink'; readonly synopsis = 'readlink PATH'
-  execute(context: CommandContext, args: string[]): string { return context.store.readlink(this.path(context, args)) }
+  execute(context: CommandContext, args: string[]): string {
+    return context.readlink(this.path(context, args))
+  }
 }
 
 export class LsCommand extends Command {
   readonly name = 'ls'; readonly synopsis = 'ls [PATH]'
-  execute(context: CommandContext, args: string[]): string { return context.store.list(context.resolve(args[0] || '.')).join('\n') }
+  execute(context: CommandContext, args: string[]): string {
+    return context.list(context.resolve(args[0] || '.')).join('\n')
+  }
 }
 
 export class StatCommand extends Command {
   readonly name = 'stat'; readonly synopsis = 'stat PATH'
-  execute(context: CommandContext, args: string[]): string { return context.store.type(this.path(context, args)) }
+  execute(context: CommandContext, args: string[]): string {
+    return context.type(this.path(context, args))
+  }
 }
 
 export class LstatCommand extends Command {
   readonly name = 'lstat'; readonly synopsis = 'lstat PATH'
   execute(context: CommandContext, args: string[]): string {
-    return context.store.type(this.path(context, args), false)
+    return context.type(this.path(context, args), false)
   }
 }
 
 export class OriginsCommand extends Command {
   readonly name = 'origins'; readonly synopsis = 'origins PATH'
   execute(context: CommandContext, args: string[]): string {
-    return context.store.origins(this.path(context, args)).join('\n')
+    return context.origins(this.path(context, args)).join('\n')
   }
 }
 
 export class MountsCommand extends Command {
   readonly name = 'mounts'; readonly synopsis = 'mounts'
-  execute(context: CommandContext): string { return context.store.mounts().map(mount => `${mount.path} union ${mount.layers.join(' ')}`).join('\n') }
+  execute(context: CommandContext): string { return context.mounts().join('\n') }
 }
 
 export class InspectCommand extends Command {
   readonly name = 'inspect'; readonly synopsis = 'inspect PATH'
   execute(context: CommandContext, args: string[]): string {
     const path = this.path(context, args)
-    return JSON.stringify({ path, type: context.store.type(path), origins: context.store.origins(path) })
+    return JSON.stringify({ path, type: context.type(path), origins: context.provenance(path) })
+  }
+}
+
+export class MountCommand extends Command {
+  readonly name = 'mount'; readonly synopsis = 'mount validate|activate MANIFEST [ID] | unmount ID'
+  execute(context: CommandContext, args: string[]): string {
+    const [action, manifest, id] = args; if (action === 'unmount') return this.unmount(context, manifest)
+    const record = this.activation(context, manifest, id); if (action !== 'activate') return JSON.stringify(record)
+    context.mount(record); return `${record.id} active`
+  }
+
+  private activation(context: CommandContext, manifest: string | undefined,
+    id: string | undefined) {
+    if (!manifest) throw new Error('mount requires a manifest path'); return context.planMount(context.resolve(manifest), id)
+  }
+
+  private unmount(context: CommandContext, id: string | undefined) {
+    if (!id) throw new Error('mount unmount requires an id'); context.planUnmount(id); context.unmount(id); return `${id} unmounted`
   }
 }
 
@@ -148,14 +174,17 @@ export function commands(): BuiltinCommand[] {
 
 function sessionCommands(): BuiltinCommand[] {
   return [new HelpCommand(), new VersionCommand(), new WhoamiCommand(), new DateCommand(),
-    new TrueCommand(), new FalseCommand(), new EchoCommand(), new PrintfCommand(), new PwdCommand(), new CdCommand()]
+    new TrueCommand(), new FalseCommand(), new EchoCommand(), new PrintfCommand(),
+    new PwdCommand(), new CdCommand()]
 }
 
 function filesystemCommands(): BuiltinCommand[] {
-  return [new MkdirCommand(), new TouchCommand(), new RmCommand(), new LnCommand(), new UnionCommand(),
+  return [new MkdirCommand(), new TouchCommand(), new RmCommand(), new LnCommand(),
+    new UnionCommand(),
     new CatCommand(), new ReadlinkCommand(), new LsCommand()]
 }
 
 function inspectionCommands(): BuiltinCommand[] {
-  return [new StatCommand(), new LstatCommand(), new OriginsCommand(), new MountsCommand(), new InspectCommand()]
+  return [new StatCommand(), new LstatCommand(), new OriginsCommand(), new MountsCommand(),
+    new InspectCommand(), new MountCommand()]
 }

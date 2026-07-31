@@ -2,7 +2,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 export class CommandHistory {
-  private constructor(private readonly path: string, private readonly limit: number, private lines: string[]) {}
+  private constructor(private readonly path: string, private readonly limit: number,
+    private lines: string[]) {}
 
   static async open(path: string, limit = 1_000): Promise<CommandHistory> {
     return new CommandHistory(path, limit, await historyLines(path, limit))

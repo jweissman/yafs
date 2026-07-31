@@ -37,7 +37,8 @@ export async function currentState(path: string): Promise<DaemonState | undefine
 async function removeStaleState(path: string) { await clearState(path); return undefined }
 
 function newState(address: { host: string, port: number }): DaemonState {
-  return { version: 1, pid: process.pid, ...address, startedAt: new Date().toISOString(), instanceId: randomUUID() }
+  return { version: 1, pid: process.pid, ...address, startedAt: new Date().toISOString(),
+    instanceId: randomUUID() }
 }
 
 async function replace(path: string, temporary: string, contents: string) {
