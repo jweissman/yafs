@@ -3,8 +3,9 @@ import { User } from './types/User';
 import { AbsolutePath } from './core/AbsolutePath';
 import { Shell } from './Shell';
 import { Command } from './types/Command';
-import { Mutation } from './types/Mutation';
+import { VfsIntent, VfsOperation } from './vfs/VfsOperation';
 import { ExecutionResult } from './types/ExecutionResult';
+import { ExecutionPlan } from './types/ExecutionPlan';
 import { BuiltinCommand } from './commands/BuiltinCommand';
 import { Interpreter } from './lang/Interpreter';
 import { Clock, systemClock } from './core/Clock';
@@ -18,18 +19,15 @@ export default class Yafs {
   user: User
   shell: Shell
   interpreter: Interpreter
-  private mutations: Mutation[] = []
+  private operations: VfsOperation[] = []
   private builtins = new Map<string, BuiltinCommand>()
 
   private clock: Clock
 
   constructor(options: { store?: NodeStore, user?: User, clock?: Clock } = {}) {
-    this.clock = options.clock || systemClock
-    this.store = options.store || new NodeStore(this.clock)
-    this.user = options.user || { name: 'root' }
-    this.shell = new Shell(this.user, this.store)
-    this.interpreter = new Interpreter(this.shell)
-    this.registerBuiltins()
+    this.clock = options.clock || systemClock; this.store = options.store || new NodeStore(this.clock)
+    this.user = options.user || { name: 'root' }; this.shell = new Shell(this.user, this.store)
+    this.interpreter = new Interpreter(this.shell); this.registerBuiltins()
   }
 
   static exec(input: string) {
@@ -44,11 +42,21 @@ export default class Yafs {
   }
 
   execute(input: string): ExecutionResult {
-    try {
-      return this.success(this.handle(this.interpreter.parse(input)))
-    } catch (error) {
-      return this.failure(error)
-    }
+    const plan = this.plan(input)
+    if (!plan.result.error) this.apply(plan.operations)
+    return plan.result
+  }
+
+  plan(input: string): ExecutionPlan {
+    this.operations = []
+    try { return this.planned(input) }
+    catch (error) { return { result: this.failure(error), operations: [] } }
+  }
+
+  private planned(input: string): ExecutionPlan {
+    const result = this.success(this.handle(this.interpreter.parse(input)))
+    this.store.validate(this.operations)
+    return { result, operations: this.operations }
   }
 
   private success(stdout: string): ExecutionResult { return { stdout, stderr: '', status: 0, session: this.sessionState() } }
@@ -58,10 +66,9 @@ export default class Yafs {
     return { stdout: '', stderr: message, status: message.startsWith('Unknown command:') ? 127 : 1, error: { code: errorCode(message), message }, session: this.sessionState() }
   }
 
-  drainMutations(): Mutation[] {
-    const mutations = this.mutations
-    this.mutations = []
-    return mutations
+  apply(operations: VfsOperation[]) {
+    this.store.validate(operations)
+    operations.forEach(operation => this.store.apply(operation))
   }
 
   private handle(command: Command): string {
@@ -78,7 +85,7 @@ export default class Yafs {
   private runCommand(name: string, args: string[]): string {
     const command = this.builtins.get(name)
     if (!command) throw new Error(`Unknown command: ${name}`)
-    return command.execute(args)
+    return command.execute(this.commandContext(), args)
   }
 
   private requiredArg(command: string, args: string[], index: number): string {
@@ -88,7 +95,7 @@ export default class Yafs {
   }
 
   private registerBuiltins() {
-    this.builtins = new Map(builtinCommands(this.commandContext()).map(command => [command.name, command]))
+    this.builtins = new Map(builtinCommands().map(command => [command.name, command]))
   }
 
   private commandContext(): CommandContext {
@@ -96,34 +103,32 @@ export default class Yafs {
   }
 
   private mkdir(path: AbsolutePath) {
-    this.store.mkdir(path)
-    this.mutations.push({ type: 'mkdir', path })
+    this.operation({ type: 'mkdir', path })
   }
 
   private touch(path: AbsolutePath) {
-    this.store.touch(path)
-    this.mutations.push({ type: 'touch', path })
+    this.operation({ type: 'touch', path })
   }
 
   private write(path: AbsolutePath, content: string) {
-    this.store.write(path, content)
-    this.mutations.push({ type: 'write', path, content })
+    this.operation({ type: 'write', path, content })
   }
 
   private symlink(target: string, path: AbsolutePath) {
-    this.store.symlink(target, path)
-    this.mutations.push({ type: 'symlink', path, target })
+    this.operation({ type: 'symlink', path, target })
   }
 
   private union(path: AbsolutePath, layers: AbsolutePath[]) {
     if (!layers.length) throw new Error('union requires at least one layer')
-    this.store.union(path, layers)
-    this.mutations.push({ type: 'union', path, layers })
+    this.operation({ type: 'union', path, layers })
   }
 
   private remove(path: AbsolutePath) {
-    this.store.remove(path)
-    this.mutations.push({ type: 'remove', path })
+    this.operation({ type: 'remove', path })
+  }
+
+  private operation(operation: VfsIntent) {
+    this.operations.push({ ...operation, at: this.clock.now().toISOString() } as VfsOperation)
   }
 
   private sessionState() {

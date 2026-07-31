@@ -1,14 +1,22 @@
-# yafs
+# Yafs
 
-See [the product and architecture decision record](docs/ADR.md) for the working
-vision, use cases, and milestone acceptance criteria.
+Yafs is a local-first, composable workspace service. Its kernel makes local
+state, links, and read-only unions inspectable through one virtual tree; future
+providers may add explicit, capability-scoped mounts.
 
-A tiny virtual filesystem service with some interesting properties
+`yafsd` is the loopback service and `yash` is its interactive client. This is
+not a POSIX shell, a Redis clone, or a container orchestrator. Git/GitHub,
+cache, agent, remote, and runtime capabilities are deliberately gated work,
+not ambient behavior.
 
-- Organize content structurally with symlinks and union mounts
-- Accessible over ftp/telnet/ssh with a simple CLI interpreter
-- `.yafsmeta` dotfile which can hint plugins to activate in directories
-  * `agents` plugin turns every text file in the folder into a prompt for a long-lived interactive agentic workflow
-  * `git` plugin shallow-clones and readonly-mirrors a repo/branch (keeping it up to date)
-  * `github` plugin can setup a cached mirror over PRs and issues from a gh repo
-  * `docker` plugin treats subdirectories as image-names and executes them, mounting whatever content is provided
+Current capabilities include an in-memory VFS with symlinks and ordered unions,
+a small command language, and a versioned loopback JSON-lines service. The local
+appliance journals checksummed VFS operations before applying them, recovers a
+torn final record, rejects earlier corruption, snapshots/compacts durable state,
+and locks its data directory. `yafsd serve` runs in the foreground; `start`,
+`stop`, `restart`, and `status` manage a detached process through the selected
+data directory. Authenticated remote access and plugin activation are not
+implemented yet.
+
+See the [ADR](docs/ADR.md) for product decisions and acceptance criteria, and
+the [feature roadmap](docs/FEATURE-ROADMAP.md) for implementation sequencing.

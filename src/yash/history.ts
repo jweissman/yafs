@@ -18,10 +18,8 @@ export class CommandHistory {
 
   async record(command: string): Promise<void> {
     if (!command || this.lines.at(-1) === command) return
-    this.lines.push(command)
-    this.lines = this.lines.slice(-this.limit)
-    await mkdir(dirname(this.path), { recursive: true })
-    await writeFile(this.path, this.lines.join('\n') + '\n', 'utf8')
+    this.lines.push(command); this.lines = this.lines.slice(-this.limit)
+    await mkdir(dirname(this.path), { recursive: true }); await writeFile(this.path, this.lines.join('\n') + '\n', 'utf8')
   }
 }
 

@@ -16,15 +16,14 @@ export class Interpreter {
   }
 
   private commandAst() {
-    return {
-      Command_plain(command: AstNode) { return command.ast(); },
+    return { Command_plain(command: AstNode) { return command.ast(); },
       Command_redirect(command: AstNode, _operator: AstNode, path: AstNode) { const target = path.ast() as Word; if (target.kind !== 'literal') throw new Error('Redirection requires a path'); return { ...command.ast() as Command, redirect: { kind: 'output', target: target.value } }; },
-      FunCall(funCall: AstNode, args: AstNode) { return { kind: 'command', name: funCall.sourceString, args: args.children.map((arg: AstNode) => arg.ast()) }; }
-    };
+      FunCall(funCall: AstNode, args: AstNode) { return { kind: 'command', name: funCall.sourceString, args: args.children.map((arg: AstNode) => arg.ast()) }; } };
   }
 
   private wordAst() {
-    return { ShellEscape(_leader: AstNode, expr: AstNode, _trailer: AstNode) { return { kind: 'substitution', expression: expr.ast() as Expression }; }, variable(_leader: AstNode, name: AstNode) { return { kind: 'variable', name: name.sourceString }; }, singleQuoted(this: AstNode, _leader: AstNode, _contents: AstNode, _trailer: AstNode) { return { kind: 'literal', value: this.sourceString.slice(1, -1) }; }, doubleQuoted(_leader: AstNode, parts: AstNode, _trailer: AstNode) { return { kind: 'compound', parts: parts.children.map((part: AstNode) => part.ast() as Word) }; }, doubleChar(this: AstNode, _char: AstNode) { return { kind: 'literal', value: this.sourceString }; }, path_root(_slash: AstNode) { return { kind: 'literal', value: '/' }; }, path_segments(this: AstNode, _prefix: AstNode, _first: AstNode, _separators: AstNode, _rest: AstNode, _trailing: AstNode) { return { kind: 'literal', value: this.sourceString }; }, identifier(this: AstNode, _first: AstNode, _rest: AstNode) { return { kind: 'literal', value: this.sourceString }; } };
+    return { ShellEscape(_dollar: AstNode, _open: AstNode, _innerOpen: AstNode, expr: AstNode, _innerClose: AstNode, _close: AstNode) { return { kind: 'arithmetic', expression: expr.ast() as Expression }; },
+      variable(_leader: AstNode, name: AstNode) { return { kind: 'variable', name: name.sourceString }; }, singleQuoted(this: AstNode, _leader: AstNode, _contents: AstNode, _trailer: AstNode) { return { kind: 'literal', value: this.sourceString.slice(1, -1) }; }, doubleQuoted(_leader: AstNode, parts: AstNode, _trailer: AstNode) { return { kind: 'compound', parts: parts.children.map((part: AstNode) => part.ast() as Word) }; }, doubleChar(this: AstNode, _char: AstNode) { return { kind: 'literal', value: this.sourceString }; }, path_root(_slash: AstNode) { return { kind: 'literal', value: '/' }; }, path_segments(this: AstNode, _prefix: AstNode, _first: AstNode, _separators: AstNode, _rest: AstNode, _trailing: AstNode) { return { kind: 'literal', value: this.sourceString }; }, identifier(this: AstNode, _first: AstNode, _rest: AstNode) { return { kind: 'literal', value: this.sourceString }; } };
   }
 
   private expressionAst() {
@@ -32,10 +31,7 @@ export class Interpreter {
   }
 
   parse(input: string): Command {
-    const matchResult = this.grammar.match(input);
-    if (matchResult.failed()) {
-      throw new Error(`Failed to parse input: ${input}`);
-    }
+    const matchResult = this.grammar.match(input); if (matchResult.failed()) throw new Error(`Failed to parse input: ${input}`);
     return this.semantics(matchResult).ast() as Command;
   }
 }

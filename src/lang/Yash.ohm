@@ -9,7 +9,7 @@ Yash {
       | singleQuoted
       | path
       | identifier
-  ShellEscape = "$(" Exp ")"
+  ShellEscape = "$" "(" "(" Exp ")" ")"
 
   Exp = AddExp
   AddExp = AddExp "+" PriExp  -- plus

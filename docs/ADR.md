@@ -163,24 +163,32 @@ historical shell behavior.
 `{user}@{server}:{cwd} [{revision}]$`. The server reports state; it does not
 send terminal control sequences.
 
+An interactive `yash` first attempts its configured loopback endpoint. If it
+is unavailable, Yash offers to run `yafsd start`; it never silently switches to
+an ephemeral filesystem. Non-interactive `yash -c` fails with the exact start
+command instead, so scripts cannot accidentally create a daemon. `yash --local`
+is explicit and intentionally ephemeral: useful for parser/VFS development,
+not a fallback for durable work.
+
 ### Command architecture and roster
 
 Built-ins should not accumulate in one interpreter switch statement. Each is a
 logical command object registered in a command registry:
 
 ```ts
-interface BuiltinCommand {
-  name: string
-  synopsis: string
-  help: string
-  execute(context: CommandContext, args: string[]): Promise<CommandResult>
+abstract class BuiltinCommand {
+  abstract readonly name: string
+  abstract readonly synopsis: string
+  abstract execute(context: CommandContext, args: string[]): string
 }
 ```
 
 `CommandContext` supplies the session, VFS, clock, and eventually typed input/
 output streams. This gives `help` a single source of truth, makes commands
 unit-testable, and keeps client-only actions (`history`, terminal editing) out
-of the server registry.
+of the server registry. Command instances are context-free; the interpreter
+supplies context only at invocation time. This is implemented for the current
+built-ins and is the required extension point for mount-aware commands.
 
 Adopt familiar commands only when their Yafs meaning is documented:
 
@@ -199,28 +207,97 @@ automation; `date` exists primarily for interactive and script convenience.
 
 ## Provider boundary
 
-Before the first external plugin, factor the M0 in-memory implementation behind
-a provider contract:
+**Status:** M4 contract decisions are documented below; no manifest parser,
+mount runtime, provider fixture, provenance records, or audit stream exists in
+code yet. M4 remains pending until those acceptance artifacts are implemented
+and tested.
+
+M4 introduces a mount lifecycle, not arbitrary executable directories:
+
+```text
+declared → validated → authorized → activating → active → refreshing | failed → unmounted
+```
+
+Discovery only finds `.yafsmeta`; it must not load code, contact a provider, or
+create a mount. Validation parses a strict declarative manifest. Authorization
+compares each requested capability with daemon-held grants. Only then may the
+kernel create an `activating` mount and call its provider. Every transition is
+an audit event and remains visible through `mounts`/`inspect`, including a
+failed activation.
+
+The provider receives a mount-relative path only. It cannot resolve arbitrary
+VFS paths, follow links outside its mount, pick union precedence, or write the
+kernel journal. The kernel resolves paths, links, unions, identity, mount
+boundaries, authorization, revision assignment, and audit events.
 
 ```ts
+type ProviderMode = 'read-only' | 'authoritative' | 'staged'
+
 interface Provider {
-  stat(path: RelativePath, options?: { followLinks?: boolean }): Promise<Node | undefined>
+  describe(): { mode: ProviderMode, capabilities: string[] }
+  stat(path: RelativePath, options: { followLinks: boolean }): Promise<Node | undefined>
   list(path: RelativePath): AsyncIterable<DirEntry>
   read(path: RelativePath): AsyncIterable<Uint8Array>
-  write?(path: RelativePath, data: AsyncIterable<Uint8Array>): Promise<void>
-  inspect?(path: RelativePath): Promise<Provenance>
+  refresh?(): Promise<{ revision: string }>
+  write?(change: StagedChange): Promise<{ revision: string }>
 }
 ```
 
-The VFS kernel owns path traversal, link limits, union precedence, mount
-boundaries, authorization, and audit events. Providers own only data behind a
-mounted subtree. Discovery is separate from activation; manifests declare
-configuration and requested capabilities.
+M4 implements only `read-only` through a deterministic fixture provider.
+`authoritative` means a provider's successful write is immediately its own
+source of truth; `staged` means it returns a proposal that requires a later,
+explicit commit. Neither mode is implied by merely implementing `write`.
 
-Mount configuration uses strict YAML with a versioned schema and no custom
-tags. YAML is chosen because the files are hand-authored and comments matter;
-schema validation, a restricted parser, and explicit capability declarations
-are mandatory before activation.
+### Manifest schema
+
+`.yafsmeta` is strict YAML, decoded without custom tags or aliases, then
+validated against a versioned schema. Unknown fields are errors, not extension
+points. A manifest requests privileges; it does not grant them.
+
+```yaml
+version: 1
+mounts:
+  - id: review-repo
+    path: repo
+    provider: fixture
+    config:
+      fixture: review-repo
+    capabilities: []
+```
+
+Required mount fields are `id`, `path`, `provider`, `config`, and
+`capabilities`. `id` is stable within the containing workspace; `path` is a
+clean relative path and cannot overlap another active mount; `provider` is a
+registered provider name, never a package URL or command; `config` is checked
+by that provider's declared JSON-schema-like validator; capabilities are named
+strings from a kernel-owned taxonomy. The daemon records a canonical manifest
+digest and the granted subset alongside the active mount. Comments stay useful
+to operators but never affect the digest.
+
+### Provenance and audit
+
+`origins PATH` must eventually report a structured origin for every candidate,
+not only a rendered path: local node or mount ID, provider name, provider
+revision, fetched/refreshed time, and union precedence. `inspect PATH` reports
+the winner plus shadowed candidates. Provider values may be cached, but their
+last known revision and freshness are never hidden.
+
+Audit is append-only, sequenced, and separate from human-readable provider
+files. The minimum event envelope is:
+
+```text
+sequence, at, actor, mountId, provider, action, relativePath,
+capabilitiesUsed, outcome, beforeRevision, afterRevision, correlationId
+```
+
+Actions include declaration validation, grant/deny, activation, read, refresh,
+write proposal, write commit, failure, and unmount. Never place secret values,
+tokens, prompt contents, or file payloads in the generic audit log; record
+content digests or provider-specific redacted references when needed.
+
+The mount record and audit stream are kernel data: a provider may contribute
+facts, but it cannot erase, forge, or silently omit its own capability use.
+
 
 ## Valuable increments
 
@@ -228,8 +305,8 @@ are mandatory before activation.
 | --- | --- | --- |
 | M0 — composable VFS | A tree can represent composed state predictably. | Canonical paths, links with loop handling, read-only ordered unions, origins, and explicit errors. **Complete.** |
 | M1 — command/session contract | Yash and RPC describe the same safe operation. | Typed result (`stdout`, `stderr`, status, structured error, session state); `help`, `version`, `whoami`, `mounts`, and `inspect`; documented built-ins and deterministic error codes. |
-| M2 — usable Yash | A human can comfortably explore a persistent workspace. | Prompt templates driven by server state, persisted local history, up/down, Ctrl-R, command/path completion, `yash -c`, and structured RPC mode. |
-| M3 — durable local service | Work survives restart and recovery is principled. | Versioned loopback protocol, journal commit/recovery rules, snapshots/compaction, corruption policy, and explicit foreground/start/stop/restart lifecycle. |
+| M2 — usable Yash | A human can comfortably explore a persistent workspace. | Prompt templates, persisted local history, up/down, Ctrl-R, basic final-token path completion, `yash -c`, and JSON result output. **Baseline complete; polish remains.** |
+| M3 — durable local service | Work survives restart and recovery is principled. | Versioned bounded loopback protocol; checksummed, sync-before-apply VFS operations; torn-final-record recovery; corruption refusal; snapshots/compaction; exclusive data-dir lock; `yash --local`; and managed `yafsd serve/start/stop/restart/status` lifecycle. **Complete for the single-tenant local appliance.** |
 | M4 — mount/provider contract | External state enters without special cases. | Provider interface, strict schema-validated YAML mounts, capability grants, fixture provider, provenance/audit. |
 | M5 — review workspace | The product helps with a real task. | Git/GitHub read-only mounts plus composed review workspace, explicit refresh, source revision. |
 | M6 — cache provider *(decision gate)* | Yafs is useful as an observable state service. | Durable local TTL cache, atomic replacement, expiry metadata, eviction/limit policy, concurrent-write tests. |
@@ -246,16 +323,18 @@ M1 establishes semantic coherence, not broad Unix compatibility. The initial
 documented command surface is:
 
 ```text
-help  version  whoami  pwd  cd  ls  cat
+help  version  whoami  true  false  date  pwd  cd  ls  cat
 stat  lstat  readlink  origins  mounts  inspect
-mkdir  ln  printf  echo
+mkdir  touch  rm  ln  union  printf  echo
 ```
 
 `printf` is the exact scripting/output primitive and works with redirection.
 `echo` is a human convenience; its behavior must be documented rather than
-assumed to match every host shell. Commands such as `rm`, `mv`, `cp`, `touch`,
-and broad search are deferred until provider write/delete and transaction
-semantics are designed.
+assumed to match every host shell. `touch` and non-recursive `rm` currently
+operate only on the durable local store and produce journal mutations. They do
+not promise provider-backed deletion or POSIX compatibility. `mv`, `cp`,
+recursive deletion, and broad search remain deferred until provider write/delete
+and transaction semantics are designed.
 
 ## Consequences and deferred decisions
 

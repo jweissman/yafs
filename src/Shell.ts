@@ -13,10 +13,7 @@ export class Shell {
   }
 
   cd(path: string) {
-    const absolutePath: AbsolutePath = PathResolver.resolve(path, this.pwd);
-    if (!this.store.get(absolutePath)?.dir) {
-      throw new Error(`No such directory: ${absolutePath}`);
-    }
+    const absolutePath: AbsolutePath = PathResolver.resolve(path, this.pwd); if (!this.store.get(absolutePath)?.dir) throw new Error(`No such directory: ${absolutePath}`);
     this.pwd = absolutePath;
   }
 

@@ -23,7 +23,7 @@ is the human-facing command client; a structured RPC/API is equally first-class
 for scripts, services, and agents.
 
 ```text
-SSH / FTP / API / REPL
+Yash / loopback RPC / later SSH adapter
           |
        shell session
           |
@@ -103,9 +103,9 @@ the familiar POSIX spelling where it has the same meaning:
 | --- | --- |
 | `echo hello` | Invoke a command with literal words. |
 | `echo "$USER"` | Expand a session variable within a quoted word. |
-| `echo $((2 + 2))` | Evaluate a Yafs integer expression. |
-| `echo $(cat /notes/today.md)` | Run a Yafs command and substitute captured stdout. |
-| `cat /a | select error` | Pipe structured text/bytes between Yafs commands. |
+| `echo $((2 + 2))` | Planned canonical spelling for integer arithmetic expansion. |
+| `echo $(cat /notes/today.md)` | Planned command substitution; not implemented. |
+| `cat /a | select error` | Planned pipeline syntax; not implemented. |
 
 In POSIX, `$()` is command substitution: it runs the enclosed command and
 replaces the construct with the command's standard output (with trailing
@@ -114,7 +114,11 @@ therefore not a generic `eval` mechanism; the extra pair disambiguates
 arithmetic from a nested command. A parenthesized command group, `( command )`,
 is a separate shell construct. [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html)
 
-The parser should build this shape before execution:
+Today’s parser builds an arithmetic AST before execution and accepts only
+`$((...))` for arithmetic. `$()` is reserved for a future command-substitution
+AST node and currently does not parse a command within it.
+
+The eventual parser should build this shape before execution:
 
 ```text
 Command(name="echo",
@@ -131,8 +135,8 @@ Implement these, in order:
 
 1. Practical words and paths: `-`, `_`, `.`, absolute paths, whitespace, and
    single/double quotes.
-2. Command AST and word parts: literal, variable expansion, arithmetic
-   expansion, and command substitution.
+2. Command AST and word parts: literal, variable expansion, then arithmetic
+   expansion. Add command substitution only as a distinct later AST node.
 3. Built-in command dispatch and useful errors with source locations.
 4. Pipes and redirection only after streams have a settled type/encoding model.
 
@@ -259,16 +263,18 @@ Design checkpoints for every plugin:
 
 ### Current status
 
-- The prototype parses a small command AST and supports `pwd`, `cd`, `ls`,
-  `cat`, `mkdir`, `echo`, links, union inspection, and output redirection.
-- A loopback-only `yafsd` and stateful `yash` client exist, with an append-only
-  replay journal. They demonstrate clean-restart recovery, not crash-safe
-  persistence or remote authentication.
-- M0 is complete. The current in-memory tree supports canonical paths,
+- M0 and M1 are complete: the in-memory tree supports canonical paths,
   symbolic links (including loop detection), read-only ordered unions, and
-  `origins` inspection; its error messages distinguish missing paths,
-  non-directories, link loops, and read-only mounts. Full multi-user ACLs and
-  authorization remain part of the remote-service milestone.
+  `origins` inspection; commands return typed result/error/session data.
+- M2 is substantially implemented: Yash has client-local persisted history,
+  readline up/down navigation, Ctrl-R lookup, last-token virtual-path
+  completion, `PROMPT`, `-c`, and `--json` result output. Completion and JSON
+  CLI ergonomics remain deliberately modest.
+- M3 is complete: loopback `yafsd`/`yash`, per-connection sessions, a usable
+  `yash --local` development mode, versioned/bounded protocol frames,
+  checksummed sync-before-apply operations, recovery, snapshots, and an
+  exclusive data-directory lock are covered by integration tests. `yafsd`
+  manages foreground and detached lifecycle through its data directory.
 
 ### M0 — Foundation: composable in-memory filesystem
 
@@ -291,7 +297,7 @@ status, structured error information, and updated session state (identity,
 cwd, and revision/mount context when available). The same result is returned
 through Yash and RPC.
 
-Add `help`, `version`, `whoami`, `mounts`, and `inspect`; keep the existing VFS
+Implemented: `help`, `version`, `whoami`, `mounts`, `inspect`, the existing VFS
 commands (`pwd`, `cd`, `ls`, `cat`, `stat`, `lstat`, `readlink`, `origins`,
 `mkdir`, and `ln`). Add `printf` as the exact output primitive; define `echo`
 as a documented convenience. The parser still returns a typed AST with no
@@ -300,35 +306,48 @@ substitution, pipes, or broad POSIX compatibility.
 
 ### M2 — Interactive Yash UX
 
-Checkpoint: Yash has client-local, persisted history; up/down navigation;
+Implemented baseline: Yash has client-local, persisted history; up/down navigation;
 Ctrl-R reverse search; and completion for commands and virtual paths. The
 server exposes session state such as cwd, user, mounts, and revision; Yash
 renders it through a configurable `PROMPT` template. Keep history and terminal
 editing client-side, while a `history` command may expose an explicit,
 redacted session history for introspection. Add `yash -c` and a structured
-JSON-lines/RPC mode so scripts never need to scrape rendered terminal output.
+JSON result output for `-c`. The internal protocol is JSON-lines; a dedicated
+public JSON-lines CLI mode remains an explicit automation follow-up.
 
 ### M3 — Service and client boundary
 
-Checkpoint: a long-lived `yafsd` process owns a VFS instance and exposes a
-versioned loopback-only local RPC protocol. A thin `yash` CLI creates a
+Completed checkpoint: a long-lived `yafsd serve` process owns a VFS
+instance and exposes a versioned loopback-only local RPC protocol. A thin `yash` CLI creates a
 session, sends one parsed command or input line at a time, and renders stdout,
 stderr, and status. Add authentication before exposing the protocol beyond the
 local machine. `yash --local` remains an in-process development mode.
 
-Define foreground and daemon operation explicitly: `yafsd start`, `stop`,
-`restart`, and `status` need a PID/state directory, stale-PID handling, stable
-log and journal locations, and an unambiguous policy for a second server using
-the same data directory. Do not add backgrounding as a shell trick.
+`yash --local` creates an ephemeral private VFS in the CLI process: it has no
+socket, daemon, or journal. Its colored default prompt labels that mode `local`;
+the normal client labels the connected loopback endpoint (`host:port`). The
+endpoint is intentionally shown rather than a PID: the client is connected to a
+service endpoint, not entitled to manage an arbitrary local process.
 
-Persist canonical mutations as an append-only journal and replay them at
-startup. This is the right first persistence format because it makes mutation
-semantics visible and testable. Before claiming crash durability, add an atomic
-commit protocol (write and sync before exposing a mutation), journal
-validation/checksums, snapshot compaction, data-directory locking, and a
-recovery policy for a partial final record. SQLite is a reasonable later storage
-engine if it simplifies indexing, transactions, or multi-process coordination;
-it is not required to establish the VFS model.
+`yafsd serve` is the explicit foreground process. `yafsd start`, `stop`,
+`restart`, and `status` manage one detached local process without relying on a
+shell backgrounding trick. The resolved data directory holds `daemon.json`,
+`daemon.log`, and the journal; stale state is removed after its recorded PID is
+gone. A live state or journal lock refuses a second owner. A system service
+manager may still supervise `serve` directly.
+
+Persist canonical VFS operations as an append-only journal and replay them at
+startup. M3 uses this contract:
+
+```text
+validate → append committed record → sync → apply in memory → respond
+```
+
+Each record carries a protocol/schema version and checksum. The data directory
+is locked; snapshots compact every bounded number of operations. A torn final
+record is truncated during recovery, while corruption before the final record
+refuses startup. SQLite remains a later implementation option, not a
+prerequisite.
 
 This proves Yafs can be used as a cache, router/proxy, scripting target, agent
 hub, or chat backend: they all speak the same VFS/session API rather than each
@@ -336,26 +355,30 @@ embedding the filesystem. Build SSH or Telnet as adapters over that session API,
 not as part of the kernel. SSH is the sensible first remote transport; Telnet is
 only worth adding for an intentionally retro or constrained client use case.
 
-### M4 — Command substitution and streams
+### M4 — Mount/provider contract
 
-Checkpoint: `$(...)` parses a nested Yafs command AST, captures its output, and
-has well-defined exit/error behavior. Add `|` only when command input/output
-are represented as streams rather than incidental strings. No host execution.
+Checkpoint: a fixture provider is mounted through a strict, schema-validated
+`.yafsmeta` declaration. Discovery does not activate it; activation receives
+only its configured subtree and granted capabilities. Mount state, refresh,
+unmount, provenance, and capability use are inspectable and auditable.
 
-### M5 — Mount lifecycle and `.yafsmeta`
-
-Checkpoint: metadata selects a plugin only after schema validation; a mounted
-plugin is visible in `mounts`, can be refreshed/unmounted, and cannot escape
-its configured subtree. Add an audit log for activation and capability use.
-
-### M6 — Read-only provider and Git/GitHub plugin
+### M5 — Review workspace
 
 Checkpoint: first prove the provider contract with a deterministic fixture
 provider, then expose a pinned Git revision or GitHub repository as a read-only
-mount. A GitHub view may render PR numbers as files/directories containing
-metadata, diffs, and review state. Expose freshness, source revision, and
-explicit refresh behavior. Implement Yafs-level status commands only for that
-mount; do not depend on host Git yet.
+mount. Compose the repository, PR metadata/diff, and writable notes in a
+review workspace. Expose freshness, source revision, and explicit refresh;
+do not depend on host Git yet.
+
+Command substitution and pipes remain language increments after their AST and
+stream contracts are designed. They are not prerequisites for the provider or
+review-workspace proof.
+
+### M6 — Cache provider *(decision gate)*
+
+Checkpoint: durable local TTL entries have atomic replacement, expiry metadata,
+size/eviction limits, and concurrent-write tests. The cache accepts explicit
+caller-populated values; it does not silently become an upstream mirror.
 
 ### M7 — Agents plugin *(decision gate)*
 
@@ -364,7 +387,21 @@ the prompt, allowed context, transcript, state, and generated artifacts are
 visible as files. Restarting the service recovers or clearly marks interrupted
 runs. The plugin has no implicit host-process or network capability.
 
-### M8 — Machines/images plugin *(decision gate)*
+### M8 — Remote/multi-user service *(decision gate)*
+
+Checkpoint: an authenticated API/SSH transport supports per-user sessions,
+authorization, mount visibility rules, quotas, and audit events. The initial
+local-operator service is intentionally not a public endpoint.
+
+### M9 — Runtime bridge *(decision gate)*
+
+Checkpoint: an administrator-controlled, allowlisted `host exec` can run a
+tool against a read-only materialized mount snapshot. It records command,
+identity, snapshot revision, exit status, and output. Importing writes requires
+an explicit staged change set, a matching base revision, conflict checks, and
+an explicit commit command; no runtime write mutates the VFS implicitly.
+
+#### Machine/image provider — later runtime specialization
 
 Checkpoint: an explicit `machines/` or `images/` mount exposes declared image
 definitions and a volume subtree. The plugin can build or run only after its
@@ -379,20 +416,6 @@ declared mount—not an implicit host bind mount.
   volume/                # files exposed to the workload
   run/                   # status, logs, ports, artifacts
 ```
-
-### M9 — Optional host execution bridge *(decision gate)*
-
-Checkpoint: an administrator-controlled, allowlisted `host exec` can run a
-tool against a read-only materialized mount snapshot. It records command,
-identity, snapshot revision, exit status, and output. Importing writes requires
-an explicit staged change set, a matching base revision, conflict checks, and
-an explicit commit command; no runtime write mutates the VFS implicitly.
-
-### M10 — Remote transports and multi-user service *(decision gate)*
-
-Checkpoint: one authenticated API/SSH transport supports per-user sessions,
-authorization, mount visibility rules, quotas, and audit events. Add FTP only
-if its client compatibility is worth its weaker interaction model.
 
 ## Decisions to make before M4
 

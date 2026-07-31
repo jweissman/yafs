@@ -4,20 +4,23 @@ import { stdin, stdout } from 'node:process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { YashClient } from './protocol/client'
 import { CommandHistory } from './yash/history'
 import { completionToken } from './yash/completion'
 import { renderPrompt } from './yash/prompt'
+import { connect } from './yash/connect'
 
 const host = process.env.YAFS_HOST || '127.0.0.1'
 const port = Number(process.env.YAFS_PORT || 7337)
 const args = process.argv.slice(2)
+const local = args[0] === '--local'
+if (local) args.shift()
 const json = args[0] === '--json'
 if (json) args.shift()
 const command = args[0] === '-c' ? args.slice(1).join(' ') : args.join(' ')
-const promptTemplate = process.env.PROMPT || '{user}@{server}:{cwd}$ '
+const promptTemplate = process.env.PROMPT || '\x1b[36m{user}@{server}\x1b[0m:\x1b[34m{cwd}\x1b[0m$ '
 const historyPath = process.env.YAFS_HISTORY || join(homedir(), '.local', 'state', 'yafs', 'history')
-const client = await YashClient.connect({ host, port })
+const connection = await connect(local, host, port)
+const { client, server: serverName } = connection
 
 try {
   if (command) {
@@ -35,12 +38,14 @@ try {
       completer: async line => [await client.complete(line), completionToken(line)]
     })
     const history = await CommandHistory.open(historyPath)
-    readline.history = [...history.entries()].reverse()
-    readline.on('SIGINT', () => readline.close())
+    historyInterface(readline).history = [...history.entries()].reverse()
     installReverseSearch(readline, history)
     let session = (await client.execute('pwd')).session
+    const interruption = new AbortController()
+    readline.on('SIGINT', () => interruption.abort())
     while (true) {
-      const line = await readline.question(renderPrompt(promptTemplate, session, host))
+      const line = await question(readline, promptTemplate, session, serverName, interruption)
+      if (line === undefined) break
       if (line === 'exit' || line === 'quit') break
       if (line === 'history') {
         history.entries().forEach((entry, index) => console.log(`${index + 1}  ${entry}`))
@@ -62,20 +67,30 @@ try {
   await client.close()
 }
 
+type Readline = ReturnType<typeof createInterface>
+type Session = { user: string, cwd: string }
+
+async function question(readline: Readline, template: string, session: Session,
+  server: string, interruption: AbortController) {
+  try { return await readline.question(renderPrompt(template, session, server), { signal: interruption.signal }) }
+  catch (error) { if (interruption.signal.aborted) return undefined; throw error }
+}
+
 function print(output: string) {
   if (output) console.log(output)
 }
 
 function installReverseSearch(readline: ReturnType<typeof createInterface>, history: CommandHistory) {
-  if (!stdin.isTTY) return
-  emitKeypressEvents(stdin)
-  stdin.on('keypress', (_text, key) => {
-    if (key?.ctrl && key.name === 'r') replaceLine(readline, history.search(readline.line))
-  })
+  if (!stdin.isTTY) return; emitKeypressEvents(stdin)
+  stdin.on('keypress', (_text, key) => { if (key?.ctrl && key.name === 'r') replaceLine(readline, history.search(readline.line)) })
 }
 
 function replaceLine(readline: ReturnType<typeof createInterface>, line: string | undefined) {
   if (!line) return
   readline.write(null, { ctrl: true, name: 'u' })
   readline.write(line)
+}
+
+function historyInterface(readline: ReturnType<typeof createInterface>) {
+  return readline as ReturnType<typeof createInterface> & { history: string[] }
 }

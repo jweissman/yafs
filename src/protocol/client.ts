@@ -1,8 +1,10 @@
 import { createConnection, type Socket } from 'node:net'
 
 import type { ExecutionResult } from '../types/ExecutionResult'
+import { PROTOCOL_VERSION } from './version'
 
-type Response = { id: number, result: ExecutionResult }
+type Response = { version: number, id: number, result: ExecutionResult }
+type ProtocolFailure = { version: number, id: number, error: { code: string, message: string } }
 
 export class YashClient {
   private nextId = 1
@@ -10,18 +12,14 @@ export class YashClient {
   private pending = new Map<number, { resolve: (result: ExecutionResult) => void, reject: (error: Error) => void }>()
 
   private constructor(private readonly socket: Socket) {
-    socket.setEncoding('utf8')
-    socket.on('data', chunk => this.receive(chunk))
+    socket.setEncoding('utf8'); socket.on('data', chunk => this.receive(String(chunk)))
     socket.on('error', error => this.failPending(error))
     socket.on('close', () => this.failPending(new Error('Connection closed')))
   }
 
   static async connect(address: { host: string, port: number }): Promise<YashClient> {
     const socket = createConnection(address)
-    await new Promise<void>((resolve, reject) => {
-      socket.once('connect', resolve)
-      socket.once('error', reject)
-    })
+    await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject) })
     return new YashClient(socket)
   }
 
@@ -42,8 +40,7 @@ export class YashClient {
   }
 
   async complete(input: string): Promise<string[]> {
-    const completion = completionTarget(input)
-    const result = await this.execute(`ls ${completion.directory}`)
+    const completion = completionTarget(input); const result = await this.execute(`ls ${completion.directory}`)
     if (result.error) return []
     return result.stdout.split('\n').filter(name => name.startsWith(completion.prefix)).map(completion.format)
   }
@@ -53,15 +50,17 @@ export class YashClient {
     this.responses().forEach(response => this.resolve(response))
   }
 
-  private request(id: number, command: string, resolve: (result: ExecutionResult) => void, reject: (error: Error) => void) {
+  private request(id: number, command: string, resolve: ResultResolver, reject: ErrorResolver) {
     if (this.socket.destroyed) return reject(new Error('Connection closed'))
-    this.pending.set(id, { resolve, reject })
-    this.socket.write(JSON.stringify({ id, command }) + '\n')
+    this.pending.set(id, { resolve, reject }); this.writeRequest(id, command)
+  }
+
+  private writeRequest(id: number, command: string) {
+    const request = JSON.stringify({ version: PROTOCOL_VERSION, id, command }); this.socket.write(`${request}\n`)
   }
 
   private responses(): Response[] {
-    const responses: Response[] = []
-    let newline: number
+    const responses: Response[] = []; let newline: number
     while ((newline = this.buffer.indexOf('\n')) !== -1) this.pushResponse(responses, newline)
     return responses
   }
@@ -77,10 +76,9 @@ export class YashClient {
     return line
   }
 
-  private resolve(response: Response) {
-    const pending = this.pending.get(response.id)
-    if (!pending) return
-    this.pending.delete(response.id)
+  private resolve(response: Response | ProtocolFailure) {
+    const pending = this.pending.get(response.id); if (!pending) return
+    this.pending.delete(response.id); if (response.version !== PROTOCOL_VERSION) return pending.reject(new Error('Unsupported protocol version')); if ('error' in response) return pending.reject(new Error(response.error.message))
     pending.resolve(response.result)
   }
 
@@ -90,10 +88,11 @@ export class YashClient {
   }
 }
 
+type ResultResolver = (result: ExecutionResult) => void
+type ErrorResolver = (error: Error) => void
+
 function completionTarget(input: string) {
-  const token = input.trimEnd().split(/\s+/).at(-1) || ''
-  const slash = token.lastIndexOf('/')
-  const directory = slash === -1 ? '.' : (token.slice(0, slash) || '/')
-  const prefix = slash === -1 ? token : token.slice(slash + 1)
+  const token = input.trimEnd().split(/\s+/).at(-1) || ''; const slash = token.lastIndexOf('/')
+  const directory = slash === -1 ? '.' : (token.slice(0, slash) || '/'); const prefix = slash === -1 ? token : token.slice(slash + 1)
   return { directory, prefix, format: (name: string) => slash === -1 ? name : `${token.slice(0, slash + 1)}${name}` }
 }
