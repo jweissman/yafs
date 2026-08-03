@@ -19,6 +19,15 @@ test("command substitution builds a nested AST and captures deferred output", ()
   expect(yafs.exec("echo $(touch transient)")).toBe(""); expect(yafs.execute("stat transient").error?.code).toBe("not_found"); expect(yafs.execute("echo $(false)").error?.code).toBe("command_error");
 });
 
+test('asynchronous execution preserves deferred substitution isolation', async () => {
+  const yafs = new Yafs(); const result = await yafs.executeAsync('echo $(touch transient)')
+  expect(result.stdout).toBe('')
+  expect((await yafs.executeAsync('stat transient')).error?.code).toBe('not_found')
+  expect((await yafs.executeAsync('echo $USER')).stdout).toBe('root')
+  expect((await yafs.executeAsync('echo $((2+2))')).stdout).toBe('4')
+  expect((await yafs.executeAsync('echo "value=$(echo root)"')).stdout).toBe('value=root')
+})
+
 test("command execution reports output, status, errors, and session state", () => {
   const yafs = new Yafs();
   expect(yafs.execute("pwd")).toEqual({ stdout: "/home/root", stderr: "", status: 0, session: { user: "root", cwd: "/home/root" } });

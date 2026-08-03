@@ -1,28 +1,21 @@
 # Yafs
 
 Yafs is a local-first, composable workspace service. Its kernel makes local
-state, links, and read-only unions inspectable through one virtual tree; future
-providers may add explicit, capability-scoped mounts.
+state, links, and read-only unions inspectable through one virtual tree, with
+explicit, capability-scoped provider mounts — a fixture provider and a real
+GitHub pull-request provider today.
 
-`yafsd` is the loopback service and `yash` is its interactive client. This is
-not a POSIX shell, a Redis clone, or a container orchestrator. Git/GitHub,
-cache, agent, remote, and runtime capabilities are deliberately gated work,
-not ambient behavior.
+`yafsd` is the loopback service, `yash` is its interactive client, and
+`yafs-mcp` is a local MCP adapter — all clients of the same service. This is
+not a POSIX shell, a Redis clone, or a container orchestrator.
 
-Current capabilities include an in-memory VFS with symlinks and ordered unions,
-a small command language, and a versioned loopback JSON-lines service. The local
-appliance journals checksummed VFS operations before applying them, recovers a
-torn final record, rejects earlier corruption, snapshots/compacts durable state,
-and locks its data directory. `yafsd serve` runs in the foreground; `start`,
-`stop`, `restart`, and `status` manage a detached process through the selected
-data directory. Authenticated remote access and plugin activation are not
-implemented yet.
+```sh
+bun link        # one-time: puts yafsd and yash on PATH
+yafsd start
+yash
+```
 
-`bun run mcp` starts a local stdio MCP adapter for an already-running `yafsd`.
-It exposes `yafs.list`, `yafs.read`, `yafs.inspect`, and parser-checked
-read-only `yafs.query`; it never executes arbitrary host shell input or
-activates providers.
-
-See the [product spec](docs/PRODUCT-SPEC.md) for the provider-backed workspace
-experience, the [ADR](docs/ADR.md) for decisions and acceptance criteria, and
-the [feature roadmap](docs/FEATURE-ROADMAP.md) for implementation sequencing.
+See the [documentation](docs/index.md) for a full getting-started guide, the
+[product spec](docs/PRODUCT-SPEC.md) for the provider-backed workspace
+experience, the [ADR](docs/ADR.md) for decisions and invariants, and the
+[feature roadmap](docs/FEATURE-ROADMAP.md) for implementation sequencing.

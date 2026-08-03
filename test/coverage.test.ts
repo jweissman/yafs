@@ -14,6 +14,8 @@ test('local client completes paths and returns no matches for missing directorie
   await client.exec('mkdir docs'); await client.exec('touch docs/guide.md')
   expect(await client.complete('cat d')).toEqual(['docs'])
   expect(await client.complete('cat missing/g')).toEqual([])
+  expect((await client.writeFile('docs/guide.md', 'updated')).error).toBeUndefined()
+  expect(await client.exec('cat docs/guide.md')).toBe('updated')
   await client.close()
 })
 

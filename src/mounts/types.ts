@@ -2,20 +2,26 @@ import { AbsolutePath } from '../core/AbsolutePath'
 
 export type MountState = 'active' | 'failed'
 export type FixtureConfig = { files: Record<string, string> }
-export type MountConfig = FixtureConfig
+export type GitHubConfig = { repository: string, query: string, max: number }
+export type MountProvider = 'fixture' | 'github'
+export type MountConfig = FixtureConfig | GitHubConfig
 export type PublishedSnapshot = { entries: [string, string][], fileCount: number, byteCount: number }
 
 export type MountRecord = {
-  id: string, path: AbsolutePath, provider: 'fixture', config: MountConfig,
+  id: string, path: AbsolutePath, provider: MountProvider, config: MountConfig,
   manifestPath: AbsolutePath, manifestDigest: string, revision: string,
-  state: MountState, activatedAt: string, capabilities: string[]
+  state: MountState, activatedAt: string, correlationId: string, refreshIntervalMs?: number,
+  fetchedAt?: string, capabilities: string[]
 }
 export type PreparedMountRecord = MountRecord & { snapshot: PublishedSnapshot }
 
-export type ManifestMount = { id: string, path: string, provider: 'fixture', config: MountConfig, capabilities: string[] }
+export type ManifestMount = {
+  id: string, path: string, provider: MountProvider, config: MountConfig, capabilities: string[],
+  refreshIntervalMs?: number
+}
 export type Manifest = { version: 1, mounts: ManifestMount[] }
 
 export type Provenance = {
   kind: 'local' | 'provider', path: string, mountId?: string, provider?: string,
-  revision?: string, activatedAt?: string
+  revision?: string, activatedAt?: string, fetchedAt?: string
 }

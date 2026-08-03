@@ -1,0 +1,60 @@
+import type Yafs from './index'
+import { AbsolutePath } from './core/AbsolutePath'
+import { Command } from './types/Command'
+import { yafsContext } from './YafsContext'
+import { evaluateWord, evaluateWordAsync } from './lang/evaluate'
+import { variable } from './YafsValues'
+
+export class YafsCommandRuntime {
+  constructor(private readonly yafs: Yafs) {}
+
+  handle(command: Command): string {
+    const output = this.run(command.name, this.arguments(command))
+    if (output instanceof Promise) throw new Error(`Command requires asynchronous execution: ${command.name}`)
+    return command.redirect ? this.redirect(command.redirect.target, output) : output
+  }
+
+  async handleAsync(command: Command): Promise<string> {
+    const output = await this.run(command.name, await this.argumentsAsync(command))
+    return command.redirect ? this.redirect(command.redirect.target, output) : output
+  }
+
+  private arguments(command: Command) {
+    return command.args.map(word =>
+      evaluateWord(word, name => variable(this.yafs, name), nested => this.substitute(nested)))
+  }
+
+  private argumentsAsync(command: Command) {
+    return Promise.all(command.args.map(word =>
+      evaluateWordAsync(word, name => variable(this.yafs, name), nested => this.substituteAsync(nested))))
+  }
+
+  private redirect(target: string, output: string): string {
+    this.yafs.operationQueue.add({ type: 'write', path: this.yafs.shell.resolve(target), content: output })
+    return ''
+  }
+
+  private substitute(command: Command): string {
+    const state = this.state()
+    try { return this.handle(command).replace(/\n+$/, '') }
+    finally { this.restore(state) }
+  }
+
+  private async substituteAsync(command: Command): Promise<string> {
+    const state = this.state()
+    try { return (await this.handleAsync(command)).replace(/\n+$/, '') }
+    finally { this.restore(state) }
+  }
+
+  private state() { return { cwd: this.yafs.shell.pwd, operationCount: this.yafs.operationQueue.count() } }
+
+  private restore(state: { cwd: AbsolutePath, operationCount: number }) {
+    this.yafs.shell.enter(state.cwd); this.yafs.operationQueue.restore(state.operationCount)
+  }
+
+  private run(name: string, args: string[]): string | Promise<string> {
+    const command = this.yafs.builtins.get(name)
+    if (!command) throw new Error(`Unknown command: ${name}`)
+    return command.execute(yafsContext(this.yafs), args)
+  }
+}

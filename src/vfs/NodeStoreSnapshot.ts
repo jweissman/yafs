@@ -1,14 +1,19 @@
 import { FSNode } from './FSNode'
 import { NodeStoreMutation } from './NodeStoreMutation'
+import { NodeStoreResolver } from './NodeStoreResolver'
 import { NodeStoreState } from './NodeStoreState'
 import { SnapshotNode, VfsSnapshot } from './Snapshot'
 import { VfsOperation } from './VfsOperation'
 
 export class NodeStoreSnapshot {
-  constructor(private readonly state: NodeStoreState, private readonly mutate: NodeStoreMutation,
-    private readonly copy: () => NodeStoreSnapshot) {}
+  constructor(private readonly state: NodeStoreState, private readonly mutate: NodeStoreMutation) {}
   validate(operations: VfsOperation[]) {
     const copy = this.copy(); copy.restore(this.snapshot(0)); operations.forEach(item => copy.mutate.apply(item))
+  }
+
+  private copy() {
+    const state = new NodeStoreState(this.state.clock); const resolver = new NodeStoreResolver(state)
+    return new NodeStoreSnapshot(state, new NodeStoreMutation(state, resolver))
   }
   snapshot(sequence: number): VfsSnapshot {
     return { version: 1, sequence, root: this.node(this.state.origin) }

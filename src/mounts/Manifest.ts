@@ -44,18 +44,25 @@ function validateManifest(value: unknown): Manifest {
 }
 
 function validateMount(value: unknown): ManifestMount {
-  const mount = object(value, 'mount'); only(mount, ['id', 'path', 'provider', 'config', 'capabilities'], 'mount')
+  const mount = object(value, 'mount'); only(mount, ['id', 'path', 'provider', 'config', 'capabilities', 'refresh'], 'mount')
   validateMountFields(mount)
   return validatedMount(mount)
 }
 
 function validatedMount(mount: Record<string, unknown>): ManifestMount {
-  return { id: mount.id as string, path: mount.path as string, provider: 'fixture',
-    config: fixture(mount.config), capabilities: mount.capabilities as string[] }
+  const provider = mount.provider as ManifestMount['provider']
+  return { ...mountIdentity(mount, provider), config: config(provider, mount.config),
+    capabilities: mount.capabilities as string[], refreshIntervalMs: interval(mount.refresh) }
 }
 
+function mountIdentity(mount: Record<string, unknown>, provider: ManifestMount['provider']) {
+  return { id: mount.id as string, path: mount.path as string, provider }
+}
+
+function config(provider: ManifestMount['provider'], value: unknown) { return provider === 'fixture' ? fixture(value) : github(value) }
+
 function validateMountFields(mount: Record<string, unknown>) {
-  if (typeof mount.id !== 'string' || !relative(mount.path) || mount.provider !== 'fixture') throw new Error('Invalid .yafsmeta mount')
+  if (typeof mount.id !== 'string' || !relative(mount.path) || !provider(mount.provider)) throw new Error('Invalid .yafsmeta mount')
   if (!Array.isArray(mount.capabilities) || !mount.capabilities.every(capability => typeof capability === 'string')) throw new Error('Invalid .yafsmeta capabilities')
 }
 
@@ -65,10 +72,40 @@ function fixture(value: unknown) {
   return { files: files as Record<string, string> }
 }
 
+function github(value: unknown) {
+  const config = object(value, 'github config'); only(config, ['repository', 'query', 'max'], 'github config')
+  return githubConfig(config)
+}
+
+function githubConfig(config: Record<string, unknown>) {
+  const max = config.max; if (!validGitHubConfig(config.repository, config.query, max)) throw new Error('Invalid github config')
+  return { repository: config.repository as string, query: config.query as string, max: max as number }
+}
+
+function validGitHubConfig(repositoryValue: unknown, query: unknown, max: unknown) {
+  return repository(repositoryValue) && typeof query === 'string' && Number.isInteger(max)
+    && typeof max === 'number' && max >= 1 && max <= 100
+}
+
 function object(value: unknown, name: string): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid ${name}`); return value as Record<string, unknown> }
 
 function only(value: Record<string, unknown>, keys: string[], name: string) { if (Object.keys(value).some(key => !keys.includes(key))) throw new Error(`Unknown ${name} field`) }
 
 function relative(value: unknown): value is string { return typeof value === 'string' && value !== '' && !value.startsWith('/') && !value.split('/').some(part => !part || part === '.' || part === '..') }
+
+function provider(value: unknown): value is ManifestMount['provider'] { return value === 'fixture' || value === 'github' }
+
+function repository(value: unknown): value is string { return typeof value === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value) }
+
+function interval(value: unknown) {
+  if (value === undefined) return undefined
+  const refresh = object(value, 'refresh'); only(refresh, ['interval'], 'refresh'); return intervalValue(refresh.interval)
+}
+
+function intervalValue(value: unknown) {
+  if (typeof value !== 'string') throw new Error('Invalid refresh interval')
+  const match = /^(\d+)(m|h)$/.exec(value); if (!match) throw new Error('Invalid refresh interval')
+  return Number(match[1]) * (match[2] === 'h' ? 60 : 1) * 60_000
+}
 
 function canonical(value: unknown) { return JSON.stringify(value) }

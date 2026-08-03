@@ -6,5 +6,5 @@ export interface BuiltinCommand {
   readonly name: string
   readonly synopsis: string
   readonly access: CommandAccess
-  execute(context: CommandContext, args: string[]): string
+  execute(context: CommandContext, args: string[]): string | Promise<string>
 }

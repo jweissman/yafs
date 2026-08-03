@@ -1,4 +1,4 @@
-import { mkdir, open } from 'node:fs/promises'
+import { mkdir, open, readFile } from 'node:fs/promises'
 import { spawn, type ChildProcess } from 'node:child_process'
 
 import { clearState, currentState, paths, writeState } from './daemon'
@@ -13,8 +13,22 @@ await ({ serve, start, stop, restart, status }[command] || usage)()
 
 async function serve() {
   if (await managedState()) throw new Error(`yafsd already running for ${statePaths.directory}`)
-  const server = await YafsServer.start(settings); const state = await announce(server)
+  const server = await startServer(); const state = await announce(server)
   await waitForSignal(); await server.close(); await clearState(statePaths.state, state.instanceId)
+}
+
+async function startServer() {
+  try { return await YafsServer.start(settings) }
+  catch (error) { throw isAddressInUse(error) ? addressInUseError() : error }
+}
+
+function isAddressInUse(error: unknown) {
+  return Boolean(error && typeof error === 'object' && (error as NodeJS.ErrnoException).code === 'EADDRINUSE')
+}
+
+function addressInUseError() {
+  return new Error(`Port ${settings.host}:${settings.port} is already in use; another yafsd `
+    + '(perhaps a different data directory, or one started outside this lifecycle) may already be listening')
 }
 
 async function announce(server: YafsServer) {
@@ -48,8 +62,26 @@ function usage(): never { throw new Error('Usage: yafsd [serve|start|stop|restar
 function report(value: string) { console.log(`yafsd ${value}; data: ${statePaths.directory}`) }
 
 async function waitForState(child: ChildProcess) {
-  for (let count = 0; count < 30; count++) { if (await currentState(statePaths.state)) return; if (child.exitCode !== null) throw new Error(`yafsd failed to start; see ${statePaths.log}`); await delay(100) }
+  for (let count = 0; count < 30; count++) { if (await tick(child)) return; await delay(100) }
   throw new Error(`Timed out starting yafsd; see ${statePaths.log}`)
+}
+
+async function tick(child: ChildProcess) {
+  if (await currentState(statePaths.state)) return true
+  if (child.exitCode !== null) throw await startupFailure(); return false
+}
+
+async function startupFailure() {
+  return new Error((await errorLine()) || `yafsd failed to start; see ${statePaths.log}`)
+}
+
+async function errorLine() {
+  try { return lastError(await readFile(statePaths.log, 'utf8')) } catch { return undefined }
+}
+
+function lastError(content: string) {
+  const line = [...content.trim().split('\n')].reverse().find(entry => entry.startsWith('error:'))
+  return line && `yafsd failed to start: ${line.slice('error:'.length).trim()}`
 }
 
 async function managedState() {

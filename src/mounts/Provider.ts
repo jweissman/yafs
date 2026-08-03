@@ -9,5 +9,6 @@ export type ReadOnlyProvider = {
 }
 
 export function providerFor(record: MountRecord): ReadOnlyProvider {
-  return FixtureProvider.from(record.config)
+  if (record.provider !== 'fixture') throw new Error(`Provider is not synchronous: ${record.provider}`)
+  return FixtureProvider.from(record.config as import('./types').FixtureConfig)
 }

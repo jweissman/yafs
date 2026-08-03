@@ -10,14 +10,49 @@ export function execute(yafs: Yafs, input: string): ExecutionResult {
   return plan.result
 }
 
+export async function executeAsync(yafs: Yafs, input: string): Promise<ExecutionResult> {
+  const plan = await planExecutionAsync(yafs, input)
+  if (!plan.result.error) yafs.operationQueue.apply()
+  return plan.result
+}
+
 export function planExecution(yafs: Yafs, input: string): ExecutionPlan {
   yafs.operationQueue.reset()
   try { return planned(yafs, input) }
   catch (error) { return { result: failure(yafs, error), operations: [] } }
 }
 
+export async function planExecutionAsync(yafs: Yafs, input: string): Promise<ExecutionPlan> {
+  yafs.operationQueue.reset()
+  try { return await plannedAsync(yafs, input) }
+  catch (error) { return { result: failure(yafs, error), operations: [] } }
+}
+
+export function executeWrite(yafs: Yafs, path: string, content: string): ExecutionResult {
+  const plan = planWrite(yafs, path, content)
+  if (!plan.result.error) yafs.operationQueue.apply()
+  return plan.result
+}
+
+export function planWrite(yafs: Yafs, path: string, content: string): ExecutionPlan {
+  yafs.operationQueue.reset()
+  try { return plannedWrite(yafs, path, content) }
+  catch (error) { return { result: failure(yafs, error), operations: [] } }
+}
+
+function plannedWrite(yafs: Yafs, path: string, content: string): ExecutionPlan {
+  yafs.operationQueue.add({ type: 'write', path: yafs.shell.resolve(path), content })
+  yafs.operationQueue.validate(); return { result: success(yafs, ''), operations: yafs.operationQueue.all() }
+}
+
 function planned(yafs: Yafs, input: string): ExecutionPlan {
   const result = success(yafs, yafs.handle(yafs.interpreter.parse(input)))
+  yafs.operationQueue.validate()
+  return { result, operations: yafs.operationQueue.all() }
+}
+
+async function plannedAsync(yafs: Yafs, input: string): Promise<ExecutionPlan> {
+  const result = success(yafs, await yafs.handleAsync(yafs.interpreter.parse(input)))
   yafs.operationQueue.validate()
   return { result, operations: yafs.operationQueue.all() }
 }

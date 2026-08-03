@@ -22,6 +22,23 @@ test('a yash client talks to a persistent server', async () => {
   await reconnected.close(); await restarted.close()
 })
 
+test('a structured write RPC round-trips content the command grammar cannot represent', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'yafs-write-')); const server = await YafsServer.start({ walPath: join(directory, 'yafs.wal') })
+  const client = await YashClient.connect(server.address()); await client.exec('mkdir notes')
+  const tricky = "it's a $(command) with a $variable and 'quotes'"
+  expect((await client.writeFile('notes/tricky.md', tricky)).error).toBeUndefined(); expect(await client.exec('cat notes/tricky.md')).toBe(tricky)
+  expect((await client.writeFile('notes/tricky.md', 'replaced')).error).toBeUndefined(); expect(await client.exec('cat notes/tricky.md')).toBe('replaced')
+  await client.close(); await server.close()
+})
+
+test('a structured write RPC honors read-only mount rejection', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'yafs-write-mount-')); const server = await YafsServer.start({ walPath: join(directory, 'yafs.wal') })
+  const client = await YashClient.connect(server.address())
+  await client.exec("printf '{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hi}}, capabilities: []}]}' > .yafsmeta")
+  await client.exec('mount activate .yafsmeta'); expect((await client.writeFile('fixture/hello.txt', 'nope')).error?.code).toBe('read_only_mount')
+  await client.close(); await server.close()
+})
+
 test('a yash client rejects unsupported and failed protocol replies', async () => {
   const server = createServer(socket => socket.on('data', () => socket.write(protocolFailure())))
   await listen(server)

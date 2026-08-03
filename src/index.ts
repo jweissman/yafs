@@ -1,21 +1,17 @@
 import { NodeStore } from './vfs/NodeStore';
 import { User } from './types/User';
-import { AbsolutePath } from './core/AbsolutePath';
 import { Shell } from './Shell';
-import { Command } from './types/Command';
 import { ExecutionResult } from './types/ExecutionResult';
 import { ExecutionPlan } from './types/ExecutionPlan';
 import { BuiltinCommand } from './commands/BuiltinCommand';
 import { Interpreter } from './lang/Interpreter';
 import { Clock, systemClock } from './core/Clock';
-import { evaluateWord } from './lang/evaluate';
 import { builtinCommands } from './commands/registry';
 import { MountManager } from './mounts/MountManager';
 import { YafsOperationQueue } from './YafsOperationQueue';
 import { YafsWorkspace } from './YafsWorkspace';
-import { execute, planExecution } from './YafsExecution';
-import { yafsContext } from './YafsContext';
-import { variable } from './YafsValues';
+import { execute, executeAsync, executeWrite, planExecution, planExecutionAsync, planWrite } from './YafsExecution';
+import { YafsCommandRuntime } from './YafsCommandRuntime';
 
 type YafsOptions = {
   store?: NodeStore, user?: User, clock?: Clock, mounts?: MountManager
@@ -31,6 +27,7 @@ export default class Yafs {
   workspace: YafsWorkspace
   operationQueue: YafsOperationQueue
   clock: Clock
+  commands = new YafsCommandRuntime(this)
 
   constructor(options: YafsOptions = {}) {
     this.clock = options.clock || systemClock
@@ -66,46 +63,17 @@ export default class Yafs {
   }
 
   execute(input: string): ExecutionResult { return execute(this, input) }
+  executeAsync(input: string): Promise<ExecutionResult> { return executeAsync(this, input) }
+  executeWrite(path: string, content: string): ExecutionResult { return executeWrite(this, path, content) }
 
   apply(operations: import('./vfs/VfsOperation').VfsOperation[]) { this.operationQueue.apply(operations) }
 
   plan(input: string): ExecutionPlan { return planExecution(this, input) }
+  planAsync(input: string): Promise<ExecutionPlan> { return planExecutionAsync(this, input) }
+  planWrite(path: string, content: string): ExecutionPlan { return planWrite(this, path, content) }
 
-  handle(command: Command): string {
-    const args = this.arguments(command)
-    const output = this.runCommand(command.name, args)
-    return command.redirect ? this.redirect(command.redirect.target, output) : output
-  }
-
-  private arguments(command: Command) {
-    return command.args.map(word =>
-      evaluateWord(word, name => variable(this, name), nested => this.substitute(nested)))
-  }
-
-  private redirect(target: string, output: string): string {
-    this.operationQueue.add({ type: 'write', path: this.shell.resolve(target), content: output })
-    return ''
-  }
-
-  private substitute(command: Command): string {
-    const state = this.substitutionState()
-    try { return this.handle(command).replace(/\n+$/, '') }
-    finally { this.restoreSubstitution(state) }
-  }
-
-  private substitutionState() {
-    return { cwd: this.shell.pwd, operationCount: this.operationQueue.count() }
-  }
-
-  private restoreSubstitution(state: { cwd: AbsolutePath, operationCount: number }) {
-    this.shell.enter(state.cwd); this.operationQueue.restore(state.operationCount)
-  }
-
-  private runCommand(name: string, args: string[]): string {
-    const command = this.builtins.get(name)
-    if (!command) throw new Error(`Unknown command: ${name}`)
-    return command.execute(this.context(), args)
-  }
+  handle(command: import('./types/Command').Command): string { return this.commands.handle(command) }
+  handleAsync(command: import('./types/Command').Command) { return this.commands.handleAsync(command) }
 
   requiredArg(command: string, args: string[], index: number): string {
     const value = args[index]
@@ -116,6 +84,4 @@ export default class Yafs {
   private registerBuiltins() {
     this.builtins = new Map(builtinCommands().map(command => [command.name, command]))
   }
-
-  private context() { return yafsContext(this) }
 }

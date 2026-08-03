@@ -4,6 +4,7 @@ import { MountPersistence } from './MountPersistence'
 import { MountPlanner } from './MountPlanner'
 import { SnapshotLimits, SnapshotMaterializer } from './SnapshotMaterializer'
 import { MountRecord, PreparedMountRecord } from './types'
+import { ProviderRegistry } from './ProviderRegistry'
 
 export class MountManager {
   private records: PreparedMountRecord[] = []
@@ -11,29 +12,37 @@ export class MountManager {
   private readonly planner: MountPlanner
   private readonly snapshots: SnapshotMaterializer
 
-  constructor(store: NodeStore, statePath?: string, auditPath?: string, limits?: SnapshotLimits) {
-    this.persistence = new MountPersistence(statePath, auditPath)
+  constructor(store: NodeStore, statePath?: string, auditPath?: string, limits?: SnapshotLimits,
+    private readonly providers = new ProviderRegistry()) {
+    this.persistence = this.persistenceFor(statePath, auditPath); this.records = this.restore()
     this.planner = this.createPlanner(store); this.snapshots = new SnapshotMaterializer(store, limits)
-    this.records = this.persistence.restore()
   }
 
-  private createPlanner(store: NodeStore) { return new MountPlanner(store, () => this.records) }
+  private persistenceFor(statePath?: string, auditPath?: string) { return new MountPersistence(statePath, auditPath) }
+  private restore() { return this.persistence.restore() }
+
+  private createPlanner(store: NodeStore) { return new MountPlanner(store, () => this.records, this.providers) }
 
   validate(path: AbsolutePath) { return this.planner.validate(path) }
   planActivation(path: AbsolutePath, id?: string) { return this.planner.plan(path, id) }
-  prepareActivation(record: MountRecord) { return this.snapshots.prepare(record) }
-  prepareRefresh(path: AbsolutePath, id?: string) { return this.prepareActivation(this.planner.refresh(path, id)) }
+  prepareActivation(record: MountRecord, actor = 'system') {
+    if (record.capabilities.length) this.persistence.audit(record, actor, 'fetch', { outcome: 'started' })
+    return this.prepared(record, actor)
+  }
+  prepareRefresh(path: AbsolutePath, id?: string, actor?: string) {
+    return this.prepareActivation(this.planner.refresh(path, id), actor)
+  }
   mounts() { return [...this.records] }
 
   activate(record: PreparedMountRecord, actor: string) {
     this.snapshots.materialize(record); this.records.push(record); this.save()
-    this.persistence.audit(record, actor, 'activation', undefined, record.revision)
+    this.persistence.audit(record, actor, 'activation', { outcome: 'success', after: record.revision })
   }
 
   refresh(record: PreparedMountRecord, actor: string) {
     const previous = this.planUnmount(record.id)
     this.snapshots.replace(record); this.records = this.records.map(item => item.id === record.id ? record : item)
-    this.save(); this.persistence.audit(record, actor, 'refresh', previous.revision, record.revision)
+    this.save(); this.persistence.audit(record, actor, 'refresh', { outcome: 'success', before: previous.revision, after: record.revision })
   }
 
   planUnmount(id: string): PreparedMountRecord {
@@ -45,7 +54,7 @@ export class MountManager {
   unmount(id: string, actor: string) {
     const record = this.planUnmount(id)
     this.remove(record)
-    this.persistence.audit(record, actor, 'unmount', record.revision)
+    this.persistence.audit(record, actor, 'unmount', { outcome: 'success', before: record.revision })
   }
 
   restoreOperation(record: PreparedMountRecord) {
@@ -65,6 +74,13 @@ export class MountManager {
   }
 
   private save() { this.persistence.save(this.records) }
+  private prepared(record: MountRecord, actor: string) {
+    const prepared = this.providers.prepare(record, this.snapshots)
+    return prepared instanceof Promise ? prepared.catch(error => this.fetchFailed(record, actor, error)) : prepared
+  }
+  private fetchFailed(record: MountRecord, actor: string, error: unknown): never {
+    this.persistence.audit(record, actor, 'fetch', { outcome: 'failed', detail: detail(error) }); throw error
+  }
   private includes(record: MountRecord) {
     return this.records.some(item => item.id === record.id && item.path === record.path)
   }
@@ -73,3 +89,5 @@ export class MountManager {
     this.save()
   }
 }
+
+function detail(error: unknown) { return error instanceof Error ? error.message : String(error) }

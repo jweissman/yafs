@@ -1,30 +1,38 @@
 import { createServer, type Server, type Socket } from 'node:net'
-import { dirname } from 'node:path'
 
 import Yafs from '../index'
 import { NodeStore } from '../vfs/NodeStore'
 import { VfsOperation } from '../vfs/VfsOperation'
 import { Journal } from './Journal'
 import { MountManager } from '../mounts/MountManager'
-import { attachLines, parseRequest, persistenceFailure, requestFailure, respond,
+import { ProviderRegistry } from '../mounts/ProviderRegistry'
+import { MountRefreshScheduler } from '../mounts/MountRefreshScheduler'
+import { openServices, listen } from './ServerServices'
+import { attachLines, isWriteRequest, parseRequest, persistenceFailure, requestFailure, respond,
   Request } from './Framing'
 
-type StartOptions = { walPath?: string, dataDir?: string, port?: number, host?: string }
+export type StartOptions = {
+  walPath?: string, dataDir?: string, port?: number, host?: string, providers?: ProviderRegistry,
+  now?: () => number
+}
 
 export class YafsServer {
   private readonly server: Server
   private queue: Promise<void> = Promise.resolve()
   private sockets = new Set<Socket>()
+  private readonly scheduler: MountRefreshScheduler
+  private refreshTimer?: Timer
 
   private constructor(private readonly store: NodeStore, private readonly journal: Journal,
-    private readonly mounts: MountManager) {
+    private readonly mounts: MountManager, now?: () => number) {
     this.server = createServer(socket => this.accept(socket))
+    this.scheduler = new MountRefreshScheduler(() => this.mounts.mounts(), record => this.enqueueRefresh(record), now)
   }
 
   static async start(options: StartOptions): Promise<YafsServer> {
     const services = await openServices(options)
-    const yafsServer = new YafsServer(services.store, services.journal, services.mounts)
-    await listen(yafsServer.server, options); return yafsServer
+    const yafsServer = new YafsServer(services.store, services.journal, services.mounts, options.now)
+    await listen(yafsServer.server, options); yafsServer.startRefreshTimer(); return yafsServer
   }
 
   address(): { host: string, port: number } {
@@ -34,10 +42,11 @@ export class YafsServer {
   }
 
   async close(): Promise<void> {
-    for (const socket of this.sockets) socket.destroy()
-    await this.closeNetwork()
-    await this.journal.close()
+    if (this.refreshTimer) clearInterval(this.refreshTimer)
+    this.closeSockets(); await this.closeNetwork(); await this.journal.close()
   }
+
+  private closeSockets() { for (const socket of this.sockets) socket.destroy() }
 
   private closeNetwork() {
     return new Promise<void>((resolve, reject) =>
@@ -71,8 +80,14 @@ export class YafsServer {
   }
 
   private async executeRequest(session: Yafs, request: Request, socket: Socket) {
-    const plan = session.plan(request.command); await this.commit(session, plan.operations)
+    const plan = await this.plan(session, request)
+    await this.commit(session, plan.operations)
     respond(socket, { version: 1, id: request.id, result: plan.result })
+  }
+
+  private plan(session: Yafs, request: Request) {
+    return isWriteRequest(request) ? session.planWrite(request.write.path, request.write.content)
+      : session.planAsync(request.command)
   }
 
   private requestOrClose(line: string, socket: Socket): Request | undefined {
@@ -89,35 +104,18 @@ export class YafsServer {
     await this.journal.commit(operations); session.apply(operations)
     try { await this.journal.compact(this.store) } catch (error) { console.error('Journal compaction failed:', error) }
   }
-}
 
-function replay(mounts: MountManager) {
-  return (operation: VfsOperation) => replayMountOperation(mounts, operation)
-}
+  async refreshDue() { return this.scheduler.tick() }
+  private startRefreshTimer() {
+    this.refreshTimer = setInterval(() => void this.refreshDue().catch(console.error), 60_000)
+  }
 
-function replayMountOperation(mounts: MountManager, operation: VfsOperation) {
-  if (operation.type === 'mount') mounts.restoreOperation(operation.record)
-  if (operation.type === 'refresh') mounts.restoreRefresh(operation.record)
-  if (operation.type === 'unmount') mounts.restoreUnmount(operation.id)
-}
-
-async function openServices(options: StartOptions) {
-  const store = new NodeStore(); const paths = mountPaths(options)
-  const mounts = new MountManager(store, paths.state, paths.audit)
-  return { store, mounts, journal: await Journal.open(journalPath(options), store, replay(mounts)) }
-}
-
-function listen(server: Server, options: { port?: number, host?: string }): Promise<void> {
-  return new Promise((resolve, reject) => { server.once('error', reject); server.listen(options.port || 0, options.host || '127.0.0.1', resolve) })
-}
-
-function journalPath(options: { walPath?: string, dataDir?: string }): string {
-  if (options.walPath) return options.walPath
-  if (!options.dataDir) throw new Error('walPath or dataDir is required')
-  return `${options.dataDir}/journal.ndjson`
-}
-
-function mountPaths(options: StartOptions) {
-  const directory = options.dataDir || dirname(journalPath(options))
-  return { state: `${directory}/mounts.json`, audit: `${directory}/audit.ndjson` }
+  private enqueueRefresh(record: import('../mounts/types').PreparedMountRecord) {
+    this.queue = this.queue.then(() => this.refresh(record)); return this.queue
+  }
+  private async refresh(record: import('../mounts/types').PreparedMountRecord) {
+    const prepared = await this.mounts.prepareRefresh(record.manifestPath, record.id, 'system')
+    await this.journal.commit([{ type: 'refresh', record: prepared, at: new Date().toISOString() }])
+    this.mounts.refresh(prepared, 'system')
+  }
 }

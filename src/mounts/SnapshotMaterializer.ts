@@ -4,7 +4,6 @@ import { AbsolutePath } from '../core/AbsolutePath'
 import { PathResolver } from '../core/PathResolver'
 import { ProviderOrigin } from '../vfs/FSNode'
 import { NodeStore } from '../vfs/NodeStore'
-import { providerFor } from './Provider'
 import { MountRecord, PreparedMountRecord, PublishedSnapshot } from './types'
 
 export type SnapshotLimits = { files: number, bytes: number }
@@ -14,8 +13,8 @@ export const defaultSnapshotLimits: SnapshotLimits = { files: 4096, bytes: 1024 
 export class SnapshotMaterializer {
   constructor(private readonly store: NodeStore, private readonly limits = defaultSnapshotLimits) {}
 
-  prepare(record: MountRecord): PreparedMountRecord {
-    const entries = providerFor(record).entries(); const snapshot = this.snapshot(entries)
+  prepare(record: MountRecord, entries: [string, string][]): PreparedMountRecord {
+    const snapshot = this.snapshot(entries)
     return { ...record, snapshot }
   }
 
@@ -60,6 +59,6 @@ export class SnapshotMaterializer {
   }
   private origin(record: MountRecord): ProviderOrigin {
     return { mountId: record.id, provider: record.provider, revision: record.revision,
-      activatedAt: record.activatedAt, readOnly: true }
+      activatedAt: record.activatedAt, fetchedAt: record.fetchedAt, readOnly: true }
   }
 }

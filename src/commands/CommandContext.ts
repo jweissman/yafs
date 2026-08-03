@@ -18,11 +18,12 @@ export type CommandContext = {
   provenance(path: AbsolutePath): Provenance[];
   mounts(): string[];
   planMount(path: AbsolutePath, id?: string): MountRecord;
-  prepareMount(record: MountRecord): PreparedMountRecord;
-  planRefresh(path: AbsolutePath, id?: string): PreparedMountRecord;
+  prepareMount(record: MountRecord): PreparedMountRecord | Promise<PreparedMountRecord>;
+  planRefresh(path: AbsolutePath, id?: string): PreparedMountRecord | Promise<PreparedMountRecord>;
   planUnmount(id: string): MountRecord;
   mkdir(path: AbsolutePath): void;
   touch(path: AbsolutePath): void;
+  write(path: AbsolutePath, content: string): void;
   remove(path: AbsolutePath): void;
   symlink(target: string, path: AbsolutePath): void;
   union(path: AbsolutePath, layers: AbsolutePath[]): void;

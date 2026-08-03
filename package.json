@@ -1,5 +1,13 @@
 {
+  "name": "yafs",
+  "version": "0.1.0",
+  "bin": {
+    "yafsd": "./bin/yafsd",
+    "yash": "./bin/yash",
+    "yafs-mcp": "./bin/yafs-mcp"
+  },
   "scripts": {
+    "docs": "uvx --with mkdocs-material mkdocs serve",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "yafsd": "bun run src/yafsd.ts",

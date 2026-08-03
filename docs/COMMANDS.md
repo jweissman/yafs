@@ -31,7 +31,8 @@ control, host executable lookup, or shell `eval`.
 | Files | `ls [PATH]`, `cat PATH`, `mkdir PATH`, `touch PATH`, `rm PATH` | Operate on the Yafs tree. `rm` removes files only; it does not remove directories. |
 | Links and composition | `ln -s TARGET LINK`, `readlink PATH`, `union NAME LAYER...` | Create/read symbolic links and a read-only ordered directory composition. A union checks layers left-to-right and never copies up writes. |
 | Inspection | `stat PATH`, `lstat PATH`, `origins PATH`, `inspect PATH`, `mounts` | Explain type, links, provenance, union candidates, and active compositions. |
-| Mount lifecycle | `mount validate MANIFEST [ID]`, `mount activate MANIFEST [ID]`, `mount refresh MANIFEST [ID]`, `mount unmount ID` | Validate and manage declared provider views. Only the zero-capability fixture provider is implemented today. |
+| Mount lifecycle | `mount validate MANIFEST [ID]`, `mount activate MANIFEST [ID]`, `mount refresh MANIFEST [ID]`, `mount unmount ID` | Validate and manage fixture or bounded GitHub collection snapshots. GitHub needs an explicit named capability and daemon-held configuration. |
+| Review workflow | `review bind SOURCE ARTIFACT_DIRECTORY` | Create a durable local `source.json` recording the provider, mount, revision, and fetch time used by a review artifact. |
 
 All paths resolve from the session's current directory unless they begin with
 `/`. `stat` follows a final symlink; `lstat` does not. `inspect` is structured

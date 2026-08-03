@@ -12,15 +12,11 @@ export type NodeStoreComponents = {
 
 export function createNodeStoreComponents(clock: Clock): NodeStoreComponents {
   const state = new NodeStoreState(clock); const resolver = new NodeStoreResolver(state)
-  return compose(state, resolver, clock)
+  return components(state, resolver)
 }
 
-function compose(state: NodeStoreState, resolver: NodeStoreResolver, clock: Clock): NodeStoreComponents {
+function components(state: NodeStoreState, resolver: NodeStoreResolver): NodeStoreComponents {
   const mutation = new NodeStoreMutation(state, resolver)
   return { state, resolver, mutation, inspection: new NodeStoreInspection(state, resolver),
-    snapshots: snapshots(state, mutation, clock) }
-}
-
-function snapshots(state: NodeStoreState, mutation: NodeStoreMutation, clock: Clock) {
-  return new NodeStoreSnapshot(state, mutation, () => createNodeStoreComponents(clock).snapshots)
+    snapshots: new NodeStoreSnapshot(state, mutation) }
 }

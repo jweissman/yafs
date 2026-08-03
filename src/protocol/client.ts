@@ -5,6 +5,7 @@ import { PROTOCOL_VERSION } from './version'
 
 type Response = { version: number, id: number, result: ExecutionResult }
 type ProtocolFailure = { version: number, id: number, error: { code: string, message: string } }
+type Payload = { command: string } | { write: { path: string, content: string } }
 
 export class YashClient {
   private nextId = 1
@@ -30,8 +31,11 @@ export class YashClient {
   }
 
   execute(command: string): Promise<ExecutionResult> {
-    const id = this.nextId++
-    return new Promise((resolve, reject) => this.request(id, command, resolve, reject))
+    return this.send({ command })
+  }
+
+  writeFile(path: string, content: string): Promise<ExecutionResult> {
+    return this.send({ write: { path, content } })
   }
 
   async close(): Promise<void> {
@@ -50,13 +54,18 @@ export class YashClient {
     this.responses().forEach(response => this.resolve(response))
   }
 
-  private request(id: number, command: string, resolve: ResultResolver, reject: ErrorResolver) {
-    if (this.socket.destroyed) return reject(new Error('Connection closed'))
-    this.pending.set(id, { resolve, reject }); this.writeRequest(id, command)
+  private send(payload: Payload): Promise<ExecutionResult> {
+    const id = this.nextId++
+    return new Promise((resolve, reject) => this.request(id, payload, resolve, reject))
   }
 
-  private writeRequest(id: number, command: string) {
-    const request = JSON.stringify({ version: PROTOCOL_VERSION, id, command }); this.socket.write(`${request}\n`)
+  private request(id: number, payload: Payload, resolve: ResultResolver, reject: ErrorResolver) {
+    if (this.socket.destroyed) return reject(new Error('Connection closed'))
+    this.pending.set(id, { resolve, reject }); this.writeRequest(id, payload)
+  }
+
+  private writeRequest(id: number, payload: Payload) {
+    const request = JSON.stringify({ version: PROTOCOL_VERSION, id, ...payload }); this.socket.write(`${request}\n`)
   }
 
   private responses(): Response[] {

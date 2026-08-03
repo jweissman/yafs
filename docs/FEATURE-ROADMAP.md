@@ -400,14 +400,18 @@ to inspect the same source revision, write separate review artifacts, and leave
 an inspectable source revision/freshness trail. Do not depend on host Git,
 GitHub writes, autonomous agent loops, or public MCP.
 
-The declaration names a repository and PR query, never one PR. A kernel-owned,
-daemon-executed interval refresh atomically publishes the next whole matching
-collection; explicit refresh remains available for an operator. Each refresh is
-audited and reports its source revision and freshness. The schedule is durable
-mount policy, coalesces overlapping attempts, and retains the last successful
-snapshot when a refresh fails. Every local `notes/<number>/` set carries a
-durable source binding so notes remain inspectable after that PR leaves the
-live query.
+The declaration names a repository and PR query, never one PR. Explicit refresh
+atomically publishes the next whole matching collection. Each refresh reports
+its source revision and freshness. A durable `notes/<number>/` source binding
+is available through `trace` (renamed from `review bind` — see "Actions and
+durable traces" in the ADR; `reify` is its pending reconstruction half,
+prerequisite: the M6 blob store below). The daemon runs durable interval
+refresh through the normal WAL publication path and retains the last snapshot
+when a fetch fails. Its due-time/restart acceptance test remains the final M5
+check. The rename and recording the provider's own immutable reference
+(a PR's head SHA, not the collection-level digest `trace` currently records)
+are small, decoupled fixes worth landing as M5 polish independent of the
+larger blob-store work.
 
 Prerequisite: complete M4.5's published-snapshot resolver contract. GitHub
 adds an external collection provider to that proven kernel; it does not create
@@ -421,6 +425,94 @@ mount-scoped local-note write tool must not accept unrestricted shell strings.
 It does not expose provider activation. Dogfooding it against Yafs's own roadmap is
 an acceptance exercise for the structured API, not a reason to widen authority.
 
+## Near-term provider and surface candidates
+
+Recorded for sequencing discipline, not as a committed batch: everything here
+was checked against the same question every earlier idea in this document was
+checked against — does it reduce to primitives already decided (collection
+projection, reconciled resource, `ctl`, the adapter-client pattern), or does
+it need something genuinely new? Most of it reduces cleanly. The two items
+that don't are called out as such, deliberately not sequenced alongside the
+rest.
+
+**Ready — no new primitive needed:**
+
+- **Slack provider.** Channel mirroring is the same collection-projection
+  shape the GitHub provider already proved; posting a comment is a `ctl`
+  action, same mechanism as `gh comment`. Nothing about this is new design.
+- **CSV `db` provider.** Rows are resources under a mount, same shape as PRs
+  under GitHub — browsable with zero new primitives. See "Capabilities,
+  distribution, and adapters" in the ADR for why this stays a collection
+  projection and not a step toward simulating an RDBMS.
+- **A local-only webui.** Not a multi-user or remote feature — it talks only
+  to the operator's own `yafsd`, same trust model Yash already has. The one
+  real piece of new plumbing is a thin adapter process bridging HTTP (or a
+  WebSocket, for something that feels live) to the existing loopback RPC,
+  exactly the shape `yafs-mcp` already is, just a different wire format. Once
+  that bridge exists, a static htmx/tailwind frontend over it is a reasonable,
+  cheap choice.
+- **Local multi-agent group chat.** Deliberately *not* relayed through Slack:
+  a shared local append-only log (`chat/room/messages.ndjson`) that several
+  agent directories and a human read and append to needs no external-provider
+  write authority at all — it sidesteps the durable-intent/idempotency-key
+  machinery real remote writes need, because nothing here leaves the local
+  store. Buildable as repeated one-shot `model.invoke` calls (see the M7
+  section above) — each agent's "turn" reads recent history and optionally
+  appends — without needing the recursive tool-use orchestrator that real M7
+  requires. This is close to assembly of pieces already decided, not new
+  design, and is worth treating as the actual near-term target it looks like.
+
+**Ready, but a distinct engineering task, not a rider on the above:**
+
+- **Redis/S3 compatibility.** Wire-protocol gateway versus cache-shaped Yash
+  commands are different projects with different value — see "Capabilities,
+  distribution, and adapters" in the ADR for the distinction and why it
+  matters. Bounded and buildable, sequenced after M6, not folded into it.
+
+**Deliberately not sequenced — new capability class, only build when a
+concrete need forces the question:**
+
+- **Docker / container support** covers two distinct ideas, worth keeping
+  separate since they carry different risk:
+  - *Standing up long-running containers* (services, a mini-k3s-shaped
+    workspace). The mounting half — materializing a resolved mirror of the
+    composed tree into a private host directory for a container to
+    bind-mount — reuses the existing M9/`SnapshotMaterializer` mechanism; see
+    the ADR. The blocker is the container-execution capability itself, not
+    the mount.
+  - *Resolving a command name to a container image*, so `imagemagick convert
+    ...` runs a declared image and returns stdout/stderr/exit status exactly
+    like a native command. This needs explicit, non-speculative declaration
+    per command (a `.yafsmeta`-style manifest naming the image, requested
+    like any other capability) — never resolving an arbitrary typed word
+    against a registry, which would reopen the "no ambient host executable
+    lookup" line this design has held since the first version of the shell
+    contract. If pursued, stage it: read-only, stdout-only commands first
+    (no VFS writes); a container that produces file output is a distinctly
+    harder second step needing the staged-import machinery invariant 7
+    already requires and nothing has designed yet; long-running/stateful
+    containers are a third step past that.
+
+  Both need the same new capability class (`container.run`-shaped, naming an
+  allowlisted image/registry and resource limits) that doesn't exist yet, and
+  the risk compounds if either is ever looped recursively through an agent.
+  Hold both until a concrete need forces the question, not because they're
+  interesting.
+
+#### M6 prerequisite — content-addressed blob store
+
+Not a numbered milestone of its own: shared groundwork `reify` and the cache
+provider both need, so it should be built once rather than twice. Interface
+is small — `put(bytes) -> digest`, `get(digest) -> bytes | undefined`,
+`retain`/`release(digest, ownerId)`, and a `gc()` that reclaims zero-reference
+blobs, run as an ordinary serialized command rather than a background timer
+so it cannot race an activation about to reference the digest it would
+reclaim. Reference counts are derived by replaying the journal and scanning
+trace files at startup, not their own persisted ledger — see the ADR's
+"Trace capture and reification" for the full reasoning. Durability follows
+the existing pattern: sync the blob before syncing the WAL record that names
+its digest.
+
 ### M6 — Cache provider *(decision gate)*
 
 Checkpoint: durable local TTL entries have atomic replacement, expiry metadata,
@@ -433,6 +525,14 @@ Checkpoint: `agent start`, `agent send`, and `agent stop` manage a durable run;
 the prompt, allowed context, transcript, state, and generated artifacts are
 visible as files. Restarting the service recovers or clearly marks interrupted
 runs. The plugin has no implicit host-process or network capability.
+
+Before this gate, a much smaller experiment is worth running: a one-shot
+`ctl`-triggered `model.invoke` action against a real local model (no run
+lifecycle, no recursive tool use — prompt in, text recorded out) is cheap
+relative to the full checkpoint above and answers the actual open question,
+whether an autonomous pass ever produces something worth reading, before
+committing to the orchestrator a real agent loop needs. See "A cheap
+experiment before the M7 decision gate" in the ADR.
 
 ### M8 — Remote/multi-user service *(decision gate)*
 

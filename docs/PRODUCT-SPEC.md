@@ -70,10 +70,8 @@ mounts:
     provider: github
     config:
       repository: acme/widget
-      pulls:
-        query: "is:pr is:open"
-    refresh:
-      interval: 15m
+      query: "is:pr is:open"
+      max: 50
     capabilities:
       - network.github-api
       - secret.github-token
@@ -82,11 +80,15 @@ mounts:
 This mounts a GitHub collection, not PR 482. Its provider projects matching PRs
 under `source/pulls/<number>/`; a PR number is a virtual child path, not mount
 configuration. Its kernel-owned, daemon-executed refresh policy publishes a new complete
-collection snapshot at most once per interval; it never updates individual PR
-paths in place. The operator may also request a refresh explicitly. The example
-shows the intended M5 shape, not currently accepted syntax. The implemented
-fixture accepts only `provider: fixture`, a declarative file map, and
-`capabilities: []`.
+collection snapshot; it never updates individual PR paths in place. The operator
+may request `mount refresh .yafsmeta github-acme-widget` explicitly. Interval
+refresh is a later M5 checkpoint, not silently implied by the manifest.
+
+The GitHub API endpoint and credential are daemon configuration, never manifest
+data: `YAFS_GITHUB_API_URL` defaults to `https://api.github.com` and must use
+HTTPS; `YAFS_GITHUB_TOKEN`, when present, permits the separate
+`secret.github-token` grant. A public collection needs only `network.github-api`.
+Neither value is stored in the VFS, WAL snapshot, provenance, or inspection output.
 
 Activation proceeds through this visible lifecycle:
 

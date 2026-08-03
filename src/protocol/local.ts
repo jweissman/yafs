@@ -4,7 +4,10 @@ import type { ExecutionResult } from '../types/ExecutionResult'
 export class LocalYashClient {
   private readonly yafs = new Yafs()
 
-  async execute(command: string): Promise<ExecutionResult> { return this.yafs.execute(command) }
+  async execute(command: string): Promise<ExecutionResult> { return this.yafs.executeAsync(command) }
+  async writeFile(path: string, content: string): Promise<ExecutionResult> {
+    return this.yafs.executeWrite(path, content)
+  }
 
   async exec(command: string): Promise<string> {
     const result = await this.execute(command)

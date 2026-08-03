@@ -5,22 +5,24 @@ import { PathResolver } from '../core/PathResolver'
 import { NodeStore } from '../vfs/NodeStore'
 import { parseManifest } from './Manifest'
 import { ManifestMount, MountRecord, PreparedMountRecord } from './types'
+import { ProviderRegistry } from './ProviderRegistry'
 
 type Details = { declaration: ManifestMount, digest: string }
 
 export class MountPlanner {
-  constructor(private readonly store: NodeStore, private readonly records: () => PreparedMountRecord[]) {}
+  constructor(private readonly store: NodeStore, private readonly records: () => PreparedMountRecord[],
+    private readonly providers: ProviderRegistry) {}
 
   validate(path: AbsolutePath) { return parseManifest(this.store.read(path)) }
 
   plan(path: AbsolutePath, id?: string): MountRecord {
     const { declaration, digest } = this.details(path, id)
-    this.assertGranted(declaration.capabilities)
+    this.providers.assertGranted(declaration)
     return this.record(path, declaration, digest)
   }
   refresh(path: AbsolutePath, id?: string): MountRecord {
     const { declaration, digest } = this.details(path, id)
-    this.assertGranted(declaration.capabilities); return this.refreshRecord(path, declaration, digest)
+    this.providers.assertGranted(declaration); return this.refreshRecord(path, declaration, digest)
   }
 
   private details(path: AbsolutePath, id?: string): Details {
@@ -32,10 +34,6 @@ export class MountPlanner {
     const selected = mounts.filter(mount => !id || mount.id === id)
     if (selected.length !== 1) throw new Error('Expected exactly one declared mount')
     return selected[0]
-  }
-
-  private assertGranted(capabilities: string[]) {
-    if (capabilities.length) throw new Error(`Capabilities are not granted: ${capabilities.join(', ')}`)
   }
 
   private record(manifestPath: AbsolutePath, mount: ManifestMount, digest: string): MountRecord {
@@ -57,7 +55,13 @@ export class MountPlanner {
   private activeRecord(path: AbsolutePath, manifestPath: AbsolutePath, mount: ManifestMount,
     digest: string): MountRecord {
     return { ...this.identity(path, mount), ...this.metadata(manifestPath, digest),
-      state: 'active', activatedAt: new Date().toISOString(), capabilities: mount.capabilities }
+      ...this.lifecycle(mount) }
+  }
+
+  private lifecycle(mount: ManifestMount) {
+    const activatedAt = new Date().toISOString()
+    return { state: 'active' as const, activatedAt, correlationId: `${mount.id}:${activatedAt}`,
+      refreshIntervalMs: mount.refreshIntervalMs, capabilities: mount.capabilities }
   }
 
   private identity(path: AbsolutePath, mount: ManifestMount) {

@@ -8,6 +8,8 @@ import { CommandHistory } from './yash/history'
 import { completionToken } from './yash/completion'
 import { renderPrompt } from './yash/prompt'
 import { connect } from './yash/connect'
+import { edit } from './yash/edit'
+import { withTerminalHandoff } from './yash/terminalHandoff'
 
 const host = process.env.YAFS_HOST || '127.0.0.1'
 const port = Number(process.env.YAFS_PORT || 7337)
@@ -52,6 +54,11 @@ try {
         history.entries().forEach((entry, index) => console.log(`${index + 1}  ${entry}`))
         continue
       }
+      if (line === 'edit' || line.startsWith('edit ')) {
+        await history.record(line)
+        await withTerminalHandoff(readline, () => runEdit(client, line.slice(5).trim()))
+        continue
+      }
       try {
         await history.record(line)
         const result = await client.execute(line)
@@ -77,6 +84,11 @@ async function question(readline: Readline, prompt: string, interruption: AbortC
 
 function print(output: string) {
   if (output) console.log(output)
+}
+
+async function runEdit(client: Parameters<typeof edit>[0], path: string) {
+  try { const error = await edit(client, path); if (error) console.error(error) }
+  catch (error) { console.error(error instanceof Error ? error.message : String(error)) }
 }
 
 function installReverseSearch(readline: ReturnType<typeof createInterface>,

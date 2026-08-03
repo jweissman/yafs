@@ -1,7 +1,8 @@
 import { AbsolutePath } from '../core/AbsolutePath'
 
 export type ProviderOrigin = {
-  mountId: string, provider: string, revision: string, activatedAt: string, readOnly: true
+  mountId: string, provider: string, revision: string, activatedAt: string,
+  fetchedAt?: string, readOnly: true
 }
 
 export type FSNode = {

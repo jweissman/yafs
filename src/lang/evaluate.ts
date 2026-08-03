@@ -13,6 +13,12 @@ export function evaluateWord(word: Word, variable: (name: string) => string, sub
   return expansion(word, substitute)
 }
 
+export async function evaluateWordAsync(word: Word, variable: (name: string) => string,
+  substitute: (command: import('../types/Command').Command) => Promise<string>): Promise<string> {
+  if (word.kind === 'literal') return word.value; if (word.kind === 'variable') return variable(word.name)
+  if (word.kind === 'compound') return (await Promise.all(word.parts.map(part => evaluateWordAsync(part, variable, substitute)))).join('')
+  return word.kind === 'substitution' ? substitute(word.command) : String(evaluateExpression(word.expression)) }
+
 function expansion(word: Exclude<Word, { kind: 'literal' | 'variable' | 'compound' }>, substitute: (command: import('../types/Command').Command) => string) {
   return word.kind === 'substitution' ? substitute(word.command) : String(evaluateExpression(word.expression))
 }

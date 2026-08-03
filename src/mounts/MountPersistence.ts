@@ -2,9 +2,10 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync,
   renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-import { PreparedMountRecord } from './types'
+import { MountRecord, PreparedMountRecord } from './types'
 
 type StoredMounts = { version: 1, mounts: PreparedMountRecord[] }
+export type AuditOutcome = { outcome: string, before?: string, after?: string, detail?: string }
 
 export class MountPersistence {
   private sequence = 0
@@ -22,28 +23,34 @@ export class MountPersistence {
     writeMounts(this.statePath, mounts)
   }
 
-  audit(record: PreparedMountRecord, actor: string, action: string, before?: string, after?: string) {
+  audit(record: MountRecord, actor: string, action: string, outcome: AuditOutcome = { outcome: 'success' }) {
     if (!this.auditPath) return
-    mkdirSync(dirname(this.auditPath), { recursive: true })
-    appendSynced(this.auditPath, `${JSON.stringify(this.event(record, actor, action, before, after))}\n`)
+    this.appendAudit(record, actor, action, outcome)
+  }
+
+  private appendAudit(record: MountRecord, actor: string, action: string, outcome: AuditOutcome) {
+    const path = this.auditPath!; mkdirSync(dirname(path), { recursive: true })
+    appendSynced(path, this.auditLine(record, actor, action, outcome))
+  }
+
+  private auditLine(record: MountRecord, actor: string, action: string, outcome: AuditOutcome) {
+    return `${JSON.stringify(this.event(record, actor, action, outcome))}\n`
   }
 
   private parse(path: string) { return valid(JSON.parse(readFileSync(path, 'utf8')) as StoredMounts) }
 
-  private event(record: PreparedMountRecord, actor: string, action: string, before?: string,
-    after?: string) {
-    return { ...this.eventIdentity(record, actor, ++this.sequence),
-      ...this.eventFields(action, before, after) }
+  private event(record: MountRecord, actor: string, action: string, outcome: AuditOutcome) {
+    return { ...this.eventIdentity(record, actor, ++this.sequence), ...this.eventFields(record, action, outcome) }
   }
 
-  private eventFields(action: string, before?: string, after?: string) {
-    return { action, relativePath: '',
-      capabilitiesUsed: [], outcome: 'success', beforeRevision: before, afterRevision: after }
+  private eventFields(record: MountRecord, action: string, outcome: AuditOutcome) {
+    return { action, relativePath: '', capabilitiesUsed: record.capabilities, outcome: outcome.outcome,
+      beforeRevision: outcome.before, afterRevision: outcome.after, detail: outcome.detail }
   }
 
-  private eventIdentity(record: PreparedMountRecord, actor: string, sequence: number) {
+  private eventIdentity(record: MountRecord, actor: string, sequence: number) {
     return { sequence, at: new Date().toISOString(), actor, mountId: record.id,
-      provider: record.provider, correlationId: `${record.id}:${sequence}` }
+      provider: record.provider, correlationId: record.correlationId }
   }
 }
 

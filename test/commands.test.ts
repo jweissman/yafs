@@ -41,6 +41,6 @@ function mountContext() {
 }
 
 function writeContext() {
-  return { mkdir: () => undefined, touch: () => undefined, remove: () => undefined,
+  return { mkdir: () => undefined, touch: () => undefined, write: () => undefined, remove: () => undefined,
     symlink: () => undefined, union: () => undefined }
 }
