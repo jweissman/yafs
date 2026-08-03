@@ -1,5 +1,5 @@
 import { AbsolutePath } from '../core/AbsolutePath'
-import { FSNode } from './FSNode'
+import { FSNode, ProviderOrigin } from './FSNode'
 import { NodeStoreResolver } from './NodeStoreResolver'
 import { NodeStoreState } from './NodeStoreState'
 
@@ -25,14 +25,18 @@ export class NodeStoreInspection {
   private unionNames(node: FSNode) { return [...new Set(this.resolver.entries(node).map(child => child.name))] }
   private names(node: FSNode) { return (node.children || []).map(child => child.name).sort() }
   origins(path: AbsolutePath): string[] {
+    if (path === '/') return ['/']
     return this.findOrigins(this.state.origin, path.slice(1).split('/'), path)
+  }
+  provenance(path: AbsolutePath): { path: string, origin?: ProviderOrigin }[] {
+    return this.origins(path).map(origin => this.provenanceItem(origin as AbsolutePath))
   }
   mounts(): { path: string, layers: string[] }[] {
     const mounts: { path: string, layers: string[] }[] = []; this.collect(this.state.origin, mounts)
     return mounts
   }
   private findOrigins(node: FSNode, parts: string[], path: AbsolutePath): string[] {
-    if (node.unionLayers) return node.unionLayers.map(layer => this.resolver.resolveFrom(layer, parts))
+    if (node.unionLayers) return this.resolver.layers(node).map(layer => this.resolver.resolveFrom(layer, parts))
       .filter(this.node).map(item => this.resolver.pathOf(item))
     return this.childOrigins(node, parts, path)
   }
@@ -48,7 +52,10 @@ export class NodeStoreInspection {
     node.children?.forEach(child => this.collect(child, mounts))
   }
   private mount(node: FSNode) {
-    return { path: this.resolver.pathOf(node), layers: node.unionLayers!.map(layer => this.resolver.pathOf(layer)) }
+    return { path: this.resolver.pathOf(node), layers: node.unionLayers || [] }
   }
   private node(value: FSNode | undefined): value is FSNode { return !!value }
+  private provenanceItem(path: AbsolutePath) {
+    return { path, origin: this.resolver.get(path)?.providerOrigin }
+  }
 }

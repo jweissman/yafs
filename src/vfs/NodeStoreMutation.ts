@@ -1,11 +1,14 @@
 import { AbsolutePath } from '../core/AbsolutePath'
 import { PathResolver } from '../core/PathResolver'
 import { FSNode } from './FSNode'
+import { nodeStoreWriteGuard } from './NodeStoreWriteGuard'
 import { NodeStoreResolver } from './NodeStoreResolver'
 import { NodeStoreState } from './NodeStoreState'
+import { canonicalUnionLayers } from './UnionLayers'
 import { VfsOperation } from './VfsOperation'
 
 export class NodeStoreMutation {
+  private readonly guard = nodeStoreWriteGuard
   constructor(private readonly state: NodeStoreState, private readonly resolver: NodeStoreResolver) {}
 
   mkdir(path: AbsolutePath, at = this.state.clock.now()) { this.create(path, true, at) }
@@ -34,24 +37,30 @@ export class NodeStoreMutation {
     const index = parent.children?.findIndex(child => child.name === name) ?? -1
     if (index >= 0) parent.children!.splice(index, 1)
   }
+  setProviderOrigin(path: AbsolutePath, origin: import('./FSNode').ProviderOrigin) {
+    const node = this.resolver.get(path, false)
+    if (!node) throw new Error(`No such file: ${path}`)
+    this.guard.setProviderOrigin(node, origin)
+  }
   symlink(target: string, path: AbsolutePath, at = this.state.clock.now()) {
     const { parent, name } = this.parent(path); this.assertAbsent(parent, name, path)
     this.state.createNode(name, false, parent, at).symlinkTarget = target
   }
   union(path: AbsolutePath, layers: AbsolutePath[], at = this.state.clock.now()) {
+    const resolved = canonicalUnionLayers(this.resolver, layers)
     const { parent, name } = this.parent(path); this.assertAbsent(parent, name, path)
-    this.state.createNode(name, true, parent, at).unionLayers = layers.map(layer => this.layer(layer))
+    this.state.createNode(name, true, parent, at).unionLayers = resolved
   }
   apply(operation: VfsOperation) {
-    if (operation.type === 'mount' || operation.type === 'unmount') return
+    if (operation.type === 'mount' || operation.type === 'unmount' || operation.type === 'refresh') return
     const at = new Date(operation.at); return this.applyAt(operation, at)
   }
-  private applyAt(operation: Exclude<VfsOperation, { type: 'mount' | 'unmount' }>, at: Date) {
+  private applyAt(operation: Exclude<VfsOperation, { type: 'mount' | 'unmount' | 'refresh' }>, at: Date) {
     if (operation.type === 'mkdir') return this.mkdir(operation.path, at)
     if (operation.type === 'touch') return this.touch(operation.path, at)
     return this.applyWrite(operation, at)
   }
-  private applyWrite(operation: Exclude<VfsOperation, { type: 'mount' | 'unmount' | 'mkdir' | 'touch' }>, at: Date) {
+  private applyWrite(operation: Exclude<VfsOperation, { type: 'mount' | 'unmount' | 'refresh' | 'mkdir' | 'touch' }>, at: Date) {
     if (operation.type === 'write') return this.write(operation.path, operation.content, at)
     if (operation.type === 'symlink') return this.symlink(operation.target, operation.path, at)
     return operation.type === 'union' ? this.union(operation.path, operation.layers, at) : this.remove(operation.path)
@@ -72,13 +81,12 @@ export class NodeStoreMutation {
     if (!parent.dir) throw new Error(`Not a directory: ${path}`); if (parent.unionLayers) throw new Error(`Read-only union mount: ${path}`)
     return { parent, name }
   }
-  private layer(path: AbsolutePath) { const node = this.resolver.get(path); if (!node?.dir) throw new Error(`Union layer is not a directory: ${path}`); return node }
   private assertAbsent(parent: FSNode, name: string, path: AbsolutePath) { if (parent.children?.some(child => child.name === name)) throw new Error(`Path already exists: ${path}`) }
   private assertWritable(path: AbsolutePath, depth = 0) {
     if (depth > 40) throw new Error('Too many symbolic links'); this.writable(this.state.origin, path.slice(1).split('/'), path, depth)
   }
   private writable(node: FSNode, parts: string[], path: AbsolutePath, depth: number) {
-    if (node.unionLayers) throw new Error(`Read-only union mount: ${path}`)
+    this.guard.assertWritable(node, path)
     const child = node.children?.find(item => item.name === parts[0]); if (!child) return
     this.writableChild(child, parts, path, depth)
   }

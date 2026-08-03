@@ -1,5 +1,5 @@
 import { AbsolutePath } from '../core/AbsolutePath'
-import { MountRecord } from '../mounts/types'
+import { PreparedMountRecord } from '../mounts/types'
 
 type TimedOperation = { at: string }
 
@@ -9,7 +9,8 @@ export type VfsIntent =
   { type: 'write', path: AbsolutePath, content: string } |
   { type: 'symlink', path: AbsolutePath, target: string } |
   { type: 'union', path: AbsolutePath, layers: AbsolutePath[] } |
-  { type: 'mount', record: MountRecord } |
+  { type: 'mount', record: PreparedMountRecord } |
+  { type: 'refresh', record: PreparedMountRecord } |
   { type: 'unmount', id: string } |
   { type: 'remove', path: AbsolutePath }
 
@@ -19,7 +20,8 @@ export type VfsOperation = TimedOperation & (
   { type: 'write', path: AbsolutePath, content: string } |
   { type: 'symlink', path: AbsolutePath, target: string } |
   { type: 'union', path: AbsolutePath, layers: AbsolutePath[] } |
-  { type: 'mount', record: MountRecord } |
+  { type: 'mount', record: PreparedMountRecord } |
+  { type: 'refresh', record: PreparedMountRecord } |
   { type: 'unmount', id: string } |
   { type: 'remove', path: AbsolutePath }
 )

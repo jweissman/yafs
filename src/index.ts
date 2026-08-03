@@ -45,7 +45,7 @@ export default class Yafs {
   }
 
   private initializeWorkspace() {
-    this.workspace = new YafsWorkspace(this.shell, this.store, this.mounts)
+    this.workspace = new YafsWorkspace(this.shell, this.store, () => this.mounts.mounts())
   }
   private initializeOperations() {
     this.operationQueue = new YafsOperationQueue(this.store, this.mounts, this.clock,
@@ -54,7 +54,7 @@ export default class Yafs {
 
   private initializeShell() {
     this.shell = new Shell(this.user, this.store)
-    this.interpreter = new Interpreter(this.shell); this.registerBuiltins()
+    this.interpreter = new Interpreter(); this.registerBuiltins()
   }
 
   static exec(input: string) { return new Yafs().exec(input) }

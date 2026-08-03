@@ -18,9 +18,9 @@ export function createNodeStoreComponents(clock: Clock): NodeStoreComponents {
 function compose(state: NodeStoreState, resolver: NodeStoreResolver, clock: Clock): NodeStoreComponents {
   const mutation = new NodeStoreMutation(state, resolver)
   return { state, resolver, mutation, inspection: new NodeStoreInspection(state, resolver),
-    snapshots: snapshots(state, resolver, mutation, clock) }
+    snapshots: snapshots(state, mutation, clock) }
 }
 
-function snapshots(state: NodeStoreState, resolver: NodeStoreResolver, mutation: NodeStoreMutation, clock: Clock) {
-  return new NodeStoreSnapshot(state, resolver, mutation, () => createNodeStoreComponents(clock).snapshots)
+function snapshots(state: NodeStoreState, mutation: NodeStoreMutation, clock: Clock) {
+  return new NodeStoreSnapshot(state, mutation, () => createNodeStoreComponents(clock).snapshots)
 }

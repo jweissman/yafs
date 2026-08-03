@@ -18,6 +18,11 @@ and locks its data directory. `yafsd serve` runs in the foreground; `start`,
 data directory. Authenticated remote access and plugin activation are not
 implemented yet.
 
+`bun run mcp` starts a local stdio MCP adapter for an already-running `yafsd`.
+It exposes `yafs.list`, `yafs.read`, `yafs.inspect`, and parser-checked
+read-only `yafs.query`; it never executes arbitrary host shell input or
+activates providers.
+
 See the [product spec](docs/PRODUCT-SPEC.md) for the provider-backed workspace
 experience, the [ADR](docs/ADR.md) for decisions and acceptance criteria, and
 the [feature roadmap](docs/FEATURE-ROADMAP.md) for implementation sequencing.

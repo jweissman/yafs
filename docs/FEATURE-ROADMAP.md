@@ -1,7 +1,7 @@
 # Yafs feature roadmap
 
 This file tracks implementation sequencing. The product decision, use cases,
-and acceptance-level milestones live in [docs/ADR.md](docs/ADR.md).
+and acceptance-level milestones live in [ADR.md](ADR.md).
 
 The committed delivery horizon ends at the Git/GitHub review-workspace proof.
 Cache, agents, remote multi-user service, and runtime execution are gated
@@ -10,10 +10,10 @@ listed below.
 
 ## Product thesis
 
-Yafs is a virtual filesystem service whose directories can acquire capabilities
-through explicit mounts. A user should be able to browse, inspect, compose, and
-operate on ordinary-looking paths while plugins supply the backing data or
-behavior.
+Yafs is a virtual filesystem service whose directories can acquire explicit
+provider views. A user can browse, inspect, and compose ordinary-looking paths;
+providers may separately expose named, typed actions through Yash and RPC.
+Mounting a view never implies authority to invoke an action.
 
 The stable center is the VFS. The shell, network transports, and plugins are
 clients of it.
@@ -27,9 +27,9 @@ Yash / loopback RPC / later SSH adapter
           |
        shell session
           |
-  VFS kernel: paths, nodes, links, ACLs, mounts, metadata
+  VFS kernel: paths, nodes, links, identity, mounts, metadata
           |
-  local store | git mirror | agent workspace | other providers
+  local store | collection views | reconciled resources | adapters
 ```
 
 ## Non-goals for the first releases
@@ -68,12 +68,13 @@ workflow. It should expose files, not hide a proprietary state machine.
 ```yaml
 # /work/bug-184/.yafsmeta
 mounts:
-  - path: agents
-    plugin: agents
+  - id: reviewer
+    path: agents/reviewer
+    provider: agent
     config:
       prompt: prompt.md
       context: [context]
-      permissions: [read_workspace, write_output]
+    capabilities: [model.invoke]
 ```
 
 From the Yafs REPL, a realistic first interaction could be:
@@ -234,12 +235,12 @@ the opt-in host bridge. [POSIX command search and execution](https://pubs.opengr
 
 ## Plugin model
 
-Each mount declares a plugin, configuration, and granted capabilities in
+Each mount declares a provider, configuration, and granted capabilities in
 `.yafsmeta`. Plugin discovery must be separate from activation; merely finding
 metadata should not start an agent, clone a repository, or launch a container.
 
 ```ts
-interface VfsPlugin {
+interface VfsProvider {
   manifest: { name: string; version: string; capabilities: Capability[] }
   mount(config: unknown, context: MountContext): Promise<Mount>
 }
@@ -268,8 +269,6 @@ Design checkpoints for every plugin:
 - M0 and M1 are complete for local nodes: the in-memory tree supports canonical
   paths, symbolic links (including loop detection), read-only ordered unions,
   and `origins` inspection; commands return typed result/error/session data.
-  Provider-backed paths are not yet logical union layers or symlink targets;
-  that M5 foundation remains deliberately open.
 - M2 is substantially implemented: Yash has client-local persisted history,
   readline up/down navigation, Ctrl-R lookup, last-token virtual-path
   completion, `PROMPT`, `-c`, and `--json` result output. Completion and JSON
@@ -279,13 +278,17 @@ Design checkpoints for every plugin:
   checksummed sync-before-apply operations, recovery, snapshots, and an
   exclusive data-directory lock are covered by integration tests. `yafsd`
   manages foreground and detached lifecycle through its data directory.
-- M4's read-only fixture slice is complete: `.yafsmeta` is strict YAML with
-  unknown-field rejection; `mount validate`, `activate`, and `unmount` are
-  explicit; mount state and activation/unmount audit persist in the data directory;
-  mounted reads have structured provenance. Provider writes, grants, refresh,
-  and external providers remain follow-up work. Command substitution is
-  implemented as a deferred nested-command AST, including inside double quotes;
-  pipes remain later work.
+- M4 and M4.5 are complete for the read-only fixture: `.yafsmeta` is strict
+  YAML with unknown-field rejection; validate, activate, refresh, and unmount
+  are explicit. A bounded snapshot is durably recorded before publication;
+  direct reads, links, unions, provenance, recovery, and unmount use that one
+  resolver path. Provider writes, grants, and external providers remain
+  follow-up work. Command substitution is implemented as a deferred nested-
+  command AST, including inside double quotes; pipes remain later work.
+- `yafs-mcp` is a local stdio client of `yafsd`, not a provider or a second VFS
+  implementation. Its current tools are `yafs.list`, `yafs.read`, and
+  `yafs.inspect`; arbitrary shell execution, MCP writes, and public access are
+  deliberately absent.
 
 ### M0 — Foundation: composable in-memory filesystem
 
@@ -373,6 +376,21 @@ Checkpoint: a fixture provider is mounted through a strict, schema-validated
 only its configured subtree and granted capabilities. Mount state, refresh,
 unmount, provenance, and capability use are inspectable and auditable.
 
+### M4.5 — Published snapshot resolver
+
+Completed fixture checkpoint: replace the fixture's split direct-provider/materialized-copy paths
+with one synchronous resolver over published snapshots. Provider I/O occurs
+only during explicit activation or refresh, which builds a detached snapshot
+and atomically publishes it with node-level provenance and read-only metadata.
+Recovery, direct reads, symlinks, unions, `inspect`, unmount, and refresh now
+all observe the same snapshot revision. This is a correctness milestone, not
+GitHub work.
+
+The narrow VFS usability pass now includes `grep -n PATTERN PATH...`,
+`head`, `tail`, and `wc -l` over virtual files, plus parser-checked read-only
+MCP query execution. These aid review and MCP dogfooding without claiming
+pipelines, globbing, or POSIX text semantics.
+
 ### M5 — Collaborative review room
 
 Checkpoint: expose a filtered GitHub PR collection as a read-only source
@@ -382,16 +400,26 @@ to inspect the same source revision, write separate review artifacts, and leave
 an inspectable source revision/freshness trail. Do not depend on host Git,
 GitHub writes, autonomous agent loops, or public MCP.
 
-Entry foundation: replace the fixture-specific overlay with a provider-neutral
-logical-node resolver. A mount must never shadow a local node; ordered unions
-must accept provider-backed directories; and symlink traversal must re-enter
-the resolver. `union NAME LAYER...` remains a read-only, left-to-right
-composition of a newly created directory, not a Plan 9 bind or a writable
-overlay. Tests cover direct provider access, provider paths through links and
-unions, collision rejection, selected/shadowed provenance, and snapshot
-replacement only through explicit refresh.
+The declaration names a repository and PR query, never one PR. A kernel-owned,
+daemon-executed interval refresh atomically publishes the next whole matching
+collection; explicit refresh remains available for an operator. Each refresh is
+audited and reports its source revision and freshness. The schedule is durable
+mount policy, coalesces overlapping attempts, and retains the last successful
+snapshot when a refresh fails. Every local `notes/<number>/` set carries a
+durable source binding so notes remain inspectable after that PR leaves the
+live query.
+
+Prerequisite: complete M4.5's published-snapshot resolver contract. GitHub
+adds an external collection provider to that proven kernel; it does not create
+an alternative namespace or refresh path.
 
 Pipes remain a language increment after typed stream contracts are designed.
+
+The M5 foundation includes a local-only `yafs-mcp` adapter as a separate client
+executable. It currently exposes read/list/inspect only; a future structured,
+mount-scoped local-note write tool must not accept unrestricted shell strings.
+It does not expose provider activation. Dogfooding it against Yafs's own roadmap is
+an acceptance exercise for the structured API, not a reason to widen authority.
 
 ### M6 — Cache provider *(decision gate)*
 
@@ -438,7 +466,6 @@ declared mount—not an implicit host bind mount.
 
 ## M5 design gate
 
-The provider/adapter decisions in [docs/ADR.md](docs/ADR.md) are now explicit.
 Before implementing the GitHub source provider, turn its named network grant,
 secret-reference policy, Unicode path boundary, revision/freshness metadata,
-and bounded response behavior into code and acceptance tests.
+bounded snapshot behavior, and explicit refresh into code and acceptance tests.

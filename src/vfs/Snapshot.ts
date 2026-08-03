@@ -1,3 +1,6 @@
+import { ProviderOrigin } from './FSNode'
+import { AbsolutePath } from '../core/AbsolutePath'
+
 export type SnapshotNode = {
   name: string
   dir?: boolean
@@ -6,7 +9,8 @@ export type SnapshotNode = {
   createdAt: string
   modifiedAt: string
   children?: SnapshotNode[]
-  unionLayers?: string[]
+  unionLayers?: AbsolutePath[]
+  providerOrigin?: ProviderOrigin
 }
 
 export type VfsSnapshot = { version: 1, sequence: number, root: SnapshotNode }

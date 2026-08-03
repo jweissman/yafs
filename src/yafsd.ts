@@ -13,11 +13,14 @@ await ({ serve, start, stop, restart, status }[command] || usage)()
 
 async function serve() {
   if (await managedState()) throw new Error(`yafsd already running for ${statePaths.directory}`)
-  const server = await YafsServer.start(settings); await announce(server)
-  await waitForSignal(); await server.close(); await clearState(statePaths.state)
+  const server = await YafsServer.start(settings); const state = await announce(server)
+  await waitForSignal(); await server.close(); await clearState(statePaths.state, state.instanceId)
 }
 
-async function announce(server: YafsServer) { const address = server.address(); await writeState(statePaths.state, address); console.log(`yafsd listening on ${address.host}:${address.port}; data: ${statePaths.directory}`) }
+async function announce(server: YafsServer) {
+  const address = server.address(); const state = await writeState(statePaths.state, address)
+  console.log(`yafsd listening on ${address.host}:${address.port}; data: ${statePaths.directory}`); return state
+}
 
 async function start() {
   if (await managedState()) return report('running')
@@ -33,7 +36,7 @@ function detach(log: Awaited<ReturnType<typeof open>>) {
 
 async function stop() {
   const state = await managedState(); if (!state) return report('stopped')
-  process.kill(state.pid, 'SIGTERM'); await waitForStop(state.pid); await clearState(statePaths.state); report('stopped')
+  process.kill(state.pid, 'SIGTERM'); await waitForStop(state.pid); await clearState(statePaths.state, state.instanceId); report('stopped')
 }
 
 async function restart() { await stop(); await start() }

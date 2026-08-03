@@ -16,7 +16,6 @@ export class YafsOperationQueue {
   validate() { this.store.validate(this.operations) }
 
   add(operation: VfsIntent) {
-    if ('path' in operation) this.mounts.assertWritable(operation.path)
     this.operations.push({ ...operation, at: this.clock.now().toISOString() } as VfsOperation)
   }
 
@@ -24,7 +23,11 @@ export class YafsOperationQueue {
 
   private applyOperation(operation: VfsOperation) {
     if (operation.type === 'mount') return this.mounts.activate(operation.record, this.actor())
+    return this.applyNonMount(operation)
+  }
+  private applyNonMount(operation: VfsOperation) {
+    if (operation.type === 'refresh') return this.mounts.refresh(operation.record, this.actor())
     if (operation.type === 'unmount') return this.mounts.unmount(operation.id, this.actor())
-    this.store.apply(operation)
+    return this.store.apply(operation)
   }
 }

@@ -1,6 +1,5 @@
 import * as ohm from 'ohm-js';
 import grammarContent from './Yash.ohm' with { type: 'text' };
-import { Shell } from '../Shell';
 import { AstNode } from './AstNode';
 import { Command } from '../types/Command';
 import { Expression } from '../types/Expression';
@@ -9,7 +8,7 @@ import { Word } from './Word';
 export class Interpreter {
   grammar: ohm.Grammar;
   semantics: ohm.Semantics;
-  constructor(private shell: Shell) {
+  constructor() {
     this.grammar = ohm.grammar(grammarContent);
     this.semantics = this.grammar.createSemantics();
     this.semantics.addOperation('ast', { ...this.commandAst(), ...this.wordAst(), ...this.expressionAst() });

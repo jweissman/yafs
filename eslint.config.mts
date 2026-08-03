@@ -6,6 +6,7 @@ import { defineConfig } from "eslint/config";
 
 
 export default defineConfig([
+  { ignores: ['site/**'] },
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
     plugins: { js, '@stylistic': stylistic },

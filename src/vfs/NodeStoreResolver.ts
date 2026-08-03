@@ -15,15 +15,17 @@ export class NodeStoreResolver {
   }
 
   child(node: FSNode, name: string): FSNode | undefined {
-    return node.unionLayers ? this.layerChild(node.unionLayers, name)
+    return node.unionLayers ? this.layerChild(this.layers(node), name)
       : node.children?.find(candidate => candidate.name === name)
   }
 
   entries(node: FSNode): FSNode[] {
     if (!node.unionLayers) return node.children || []
-    const entries = new Map<string, FSNode>(); node.unionLayers.forEach(layer => this.addEntries(entries, layer))
+    const entries = new Map<string, FSNode>(); this.layers(node).forEach(layer => this.addEntries(entries, layer))
     return [...entries.values()]
   }
+
+  layers(node: FSNode): FSNode[] { return (node.unionLayers || []).map(path => this.get(path)).filter(this.directory) }
 
   pathOf(node: FSNode): string {
     const names: string[] = []; let current: FSNode | undefined = node
@@ -60,4 +62,5 @@ export class NodeStoreResolver {
   private addEntries(entries: Map<string, FSNode>, layer: FSNode) {
     this.entries(layer).forEach(child => entries.set(child.name, entries.get(child.name) || child))
   }
+  private directory(node: FSNode | undefined): node is FSNode { return Boolean(node?.dir) }
 }

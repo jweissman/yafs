@@ -17,8 +17,30 @@ test('session command objects provide the standard session commands', () => {
   expect(yafs.exec('pwd')).toBe('/home/root'); yafs.exec('mkdir next'); expect(yafs.exec('cd next')).toBe('')
 })
 
+test('read-only text commands query virtual files without host processes', () => {
+  const yafs = new Yafs(); yafs.store.write('/home/root/words', 'alpha\nbeta\nalphabet')
+  expect(yafs.exec('grep -n alpha words')).toBe('1:alpha\n3:alphabet')
+  expect(yafs.exec('head -n 2 words')).toBe('alpha\nbeta')
+  expect(yafs.exec('tail -n 1 words')).toBe('alphabet')
+  expect(yafs.exec('wc -l words')).toBe('3')
+  expect(yafs.exec('grep beta words')).toBe('beta')
+  expect(yafs.execute('head words').stderr).toContain('head requires -n COUNT PATH')
+  expect(yafs.execute('grep alpha').stderr).toContain('grep requires a pattern and path')
+})
+
 function commandContext(): CommandContext {
   const resolve = (path: string) => `/home/root/${path}` as const
   return { clock: { now: () => new Date(0) }, user: () => 'root', pwd: () => '/home/root', cd: () => undefined, resolve,
-    required: (_command, args, index) => args[index] || '', help: () => '', read: () => '', readlink: () => '', list: () => [], type: () => 'file', origins: () => [], provenance: () => [], mounts: () => [], planMount: () => { throw new Error() }, planUnmount: () => { throw new Error() }, mkdir: () => undefined, touch: () => undefined, remove: () => undefined, symlink: () => undefined, union: () => undefined, mount: () => undefined, unmount: () => undefined }
+    required: (_command, args, index) => args[index] || '', help: () => '', read: () => '', readlink: () => '', list: () => [], type: () => 'file', origins: () => [], provenance: () => [], mounts: () => [], ...mountContext(), ...writeContext() }
+}
+
+function mountContext() {
+  return { planMount: () => { throw new Error() }, prepareMount: () => { throw new Error() },
+    planRefresh: () => { throw new Error() }, planUnmount: () => { throw new Error() },
+    mount: () => undefined, refresh: () => undefined, unmount: () => undefined }
+}
+
+function writeContext() {
+  return { mkdir: () => undefined, touch: () => undefined, remove: () => undefined,
+    symlink: () => undefined, union: () => undefined }
 }

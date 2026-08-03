@@ -97,6 +97,7 @@ function replay(mounts: MountManager) {
 
 function replayMountOperation(mounts: MountManager, operation: VfsOperation) {
   if (operation.type === 'mount') mounts.restoreOperation(operation.record)
+  if (operation.type === 'refresh') mounts.restoreRefresh(operation.record)
   if (operation.type === 'unmount') mounts.restoreUnmount(operation.id)
 }
 

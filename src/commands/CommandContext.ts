@@ -1,6 +1,6 @@
 import { Clock } from '../core/Clock';
 import { AbsolutePath } from '../core/AbsolutePath';
-import { MountRecord, Provenance } from '../mounts/types';
+import { MountRecord, PreparedMountRecord, Provenance } from '../mounts/types';
 
 export type CommandContext = {
   clock: Clock;
@@ -18,12 +18,15 @@ export type CommandContext = {
   provenance(path: AbsolutePath): Provenance[];
   mounts(): string[];
   planMount(path: AbsolutePath, id?: string): MountRecord;
+  prepareMount(record: MountRecord): PreparedMountRecord;
+  planRefresh(path: AbsolutePath, id?: string): PreparedMountRecord;
   planUnmount(id: string): MountRecord;
   mkdir(path: AbsolutePath): void;
   touch(path: AbsolutePath): void;
   remove(path: AbsolutePath): void;
   symlink(target: string, path: AbsolutePath): void;
   union(path: AbsolutePath, layers: AbsolutePath[]): void;
-  mount(record: MountRecord): void;
+  mount(record: PreparedMountRecord): void;
+  refresh(record: PreparedMountRecord): void;
   unmount(id: string): void;
 }

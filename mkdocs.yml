@@ -1,0 +1,7 @@
+site_name: Yafs
+nav:
+  - Overview: index.md
+  - Yash command reference: COMMANDS.md
+  - Architecture decision record: ADR.md
+  - Product spec: PRODUCT-SPEC.md
+  - Feature roadmap: FEATURE-ROADMAP.md

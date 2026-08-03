@@ -2,40 +2,41 @@ import { AbsolutePath } from '../core/AbsolutePath'
 import { NodeStore } from '../vfs/NodeStore'
 import { MountPersistence } from './MountPersistence'
 import { MountPlanner } from './MountPlanner'
-import { SnapshotMaterializer } from './SnapshotMaterializer'
-import { MountRecord, Provenance } from './types'
-import { MountView } from './MountView'
+import { SnapshotLimits, SnapshotMaterializer } from './SnapshotMaterializer'
+import { MountRecord, PreparedMountRecord } from './types'
 
 export class MountManager {
-  private records: MountRecord[] = []
+  private records: PreparedMountRecord[] = []
   private readonly persistence: MountPersistence
   private readonly planner: MountPlanner
   private readonly snapshots: SnapshotMaterializer
-  private readonly view: MountView
 
-  constructor(store: NodeStore, statePath?: string, auditPath?: string) {
+  constructor(store: NodeStore, statePath?: string, auditPath?: string, limits?: SnapshotLimits) {
     this.persistence = new MountPersistence(statePath, auditPath)
-    this.planner = this.createPlanner(store); this.snapshots = new SnapshotMaterializer(store)
-    this.view = new MountView(() => this.records); this.records = this.persistence.restore()
+    this.planner = this.createPlanner(store); this.snapshots = new SnapshotMaterializer(store, limits)
+    this.records = this.persistence.restore()
   }
 
   private createPlanner(store: NodeStore) { return new MountPlanner(store, () => this.records) }
 
   validate(path: AbsolutePath) { return this.planner.validate(path) }
   planActivation(path: AbsolutePath, id?: string) { return this.planner.plan(path, id) }
-  read(path: AbsolutePath) { return this.view.read(path) }
-  list(path: AbsolutePath, local: string[]) { return this.view.list(path, local) }
-  type(path: AbsolutePath) { return this.view.type(path) }
-  provenance(path: AbsolutePath): Provenance[] | undefined { return this.view.provenance(path) }
-  assertWritable(path: AbsolutePath) { this.view.assertWritable(path) }
+  prepareActivation(record: MountRecord) { return this.snapshots.prepare(record) }
+  prepareRefresh(path: AbsolutePath, id?: string) { return this.prepareActivation(this.planner.refresh(path, id)) }
   mounts() { return [...this.records] }
 
-  activate(record: MountRecord, actor: string) {
+  activate(record: PreparedMountRecord, actor: string) {
     this.snapshots.materialize(record); this.records.push(record); this.save()
     this.persistence.audit(record, actor, 'activation', undefined, record.revision)
   }
 
-  planUnmount(id: string) {
+  refresh(record: PreparedMountRecord, actor: string) {
+    const previous = this.planUnmount(record.id)
+    this.snapshots.replace(record); this.records = this.records.map(item => item.id === record.id ? record : item)
+    this.save(); this.persistence.audit(record, actor, 'refresh', previous.revision, record.revision)
+  }
+
+  planUnmount(id: string): PreparedMountRecord {
     const record = this.records.find(item => item.id === id)
     if (!record) throw new Error(`No active mount: ${id}`)
     return record
@@ -47,9 +48,14 @@ export class MountManager {
     this.persistence.audit(record, actor, 'unmount', record.revision)
   }
 
-  restoreOperation(record: MountRecord) {
-    this.snapshots.materialize(record)
+  restoreOperation(record: PreparedMountRecord) {
+    if (!this.snapshots.exists(record)) this.snapshots.materialize(record)
     if (!this.includes(record)) { this.records.push(record); this.save() }
+  }
+
+  restoreRefresh(record: PreparedMountRecord) {
+    this.snapshots.replace(record)
+    this.records = this.records.map(item => item.id === record.id ? record : item); this.save()
   }
 
   restoreUnmount(id: string) {

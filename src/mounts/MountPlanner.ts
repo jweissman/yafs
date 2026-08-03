@@ -4,12 +4,12 @@ import { AbsolutePath } from '../core/AbsolutePath'
 import { PathResolver } from '../core/PathResolver'
 import { NodeStore } from '../vfs/NodeStore'
 import { parseManifest } from './Manifest'
-import { ManifestMount, MountRecord } from './types'
+import { ManifestMount, MountRecord, PreparedMountRecord } from './types'
 
 type Details = { declaration: ManifestMount, digest: string }
 
 export class MountPlanner {
-  constructor(private readonly store: NodeStore, private readonly records: () => MountRecord[]) {}
+  constructor(private readonly store: NodeStore, private readonly records: () => PreparedMountRecord[]) {}
 
   validate(path: AbsolutePath) { return parseManifest(this.store.read(path)) }
 
@@ -17,6 +17,10 @@ export class MountPlanner {
     const { declaration, digest } = this.details(path, id)
     this.assertGranted(declaration.capabilities)
     return this.record(path, declaration, digest)
+  }
+  refresh(path: AbsolutePath, id?: string): MountRecord {
+    const { declaration, digest } = this.details(path, id)
+    this.assertGranted(declaration.capabilities); return this.refreshRecord(path, declaration, digest)
   }
 
   private details(path: AbsolutePath, id?: string): Details {
@@ -38,6 +42,16 @@ export class MountPlanner {
     const path = PathResolver.resolve(mount.path, dirname(manifestPath) as AbsolutePath)
     this.assertAvailable(path)
     return this.activeRecord(path, manifestPath, mount, digest)
+  }
+  private refreshRecord(manifestPath: AbsolutePath, mount: ManifestMount, digest: string): MountRecord {
+    const path = PathResolver.resolve(mount.path, dirname(manifestPath) as AbsolutePath)
+    this.assertActive(mount.id, path)
+    return this.activeRecord(path, manifestPath, mount, digest)
+  }
+
+  private assertActive(id: string, path: AbsolutePath) {
+    const active = this.records().find(record => record.id === id)
+    if (!active || active.path !== path) throw new Error(`No active mount: ${id}`)
   }
 
   private activeRecord(path: AbsolutePath, manifestPath: AbsolutePath, mount: ManifestMount,

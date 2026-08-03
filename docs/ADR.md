@@ -58,16 +58,25 @@ provenance remain inspectable through the tree.**
 
 ## M5 namespace semantics
 
-**Decision:** M5 will use one provider-neutral namespace resolver. Local nodes,
+**Decision:** M5 uses one provider-neutral namespace resolver. Local nodes,
 provider snapshots, and ordered unions are alternative sources of *logical
 nodes*, not separate filesystem implementations. Every pathname operation,
 including symlink traversal, re-enters that resolver.
 
-This is deliberately more precise than the current fixture implementation.
-The fixture is a useful M4 proof, but its mount paths are currently intercepted
-outside the local `NodeStore`; consequently, it cannot yet be a union layer or
-the target of a local symlink. M5 may not add GitHub until that distinction is
-removed and covered by acceptance tests.
+The early M4 fixture had two paths: direct mounted reads consulted `MountView`,
+while links and unions resolved a materialized `NodeStore` copy. Its static
+fixture data made those copies agree, but a refreshable provider could make
+them silently diverge. M4.5 removes `MountView`: one published snapshot is now
+authoritative for direct reads, links, unions, and provenance. M5 may not add
+GitHub until that invariant remains true for a non-fixture provider.
+
+The resolver is an extension of the synchronous `NodeStore` model, not a
+provider callback interface. A provider is never called while resolving,
+listing, reading, or following a link. Only explicit, authorized activation or
+refresh may perform provider I/O; it builds and validates a detached snapshot,
+then atomically publishes that snapshot and its node-level provenance/read-only
+metadata. A command therefore observes one committed snapshot, never a mix of
+pre- and post-refresh content.
 
 ### Terms and resolution
 
@@ -76,9 +85,9 @@ removed and covered by acceptance tests.
   with another mount, a local node, or a union target is an activation error.
   Ancestor directories remain ordinary namespace directories and show mounted
   children during listing.
-- A **logical node** has a type, a stable source identity, a read/list operation
-  where applicable, a writability decision, and structured provenance. It is
-  not necessarily an in-memory `FSNode`.
+- A **logical node** has a type, a stable source identity, a read/list
+  operation where applicable, a writability decision, and structured
+  provenance. It is not necessarily an in-memory `FSNode`.
 - A **symlink** stores a path string exactly as written. Resolution follows that
   string relative to the link's parent (or from `/` for an absolute target),
   then asks the namespace resolver again. Links may therefore cross from local
@@ -87,7 +96,10 @@ removed and covered by acceptance tests.
   list of existing logical-directory layer paths. Lookup is left-to-right: the
   first layer containing a name supplies that child. Listing is the stable
   union of names. `inspect` reports the winner and every shadowed candidate.
-  A union itself has no backing provider and does not mutate its layers.
+  A union resolves those paths on every operation; a missing layer contributes
+  nothing, and a later mount at the same path joins the union with its current
+  provenance. A union itself has no backing provider and does not mutate its
+  layers.
 - A write, create, delete, or rename through any union path fails. Copy-up,
   tombstones, and merge behavior are a later, separate design; no command may
   infer them.
@@ -109,12 +121,23 @@ it is not the POSIX host-mount command.
 | --- | --- | --- |
 | `mount validate MANIFEST [ID]` | Parse strict `.yafsmeta`, select exactly one declaration when `ID` is supplied, validate its provider configuration, and report the proposed mount record. | None: no provider activation, network activity, secret access, or durable state. |
 | `mount activate MANIFEST [ID]` | Validate and authorize the declaration, prepare a read-only snapshot if needed, then durably attach that exact snapshot at its declared path. | A private read cache may be prepared before commit; it becomes visible only after the mount operation is durable. |
+| `mount refresh MANIFEST [ID]` | Prepare and atomically replace one active mount with a new immutable snapshot. | Provider I/O is explicit and authorized; the resulting snapshot is durable before its refresh operation commits. |
 | `mount unmount ID` | Durably detach the active mount. | It does not delete a provider's private cache or remote data; cache retention is provider policy. |
 
-For M5, a mounted provider view is an immutable snapshot. Explicit refresh is a
-later lifecycle operation that obtains a new snapshot and atomically replaces
-the active view with a new revision/freshness record. It never changes local
-review artifacts; those artifacts must record the source revision they address.
+For M5, a mounted provider view is an immutable, byte/file-count-bounded
+snapshot. Explicit refresh atomically replaces the active view with a new
+revision/freshness record. A declared kernel-owned, daemon-executed interval
+may request the same refresh operation; it is durable policy, not ambient
+provider activity.
+It is persisted with the mount, coalesces overlapping attempts, retains the
+last successful snapshot on failure, and audits every attempt. Refresh never
+changes local review artifacts; those artifacts must record the source revision
+they address.
+
+Fixture snapshots are bounded and embedded in their WAL operations. A future
+provider whose snapshots live in a content-addressed store must sync content
+before syncing the WAL record that names its digest. Recovery reads only that
+durable content; it never refetches a provider or acquires network authority.
 
 ## Product horizon and extension hypotheses
 
@@ -152,6 +175,14 @@ composition should make remote and local state feel like one tree. Yafs adds
 the constraints modern automation needs: explicit capability grants, durable
 provenance, auditable lifecycle actions, and no ambient authority. It does not
 promise Plan 9 bind semantics, POSIX semantics, or transparent network mounts.
+
+Providers can have two deliberately separate surfaces. A **view** publishes
+bounded, inspectable state beneath a mount. An **action** is a named,
+structured request such as `gh comment`, `slack send`, or `agent start`; Yash
+may offer concise command syntax, but RPC carries the typed request/result.
+Mounting a view never grants action authority. M5 implements a GitHub view and
+mount lifecycle actions only; provider actions and remote writes remain later
+work with their own intent/outcome protocol.
 
 ### Historical views and federation
 
@@ -276,19 +307,19 @@ Built-ins should not accumulate in one interpreter switch statement. Each is a
 logical command object registered in a command registry:
 
 ```ts
-abstract class BuiltinCommand {
-  abstract readonly name: string
-  abstract readonly synopsis: string
-  abstract execute(context: CommandContext, args: string[]): string
+interface BuiltinCommand {
+  readonly name: string
+  readonly synopsis: string
+  execute(context: CommandContext, args: string[]): string
 }
 ```
 
 `CommandContext` supplies the session, VFS, clock, and eventually typed input/
-output streams. This gives `help` a single source of truth, makes commands
-unit-testable, and keeps client-only actions (`history`, terminal editing) out
-of the server registry. Command instances are context-free; the interpreter
-supplies context only at invocation time. This is implemented for the current
-built-ins and is the required extension point for mount-aware commands.
+output streams. Concrete command classes implement that small interface and
+share narrowly scoped helpers where useful; the command registry remains the
+single source of truth for `help`. This keeps client-only actions (`history`,
+terminal editing) out of the server registry. Command instances are
+context-free; the interpreter supplies context only at invocation time.
 
 Adopt familiar commands only when their Yafs meaning is documented:
 
@@ -307,11 +338,11 @@ automation; `date` exists primarily for interactive and script convenience.
 
 ## Provider boundary
 
-**Status:** M4 implements the zero-capability, read-only fixture slice: strict
-manifest validation, explicit validate/activate/unmount lifecycle, durable
-mount state, structured provenance, and append-only activation/unmount audit. Provider
-writes, non-empty capability grants, refresh, and external providers remain
-subsequent M4 extensions.
+**Status:** M4/M4.5 implement the zero-capability, read-only fixture slice:
+strict manifest validation; explicit validate, activate, refresh, and unmount
+lifecycle; durable mount state; structured provenance; append-only lifecycle
+audit; and one published snapshot resolver. Provider writes, non-empty grants,
+scheduled refresh, and external providers remain M5 work.
 
 The VFS journal authoritatively orders mount/unmount intent. `mounts.json` is a
 durably-synced materialized index required to restore mount policy after journal
@@ -408,7 +439,7 @@ write proposal, write commit, failure, and unmount. Never place secret values,
 tokens, prompt contents, or file payloads in the generic audit log; record
 content digests or provider-specific redacted references when needed.
 
-The fixture currently emits activation and unmount events with this envelope:
+The fixture currently emits activation, refresh, and unmount events with this envelope:
 the mount-relative path is empty for those mount-level events, and revision
 fields describe the fixture revision before or after the transition. Validation,
 denials, reads, and provider I/O acquire audit events with the relevant future
@@ -427,7 +458,8 @@ facts, but it cannot erase, forge, or silently omit its own capability use.
 | M2 — usable Yash | A human can comfortably explore a persistent workspace. | Prompt templates, persisted local history, up/down, Ctrl-R, basic final-token path completion, `yash -c`, and JSON result output. **Baseline complete; polish remains.** |
 | M3 — durable local service | Work survives restart and recovery is principled. | Versioned bounded loopback protocol; checksummed, sync-before-apply VFS operations; torn-final-record recovery; corruption refusal; snapshots/compaction; exclusive data-dir lock; `yash --local`; and managed `yafsd serve/start/stop/restart/status` lifecycle. **Complete for the single-tenant local appliance.** |
 | M4 — mount/provider contract | External state enters without special cases. | Strict schema-validated YAML mounts, explicit validate/activate/unmount lifecycle, durable zero-capability fixture mount, structured provenance, and activation audit. **Read-only fixture slice complete.** |
-| M5 — review workspace | The product helps with a real task. | Git/GitHub read-only mounts plus composed review workspace, explicit refresh, source revision. |
+| M4.5 — published snapshots | Composed paths cannot observe divergent provider copies. | One synchronous resolver over atomically published snapshots; node-level provenance/read-only metadata; explicit refresh; and recovery/unmount/link/union consistency tests. |
+| M5 — review workspace | The product helps with a real task. | Bounded GitHub query collection, explicit/interval refresh, source revision/freshness, and local review artifacts bound to their source revision. |
 | M6 — cache provider *(decision gate)* | Yafs is useful as an observable state service. | Durable local TTL cache, atomic replacement, expiry metadata, eviction/limit policy, concurrent-write tests. |
 | M7 — agent workspace *(decision gate)* | An agent can work visibly and safely. | Durable runs, scoped context/capabilities, artifacts, restart behavior, audit trail. |
 | M8 — remote/multi-user *(decision gate)* | The service works safely beyond localhost. | Authenticated transport, per-user authorization, quotas, remote Yash/SSH adapter, audit retention. |
@@ -555,6 +587,7 @@ annotate through one durable tree:
   source/pulls/482/       # read-only PR metadata, changed files, diff, revision
   source/pulls/483/
   notes/                  # durable local writable files
+    482/source.json       # provider/resource/revision/freshness binding
     482/alice.md
     482/reviewer-b.md
     482/safety.json
@@ -563,7 +596,9 @@ annotate through one durable tree:
 The demo succeeds when two independent sessions inspect a PR from the same
 filtered source collection, add separate notes without provider write authority,
 and a later reader can answer which revision they saw, which artifacts each
-produced, and when the source was fetched. A local LM Studio client may
+produced, and when the source was fetched. `source.json` persists that binding:
+if a later query refresh removes the PR, local notes remain and inspection says
+the bound source is no longer in the live collection. A local LM Studio client may
 participate as one such reviewer, but it is not yet an agent runtime provider.
 This is the product proof for provenance, composition, and shared inspectable
 state.

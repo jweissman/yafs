@@ -22,7 +22,9 @@ export async function writeState(path: string, address: { host: string, port: nu
   return state
 }
 
-export async function clearState(path: string) { await ignoreMissing(() => unlink(path)) }
+export async function clearState(path: string, instanceId?: string) {
+  if (!instanceId || (await readState(path))?.instanceId === instanceId) await ignoreMissing(() => unlink(path))
+}
 
 export function isRunning(pid: number): boolean {
   try { process.kill(pid, 0); return true } catch { return false }

@@ -2,9 +2,9 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync,
   renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-import { MountRecord } from './types'
+import { PreparedMountRecord } from './types'
 
-type StoredMounts = { version: 1, mounts: MountRecord[] }
+type StoredMounts = { version: 1, mounts: PreparedMountRecord[] }
 
 export class MountPersistence {
   private sequence = 0
@@ -13,16 +13,16 @@ export class MountPersistence {
     this.sequence = auditSequence(auditPath)
   }
 
-  restore(): MountRecord[] {
+  restore(): PreparedMountRecord[] {
     return this.statePath && existsSync(this.statePath) ? this.parse(this.statePath) : []
   }
 
-  save(mounts: MountRecord[]) {
+  save(mounts: PreparedMountRecord[]) {
     if (!this.statePath) return
     writeMounts(this.statePath, mounts)
   }
 
-  audit(record: MountRecord, actor: string, action: string, before?: string, after?: string) {
+  audit(record: PreparedMountRecord, actor: string, action: string, before?: string, after?: string) {
     if (!this.auditPath) return
     mkdirSync(dirname(this.auditPath), { recursive: true })
     appendSynced(this.auditPath, `${JSON.stringify(this.event(record, actor, action, before, after))}\n`)
@@ -30,24 +30,18 @@ export class MountPersistence {
 
   private parse(path: string) { return valid(JSON.parse(readFileSync(path, 'utf8')) as StoredMounts) }
 
-  private event(record: MountRecord, actor: string, action: string, before?: string,
+  private event(record: PreparedMountRecord, actor: string, action: string, before?: string,
     after?: string) {
-    const sequence = ++this.sequence
-    return this.eventDetails(record, actor, action, before, after, sequence)
+    return { ...this.eventIdentity(record, actor, ++this.sequence),
+      ...this.eventFields(action, before, after) }
   }
 
-  private eventDetails(record: MountRecord, actor: string, action: string, before: string | undefined,
-    after: string | undefined, sequence: number) {
-    return this.eventData(record, actor, action, before, after, sequence)
-  }
-
-  private eventData(record: MountRecord, actor: string, action: string, before: string | undefined,
-    after: string | undefined, sequence: number) {
-    return { ...this.eventIdentity(record, actor, sequence), action, relativePath: '',
+  private eventFields(action: string, before?: string, after?: string) {
+    return { action, relativePath: '',
       capabilitiesUsed: [], outcome: 'success', beforeRevision: before, afterRevision: after }
   }
 
-  private eventIdentity(record: MountRecord, actor: string, sequence: number) {
+  private eventIdentity(record: PreparedMountRecord, actor: string, sequence: number) {
     return { sequence, at: new Date().toISOString(), actor, mountId: record.id,
       provider: record.provider, correlationId: `${record.id}:${sequence}` }
   }
@@ -55,10 +49,13 @@ export class MountPersistence {
 
 function valid(stored: StoredMounts) {
   if (stored.version !== 1 || !Array.isArray(stored.mounts)) throw new Error('Invalid mount state')
+  if (!stored.mounts.every(hasSnapshot)) throw new Error('Mount state requires published snapshots')
   return stored.mounts
 }
 
-function writeMounts(path: string, mounts: MountRecord[]) {
+function hasSnapshot(record: PreparedMountRecord) { return Array.isArray(record.snapshot?.entries) }
+
+function writeMounts(path: string, mounts: PreparedMountRecord[]) {
   mkdirSync(dirname(path), { recursive: true }); const temporary = `${path}.tmp`
   writeSynced(temporary, JSON.stringify({ version: 1, mounts } satisfies StoredMounts))
   renameSync(temporary, path); syncDirectory(path)

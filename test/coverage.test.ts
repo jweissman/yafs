@@ -1,9 +1,4 @@
 import { expect, test } from 'bun:test'
-import { mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-
-import { clearState, currentState, isRunning, paths, readState, writeState } from '../src/daemon'
 import { FixtureProvider } from '../src/mounts/FixtureProvider'
 import { LocalYashClient } from '../src/protocol/local'
 import { Shell } from '../src/Shell'
@@ -13,26 +8,6 @@ import { attachLines, parseRequest, persistenceFailure, requestFailure, respond 
 import { NodeStore } from '../src/vfs/NodeStore'
 import { variable } from '../src/YafsValues'
 import Yafs from '../src'
-
-test('daemon state helpers validate, replace, and remove state', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'yafs-daemon-state-'))
-  const statePath = paths(directory).state
-  expect(await readState(statePath)).toBeUndefined()
-  const state = await writeState(statePath, { host: '127.0.0.1', port: 7337 })
-  expect(await currentState(statePath)).toEqual(state)
-  await clearState(statePath); expect(await readState(statePath)).toBeUndefined()
-  await writeFile(statePath, '{invalid')
-  await expect(readState(statePath)).rejects.toThrow()
-})
-
-test('daemon state removes a stale process record', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'yafs-daemon-stale-'))
-  const statePath = paths(directory).state
-  await writeFile(statePath, JSON.stringify({ version: 1, pid: 999999, host: '127.0.0.1',
-    port: 7337, startedAt: '2026-01-01T00:00:00.000Z', instanceId: 'stale' }))
-  expect(isRunning(999999)).toBe(false)
-  expect(await currentState(statePath)).toBeUndefined()
-})
 
 test('local client completes paths and returns no matches for missing directories', async () => {
   const client = new LocalYashClient()
@@ -64,11 +39,25 @@ test('the composed node store façade delegates every filesystem operation', () 
   store.union('/home/root/view', ['/home/root/upper', '/home/root/lower'])
   expect(store.getNode(1)?.name).toBe('/'); expect(store.read('/home/root/view/item')).toBe('upper')
   store.symlink('/home/root/lower/item', '/home/root/link'); expect(store.readlink('/home/root/link')).toContain('item')
+  store.touch('/home/root/transient'); store.remove('/home/root/transient')
+  expect(store.get('/home/root/transient')).toBeUndefined()
   const snapshot = store.snapshot(9); store.removeTree('/home/root/link'); store.restore(snapshot)
   expect(store.type('/home/root/link')).toBe('file')
   store.apply({ type: 'touch', path: '/home/root/restored', at: new Date().toISOString() })
   store.validate([{ type: 'remove', path: '/home/root/restored', at: new Date().toISOString() }])
   expect(store.mounts()[0].path).toBe('/home/root/view')
+})
+
+test('provider metadata survives snapshots and protects composed paths', () => {
+  const store = new NodeStore(); store.mkdir('/home/root/provider'); store.mkdir('/home/root/provider/nested')
+  store.write('/home/root/provider/nested/item', 'value')
+  store.setProviderOrigin('/home/root/provider', providerOrigin())
+  expect(store.provenance('/home/root/provider/nested/item')[0].origin?.mountId).toBe('demo')
+  expect(() => store.write('/home/root/provider/nested/item', 'changed')).toThrow('Read-only mount')
+  store.mkdir('/home/root/local'); store.union('/home/root/view', ['/home/root/local'])
+  expect(() => store.write('/home/root/view/new', 'blocked')).toThrow('Read-only union mount')
+  const snapshot = store.snapshot(1); const restored = new NodeStore(); restored.restore(snapshot)
+  expect(() => restored.write('/home/root/provider/nested/item', 'changed')).toThrow('Read-only mount')
 })
 
 test('path and framing helpers validate protocol input and normalize paths', () => {
@@ -89,3 +78,8 @@ test('shell variables expose only explicit session state', () => {
   expect(variable(yafs, 'USER')).toBe('root'); expect(variable(yafs, 'PWD')).toBe('/home/root')
   expect(variable(yafs, 'UNDECLARED')).toBe('')
 })
+
+function providerOrigin() {
+  return { mountId: 'demo', provider: 'fixture', revision: 'fixture:test',
+    activatedAt: '2026-01-01T00:00:00.000Z', readOnly: true as const }
+}

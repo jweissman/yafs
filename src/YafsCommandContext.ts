@@ -37,8 +37,23 @@ function inspects(workspace: YafsWorkspace) {
 }
 
 function mounts({ mounts: manager, operations }: Dependencies) {
+  return { ...mountPlanning(manager), ...mountMutations(operations) }
+}
+
+function mountPlanning(manager: MountManager) {
+  return { ...mountActivation(manager),
+    planRefresh: (path: AbsolutePath, id?: string) => manager.prepareRefresh(path, id),
+    planUnmount: (id: string) => manager.planUnmount(id) }
+}
+
+function mountActivation(manager: MountManager) {
   return { planMount: (path: AbsolutePath, id?: string) => manager.planActivation(path, id),
-    planUnmount: (id: string) => manager.planUnmount(id), mount: record => operations.add({ type: 'mount', record }),
+    prepareMount: record => manager.prepareActivation(record) }
+}
+
+function mountMutations(operations: YafsOperationQueue) {
+  return { mount: record => operations.add({ type: 'mount', record }),
+    refresh: record => operations.add({ type: 'refresh', record }),
     unmount: (id: string) => operations.add({ type: 'unmount', id }) }
 }
 
