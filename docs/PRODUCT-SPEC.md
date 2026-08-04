@@ -5,8 +5,8 @@
 Yafs is a local-first workspace appliance. It gives an operator one durable,
 inspectable filesystem tree whose subtrees may be backed by explicit providers.
 The value is not that a provider makes an API look like files; it is that local
-notes, remote snapshots, provenance, and later model output can be composed and
-inspected in one place.
+notes, remote snapshots, provenance, and later model output can be composed,
+inspected, and—when it matters—captured as durable artifacts in one place.
 
 This document describes the operator-facing provider promise and the first
 demonstrable product experience. [ADR.md](ADR.md) owns architectural decisions;
@@ -20,11 +20,18 @@ because it exists. Remote identities, public endpoints, and multi-user policy
 are later work.
 
 The kernel owns paths, links, union precedence, durability, identity, mount
-boundaries, provenance, and audit. A provider has a bounded state **view** and,
-only when explicitly designed, named typed **actions**. The M5 provider shape supplies a bounded,
-immutable logical snapshot at its configured subtree; the kernel resolver makes
-that one source participate consistently in direct reads, links, unions, and
-provenance. A mount does not normally name one remote object.
+boundaries, provenance, audit, and durable artifacts. A provider has a bounded
+state **view** and, only when explicitly designed, named typed **actions**. The
+M5 provider shape supplies a bounded, immutable logical snapshot at its
+configured subtree; the kernel resolver makes that one source participate
+consistently in direct reads, links, unions, and provenance. A mount does not
+normally name one remote object.
+
+This boundary rules out a misleading product claim: Yafs is not a generic
+replacement for Redis, S3, Kubernetes, Docker, or a host shell. A cache, an
+image controller, or an RPC gateway may be a useful later adapter, but must
+earn its place as a narrow consumer of these kernel properties rather than
+silently widening the appliance's authority.
 
 ## What every mount affords
 
@@ -41,9 +48,10 @@ inspectable:
 
 M4.5 makes a fixture activation or refresh publish one bounded, immutable
 snapshot into the NodeStore. Recovery consumes that recorded snapshot rather
-than calling a provider. External fetch, non-empty capability grants, provider
-writes, and user-defined provider packages are still deliberately out of
-scope; M5 must preserve the published-snapshot rule for a real provider.
+than calling a provider. M5 extends this with a bounded GitHub fetch behind
+named grants; provider writes and user-defined provider packages remain out of
+scope. M6 adds a separate durable-artifact store, but recovery still never
+refetches missing historical bytes.
 
 Unions retain declared canonical layer paths, not object references. A missing
 layer is omitted; remounting at that path makes its current snapshot available
@@ -81,12 +89,14 @@ This mounts a GitHub collection, not PR 482. Its provider projects matching PRs
 under `source/pulls/<number>/`; a PR number is a virtual child path, not mount
 configuration. Its kernel-owned, daemon-executed refresh policy publishes a new complete
 collection snapshot; it never updates individual PR paths in place. The operator
-may request `mount refresh .yafsmeta github-acme-widget` explicitly. Interval
-refresh is a later M5 checkpoint, not silently implied by the manifest.
+may request `mount refresh .yafsmeta github-acme-widget` explicitly. A declared
+interval is daemon-scheduled through that same refresh publication path; it is
+never silently inferred from the manifest.
 
 The GitHub API endpoint and credential are daemon configuration, never manifest
 data: `YAFS_GITHUB_API_URL` defaults to `https://api.github.com` and must use
-HTTPS; `YAFS_GITHUB_TOKEN`, when present, permits the separate
+HTTPS; `YAFS_GITHUB_HOST` offers the usual GitHub Enterprise host mapping; and
+`YAFS_GITHUB_TOKEN`, when present, permits the separate
 `secret.github-token` grant. A public collection needs only `network.github-api`.
 Neither value is stored in the VFS, WAL snapshot, provenance, or inspection output.
 
@@ -191,26 +201,24 @@ The first useful proof should be small enough to explain in one screen:
     pulls/
       482/
         metadata.json
-        files/
         diff.patch
-        provenance.json
       483/
         ...
-  notes/                    # durable local review artifacts, keyed by PR
-    482/source.json          # source revision/freshness bound to these notes
-    482/alice.md
-    482/reviewer-b.md
-    482/safety.json
+  artifacts/                # durable local review artifacts, keyed by PR
+    482/alice/trace.json     # source provenance, PR head SHA, captured blobs
+    482/alice/review.md
+    482/reviewer-b/trace.json
+    482/reviewer-b/review.md
 ```
 
 The operator configures a repository and PR query, explicitly activates the
 collection mount, and opens two Yash/RPC sessions. Each session can browse the
 same bounded PR snapshot and write an independent artifact under the
-corresponding `notes/<number>/` directory. The durable `source.json` records
-the source provider/resource/revision/freshness for that note set; it remains
-meaningful if a later query refresh removes the PR from `source/`. `inspect
-source/pulls/482/diff.patch` and `provenance.json` answer what was reviewed and
-when. A local model client can act as one reviewer, but no agent runtime,
+corresponding `artifacts/<number>/` directory. Its `trace.json` records exact
+captured source content, provider provenance, revision/freshness, and a PR
+head SHA where available; it remains reifiable if a later query refresh removes
+the PR from `source/`. `inspect source/pulls/482/diff.patch` and `trace.json`
+answer what was reviewed and when. A local model client can act as one reviewer, but no agent runtime,
 GitHub write, host execution, or public MCP service is required.
 
 The demo is successful only if a later reader can reconstruct:

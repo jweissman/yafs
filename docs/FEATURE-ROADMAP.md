@@ -3,7 +3,7 @@
 This file tracks implementation sequencing. The product decision, use cases,
 and acceptance-level milestones live in [ADR.md](ADR.md).
 
-The committed delivery horizon ends at the Git/GitHub review-workspace proof.
+The committed delivery horizon ends at durable traces of external artifacts.
 Cache, agents, remote multi-user service, and runtime execution are gated
 extension hypotheses; they are not implied commitments merely because they are
 listed below.
@@ -11,9 +11,10 @@ listed below.
 ## Product thesis
 
 Yafs is a virtual filesystem service whose directories can acquire explicit
-provider views. A user can browse, inspect, and compose ordinary-looking paths;
-providers may separately expose named, typed actions through Yash and RPC.
-Mounting a view never implies authority to invoke an action.
+provider views. A user can browse, inspect, and compose ordinary-looking
+paths, then preserve the exact external artifacts they acted on. Providers may
+separately expose named, typed actions through Yash and RPC. Mounting a view
+never implies authority to invoke an action.
 
 The stable center is the VFS. The shell, network transports, and plugins are
 clients of it.
@@ -43,10 +44,13 @@ Yash / loopback RPC / later SSH adapter
 Those are useful later possibilities, but each needs an explicit security and
 execution model.
 
-## Worked experience: an agent-backed directory
+## Illustrative future: an agent-backed directory
 
-An `agents` plugin can make a small, inspectable workspace around a long-lived
-workflow. It should expose files, not hide a proprietary state machine.
+An `agents` plugin could make a small, inspectable workspace around a
+long-lived workflow. It should expose files, not hide a proprietary state
+machine. This is deliberately an illustrative direction, not a current
+provider configuration contract or a promise that writing `prompt.md` starts a
+process; M7 must define that controller lifecycle first.
 
 ```text
 /work/bug-184/
@@ -285,6 +289,13 @@ Design checkpoints for every plugin:
   resolver path. Provider writes, grants, and external providers remain
   follow-up work. Command substitution is implemented as a deferred nested-
   command AST, including inside double quotes; pipes remain later work.
+- M5 is mechanically complete: the GitHub provider, named network/secret
+  grants, daemon-scheduled and explicit refresh, and `trace` source bindings
+  are implemented and were exercised against a real GitHub Enterprise Cloud
+  repository, including real authentication failure modes. What M5 has not
+  yet produced is the evidence its own extension gates ask for — repeated
+  real use across sessions, not one — which is the actual open question
+  before M6/M7 are worth starting, not anything left to build in M5 itself.
 - `yafs-mcp` is a local stdio client of `yafsd`, not a provider or a second VFS
   implementation. Its current tools are `yafs.list`, `yafs.read`, and
   `yafs.inspect`; arbitrary shell execution, MCP writes, and public access are
@@ -402,16 +413,13 @@ GitHub writes, autonomous agent loops, or public MCP.
 
 The declaration names a repository and PR query, never one PR. Explicit refresh
 atomically publishes the next whole matching collection. Each refresh reports
-its source revision and freshness. A durable `notes/<number>/` source binding
-is available through `trace` (renamed from `review bind` — see "Actions and
-durable traces" in the ADR; `reify` is its pending reconstruction half,
-prerequisite: the M6 blob store below). The daemon runs durable interval
+its source revision and freshness. A durable `notes/<number>/` source capture
+is available through `trace` and can be reconstructed through `reify` (see
+"Trace capture and reification" in the ADR). GitHub traces carry the PR head
+SHA rather than only the collection digest. The daemon runs durable interval
 refresh through the normal WAL publication path and retains the last snapshot
 when a fetch fails. Its due-time/restart acceptance test remains the final M5
-check. The rename and recording the provider's own immutable reference
-(a PR's head SHA, not the collection-level digest `trace` currently records)
-are small, decoupled fixes worth landing as M5 polish independent of the
-larger blob-store work.
+check.
 
 Prerequisite: complete M4.5's published-snapshot resolver contract. GitHub
 adds an external collection provider to that proven kernel; it does not create
@@ -499,21 +507,26 @@ concrete need forces the question:**
   Hold both until a concrete need forces the question, not because they're
   interesting.
 
-#### M6 prerequisite — content-addressed blob store
+### M6 — Durable artifacts and traces *(decision gate)*
 
-Not a numbered milestone of its own: shared groundwork `reify` and the cache
-provider both need, so it should be built once rather than twice. Interface
-is small — `put(bytes) -> digest`, `get(digest) -> bytes | undefined`,
-`retain`/`release(digest, ownerId)`, and a `gc()` that reclaims zero-reference
-blobs, run as an ordinary serialized command rather than a background timer
-so it cannot race an activation about to reference the digest it would
-reclaim. Reference counts are derived by replaying the journal and scanning
-trace files at startup, not their own persisted ledger — see the ADR's
-"Trace capture and reification" for the full reasoning. Durability follows
-the existing pattern: sync the blob before syncing the WAL record that names
-its digest.
+Checkpoint: a source subtree can be captured as a versioned `trace.json` plus
+content-addressed blobs, then `reify`d after the provider refreshes or is
+unmounted. Blob bytes are synced before the WAL record that names them;
+startup rebuilds live references from durable traces before an explicit,
+serialized GC can reclaim anything. The command never falls back to the
+current provider view when a historical blob is missing.
 
-### M6 — Cache provider *(decision gate)*
+**Foundation implemented.** The remaining M6 decision is whether a real
+provider-specific point reifier earns its network/capability surface; the
+generic reference-only hook is exercised without allowing a fallback to the
+current collection mount.
+
+The shared blob store is deliberately provider-neutral: `put(bytes) ->
+digest`, `get(digest) -> bytes | undefined`, `retain`/`release(digest,
+ownerId)`, and a `gc()` that reclaims zero-reference blobs. It is durable
+content substrate, not a cache API.
+
+### M6.1 — Cache provider *(decision gate)*
 
 Checkpoint: durable local TTL entries have atomic replacement, expiry metadata,
 size/eviction limits, and concurrent-write tests. The cache accepts explicit

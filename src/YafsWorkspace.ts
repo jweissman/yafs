@@ -14,6 +14,7 @@ export class YafsWorkspace {
   }
 
   read(path: AbsolutePath) { return this.store.read(path) }
+  exists(path: AbsolutePath) { return !!this.store.get(path, false) }
   readlink(path: AbsolutePath) { return this.store.readlink(path) }
   list(path: AbsolutePath) { return this.store.list(path) }
   type(path: AbsolutePath, follow = true): 'file' | 'directory' | 'symlink' { return this.store.type(path, follow) }

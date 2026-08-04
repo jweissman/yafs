@@ -24,19 +24,88 @@ control, host executable lookup, or shell `eval`.
 
 ## Commands
 
-| Group | Commands | Current meaning |
-| --- | --- | --- |
-| Session | `pwd`, `cd PATH`, `whoami`, `date`, `help`, `version`, `true`, `false` | Inspect or change the Yash session. `date` uses the server clock. |
-| Text | `echo [WORD...]`, `printf [WORD...]` | Produce text. `printf` is exact concatenation and is the preferred source for redirection. |
-| Files | `ls [PATH]`, `cat PATH`, `mkdir PATH`, `touch PATH`, `rm PATH` | Operate on the Yafs tree. `rm` removes files only; it does not remove directories. |
-| Links and composition | `ln -s TARGET LINK`, `readlink PATH`, `union NAME LAYER...` | Create/read symbolic links and a read-only ordered directory composition. A union checks layers left-to-right and never copies up writes. |
-| Inspection | `stat PATH`, `lstat PATH`, `origins PATH`, `inspect PATH`, `mounts` | Explain type, links, provenance, union candidates, and active compositions. |
-| Mount lifecycle | `mount validate MANIFEST [ID]`, `mount activate MANIFEST [ID]`, `mount refresh MANIFEST [ID]`, `mount unmount ID` | Validate and manage fixture or bounded GitHub collection snapshots. GitHub needs an explicit named capability and daemon-held configuration. |
-| Review workflow | `review bind SOURCE ARTIFACT_DIRECTORY` | Create a durable local `source.json` recording the provider, mount, revision, and fetch time used by a review artifact. |
-
 All paths resolve from the session's current directory unless they begin with
-`/`. `stat` follows a final symlink; `lstat` does not. `inspect` is structured
-JSON suitable for clients.
+`/`. **Access** is the command's own declared category — `read` never mutates
+anything; `session` changes session state (only `cd`); `mutate` produces a
+durable VFS operation; `control` manages mount lifecycle. `yafs.query` (see
+"Automation and MCP" below) allows only `read` commands; everything else is
+rejected before it runs.
+
+### Session
+
+| Command | Access | Meaning |
+| --- | --- | --- |
+| `pwd` | read | Print the absolute path of the current directory. |
+| `cd PATH` | session | Change the current directory. Errors if `PATH` doesn't resolve to a directory. |
+| `whoami` | read | Print the session's user name. |
+| `date` | read | Print the current time (server clock, ISO 8601) — not the host machine's clock. |
+| `help` | read | List every registered command's synopsis. |
+| `version` | read | Print the running `yafs` version. |
+| `true` | read | Succeed with no output. |
+| `false` | read | Always fail (status 1) with no output. |
+
+### Text
+
+| Command | Access | Meaning |
+| --- | --- | --- |
+| `echo [WORD...]` | read | Print the given words, space-joined. Human convenience; behavior may not match every host shell. |
+| `printf [WORD...]` | read | Print the given words concatenated with no separator — the exact-bytes primitive redirection should target. |
+| `grep [-n] PATTERN PATH...` | read | Print lines containing `PATTERN` from each `PATH`. `-n` prefixes matching lines with their line number. |
+| `head -n COUNT PATH` | read | Print the first `COUNT` lines of `PATH`. |
+| `tail -n COUNT PATH` | read | Print the last `COUNT` lines of `PATH`. |
+| `wc -l PATH` | read | Print the number of lines in `PATH`. |
+
+### Filesystem
+
+| Command | Access | Meaning |
+| --- | --- | --- |
+| `ls [PATH]` | read | List the names in a directory (current directory if omitted). |
+| `cat PATH` | read | Print a file's contents. |
+| `mkdir PATH` | mutate | Create a directory. The parent must already exist — there is no `-p`. |
+| `touch PATH` | mutate | Create an empty file, or update an existing file's modified time. |
+| `rm PATH` | mutate | Remove a file. Directories are refused (`is_directory`); this does not recurse. |
+
+### Links and composition
+
+| Command | Access | Meaning |
+| --- | --- | --- |
+| `ln -s TARGET LINK` | mutate | Create a symbolic link. `-s` is required; only symbolic links are supported. |
+| `readlink PATH` | read | Print a symlink's stored target string, unresolved. |
+| `union NAME LAYER...` | mutate | Create a new read-only directory at `NAME` that resolves lookups against `LAYER...` in order, first match wins. |
+
+### Inspection
+
+| Command | Access | Meaning |
+| --- | --- | --- |
+| `stat PATH` | read | Report type (`file`/`directory`/`symlink`), following a final symlink. |
+| `lstat PATH` | read | Same as `stat`, but does not follow a final symlink. |
+| `origins PATH` | read | List the source path(s) behind `PATH` — every candidate in precedence order for a union, the provider path for a mounted resource. |
+| `inspect PATH` | read | Structured JSON: path, type, and full provenance (mount, provider, revision, activation/fetch time). |
+| `mounts` | read | List every active union and provider mount, with state. |
+
+### Mount lifecycle
+
+| Command | Access | Meaning |
+| --- | --- | --- |
+| `mount validate MANIFEST [ID]` | control | Parse and validate a `.yafsmeta` manifest with no side effects; prints the proposed mount record as JSON. All `mount` subcommands share `control` access at the registry level, so `yafs.query` cannot run even this side-effect-free one. |
+| `mount activate MANIFEST [ID]` | control | Validate, authorize, and durably activate a mount; prints `ID active`. |
+| `mount refresh MANIFEST [ID]` | control | Prepare and durably publish a new snapshot for an already-active mount; prints `ID refreshed`. |
+| `mount unmount ID` | control | Durably detach an active mount; prints `ID unmounted`. |
+
+GitHub mounts additionally need an explicit named capability and daemon-held
+configuration — see [M5 validation](M5-VALIDATION.md).
+
+### Durable artifacts
+
+| Command | Access | Meaning |
+| --- | --- | --- |
+| `trace SOURCE ARTIFACT_DIRECTORY` | mutate | Capture a directory’s current UTF-8 Yafs files into content-addressed blobs, then durably write `ARTIFACT_DIRECTORY/trace.json`. Provider-backed sources include provenance and an immutable resource reference when their provider supplies one. |
+| `reify ARTIFACT_DIRECTORY DESTINATION` | mutate | Reconstruct a trace at a new, absent local directory. It reads local blobs first; a daemon-installed provider reifier may restore a missing blob only from the recorded immutable reference. It never reads the current mount path as fallback. |
+| `blobs gc` | control | Explicitly reclaim zero-reference blobs. On `yafsd`, this runs in the serialized request queue after startup has rebuilt trace retention from durable manifests. |
+
+Traces currently capture Yafs's UTF-8 text file surface. The blob store itself
+stores bytes; binary VFS file semantics are a separate kernel extension, not
+silently emulated by text decoding.
 
 ## Automation and MCP
 
@@ -55,7 +124,5 @@ host-process execution.
 
 ## Deliberately not implemented
 
-Pipes, loops, conditionals, `find`, provider actions such as `gh comment`, and
-host execution are not available yet. `grep [-n] PATTERN PATH...`,
-`head -n COUNT PATH`, `tail -n COUNT PATH`, and `wc -l PATH` query virtual
-UTF-8 text files directly; they do not require a general pipeline runtime.
+Pipes, loops, conditionals, `find`, recursive `rm`, `mv`/`cp`, provider
+actions such as `gh comment`, and host execution are not available yet.

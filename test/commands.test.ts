@@ -3,6 +3,8 @@ import { expect, test } from 'bun:test'
 import Yafs from '../src'
 import { commandPath } from '../src/commands/commandPath'
 import { CommandContext } from '../src/commands/CommandContext'
+import { memoryBlobStore } from '../src/protocol/MemoryBlobStore'
+import { TraceService } from '../src/traces/TraceService'
 
 test('command helpers resolve required paths without executing a command', () => {
   expect(commandPath(commandContext(), ['note'], 'touch')).toBe('/home/root/note')
@@ -37,10 +39,11 @@ function commandContext(): CommandContext {
 function mountContext() {
   return { planMount: () => { throw new Error() }, prepareMount: () => { throw new Error() },
     planRefresh: () => { throw new Error() }, planUnmount: () => { throw new Error() },
-    mount: () => undefined, refresh: () => undefined, unmount: () => undefined }
+    mount: () => undefined, refresh: () => undefined, unmount: () => undefined, resourceReference: () => undefined }
 }
 
 function writeContext() {
-  return { mkdir: () => undefined, touch: () => undefined, write: () => undefined, remove: () => undefined,
+  return { exists: () => false, traces: new TraceService(memoryBlobStore()), mkdir: () => undefined,
+    afterCommit: () => undefined, touch: () => undefined, write: () => undefined, remove: () => undefined,
     symlink: () => undefined, union: () => undefined }
 }

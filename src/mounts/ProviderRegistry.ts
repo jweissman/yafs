@@ -26,7 +26,7 @@ export class ProviderRegistry {
   private async githubSnapshot(record: MountRecord, snapshots: SnapshotMaterializer) {
     const source = this.githubSource(record)
     const snapshot = await source.snapshot(record.config as import('./types').GitHubConfig)
-    return snapshots.prepare(this.fetchedRecord(record, snapshot), snapshot.entries)
+    return snapshots.prepare(this.fetchedRecord(record, snapshot), snapshot.entries, snapshot.resourceReferences)
   }
 
   private githubCapabilities() {

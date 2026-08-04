@@ -91,6 +91,13 @@ async function managedState() {
 }
 
 async function responds(state: { host: string, port: number }) {
+  for (let i = 0; i < 3; i++) { if (await probe(state)) return true; if (i < 2) await pause() }
+  return false
+}
+
+function pause() { return delay(150) }
+
+async function probe(state: { host: string, port: number }) {
   try { const client = await YashClient.connect(state); await client.exec('version'); await client.close(); return true } catch { return false }
 }
 

@@ -5,7 +5,9 @@ export type FixtureConfig = { files: Record<string, string> }
 export type GitHubConfig = { repository: string, query: string, max: number }
 export type MountProvider = 'fixture' | 'github'
 export type MountConfig = FixtureConfig | GitHubConfig
-export type PublishedSnapshot = { entries: [string, string][], fileCount: number, byteCount: number }
+export type PublishedSnapshot = {
+  entries: [string, string][], fileCount: number, byteCount: number, resourceReferences?: Record<string, object>
+}
 
 export type MountRecord = {
   id: string, path: AbsolutePath, provider: MountProvider, config: MountConfig,

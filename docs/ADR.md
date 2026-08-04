@@ -1,8 +1,6 @@
 # ADR: Yafs as a composable workspace service
 
-**Status:** Proposed for review
-
-## Decision
+## Persistent virtual workspace
 
 Build Yafs as a persistent, inspectable virtual workspace service. It makes
 local, remote, cached, generated, and long-running state look like one
@@ -56,19 +54,14 @@ provenance remain inspectable through the tree.**
    apply: a read-only mirror cannot be mutated by an incidental file write.
    Public endpoints use a distinct, least-privileged service identity.
 
-## M5 namespace semantics
+## Namespace semantics
 
-**Decision:** M5 uses one provider-neutral namespace resolver. Local nodes,
-provider snapshots, and ordered unions are alternative sources of *logical
-nodes*, not separate filesystem implementations. Every pathname operation,
+`yafs` uses one provider-neutral namespace resolver. Local nodes,
+provider snapshots, and ordered unions are alternative sources of _logical
+nodes_, not separate filesystem implementations. Every pathname operation,
 including symlink traversal, re-enters that resolver.
 
-The early M4 fixture had two paths: direct mounted reads consulted `MountView`,
-while links and unions resolved a materialized `NodeStore` copy. Its static
-fixture data made those copies agree, but a refreshable provider could make
-them silently diverge. M4.5 removes `MountView`: one published snapshot is now
-authoritative for direct reads, links, unions, and provenance. M5 may not add
-GitHub until that invariant remains true for a non-fixture provider.
+One published snapshot is authoritative for direct reads, links, unions, and provenance.
 
 The resolver is an extension of the synchronous `NodeStore` model, not a
 provider callback interface. A provider is never called while resolving,
@@ -117,14 +110,14 @@ configuration syntax may call the operation `compose` if that is clearer.
 `mount` is a control-plane builtin, with equivalent structured RPC operations;
 it is not the POSIX host-mount command.
 
-| Command | Meaning | Side effects |
-| --- | --- | --- |
-| `mount validate MANIFEST [ID]` | Parse strict `.yafsmeta`, select exactly one declaration when `ID` is supplied, validate its provider configuration, and report the proposed mount record. | None: no provider activation, network activity, secret access, or durable state. |
-| `mount activate MANIFEST [ID]` | Validate and authorize the declaration, prepare a read-only snapshot if needed, then durably attach that exact snapshot at its declared path. | A private read cache may be prepared before commit; it becomes visible only after the mount operation is durable. |
-| `mount refresh MANIFEST [ID]` | Prepare and atomically replace one active mount with a new immutable snapshot. | Provider I/O is explicit and authorized; the resulting snapshot is durable before its refresh operation commits. |
-| `mount unmount ID` | Durably detach the active mount. | It does not delete a provider's private cache or remote data; cache retention is provider policy. |
+| Command                        | Meaning                                                                                                                                                    | Side effects                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `mount validate MANIFEST [ID]` | Parse strict `.yafsmeta`, select exactly one declaration when `ID` is supplied, validate its provider configuration, and report the proposed mount record. | None: no provider activation, network activity, secret access, or durable state.                                  |
+| `mount activate MANIFEST [ID]` | Validate and authorize the declaration, prepare a read-only snapshot if needed, then durably attach that exact snapshot at its declared path.              | A private read cache may be prepared before commit; it becomes visible only after the mount operation is durable. |
+| `mount refresh MANIFEST [ID]`  | Prepare and atomically replace one active mount with a new immutable snapshot.                                                                             | Provider I/O is explicit and authorized; the resulting snapshot is durable before its refresh operation commits.  |
+| `mount unmount ID`             | Durably detach the active mount.                                                                                                                           | It does not delete a provider's private cache or remote data; cache retention is provider policy.                 |
 
-For M5, a mounted provider view is an immutable, byte/file-count-bounded
+A mounted provider view is an immutable, byte/file-count-bounded
 snapshot. Explicit refresh atomically replaces the active view with a new
 revision/freshness record. A declared kernel-owned, daemon-executed interval
 may request the same refresh operation; it is durable policy, not ambient
@@ -141,15 +134,12 @@ durable content; it never refetches a provider or acquires network authority.
 
 ## Product horizon and extension hypotheses
 
-The committed product horizon is a useful local workspace service through the
-review-workspace proof: M0–M5. That is enough to validate the central claim
-that explicit, inspectable composition makes remote and local project state
+Explicit, inspectable composition makes remote and local project state
 more useful than either a plain filesystem or a provider-specific UI.
 
 Cache, agent, remote/multi-user, and runtime work are **extension hypotheses**,
 not promised deliverables. They remain in this ADR to constrain the kernel and
-make its intended seams concrete, but each needs a separate go/no-go decision
-after M5. No later milestone should expand the delivery commitment by existing
+make its intended seams concrete, but each needs a separate go/no-go decision. No later milestone should expand the delivery commitment by existing
 in this document.
 
 ## Namespace execution models and long-term direction
@@ -247,28 +237,110 @@ running before M7's actual decision gate:
   would show whether an autonomous "here's what changed, does it matter" pass
   ever produces something worth reading.
 - **Recursive tool use**: the model calling `yafs_read`/`yafs_list`/write
-  *itself*, mid-generation, deciding what to look at next, in a loop that
+  _itself_, mid-generation, deciding what to look at next, in a loop that
   continues until it's done. This needs an orchestrator — send the prompt and
   tool schemas, execute whatever the model requests against the live
   instance, feed results back, repeat, then record the full transcript. That
   orchestrator is not incidentally similar to M7's checkpoint ("durable runs,
   scoped context/capabilities, artifacts, restart behavior, audit trail") — it
-  *is* M7's checkpoint, with a concrete reason to build it instead of a
+  _is_ M7's checkpoint, with a concrete reason to build it instead of a
   hypothesis.
 
 Try the first before committing to the second. It answers a real question
 (is an autonomous pass ever useful) for a small fraction of the cost of
 answering it by building the full agent workspace first.
 
+### Agent personas and the ctl execution model
+
+**Decision:** a persona is a standing, named directory —
+`/agents/<name>/prompt.md` — not an anonymous `model.invoke` action. Each
+persona gets its own capability grant and its own durable run history under
+`runs/<run-id>/`, the same shape the agent workspace sketch above already
+uses (`status.json`, `transcript.ndjson`). The one-shot experiment above
+becomes concrete this way: write a prompt to `/agents/<name>/ctl`, get back a
+recorded, inspectable run.
+
+Persona directories are not fetched content, unlike every provider mount so
+far — `prompt.md` is written directly into the VFS by whoever configures the
+persona, not published by a provider fetching from an external source. So
+`ctl` cannot stay coupled to "the provider that owns this fetched mount," as
+originally scoped; it needs to be a directory-scoped handler convention any
+registered handler can claim, whether or not the directory sits under a
+fetch-based provider mount. GitHub's `ctl` handler and a persona's `ctl`
+handler are the same mechanism serving structurally different directories,
+which is a stronger validation of the mechanism than a second fetch-based
+provider would have been.
+
+**Decision:** nothing fires without an explicit trigger the user wrote
+themselves. A persona is inert by default — a `ctl` write is the only way to
+invoke it in v1. Cron-style autonomous firing is deferred, and if built later
+must require the same explicit, visible opt-in mount `refresh: {interval}`
+already does; a `prompt.md` file existing must never by itself be sufficient
+to make something run. This keeps "no ambient authority" intact for what
+would otherwise be the system's first autonomous, unprompted behavior.
+
+**Deferred to M7, not scoped down:** "spaces" — multiple personas taking
+turns, reading each other's output, invoking MCP tools mid-generation — is
+not a smaller version of one-shot invocation. It is the "recursive tool use"
+case above, already named as M7's actual checkpoint: an orchestrator, scoped
+per-agent capabilities, restart behavior, and an audit trail across multiple
+autonomous actors. Build the one-shot case first; let real usage of it — not
+the appeal of the idea — decide whether spaces is worth M7's cost.
+
+### Background execution, not a worker thread
+
+A model call is slow enough (seconds to tens of seconds, not the sub-second
+shape mount refresh assumed) that the concurrency defect just found and fixed
+in the refresh path would be far worse here: `YafsServer` runs every client
+command and every scheduled refresh through one serialized queue
+(`this.queue: Promise<void>`), so a single in-flight call would stall every
+other session for its entire duration, not only on failure.
+
+**Decision:** because LM Studio and any realistic first target are reached
+over HTTP, the actual work is I/O-bound, not CPU-bound — async `fetch` does
+not block the event loop regardless of thread count, in the same way
+`GitHubApiClient` never needed one. No worker thread or subprocess is needed
+for this. What changes is not routing the wait itself through the shared
+queue at all: a `ctl` write commits a fast, durable "run started" record
+through the ordinary queue, the actual call runs unserialized against
+nothing but its own state, and only the result — or periodic checkpoints, see
+below — gets committed back through the queue. Every use of the shared queue
+stays fast and bounded; the wait itself never does. A worker thread only
+becomes relevant if inference ever runs in-process (an embedded model rather
+than a call to an already-separate server); that is not the current plan and
+should not be designed for yet.
+
+### Streaming is genuinely unresolved — prove it cheaply first
+
+Whether a durable file can meaningfully "stream" is an open question this
+system hasn't faced. Committing every chunk through the WAL is safe but could
+mean dozens of journal writes per second for token-level streaming; buffering
+everything and committing once at the end is simple but isn't streaming at
+all — `cat` during a long response would just hang until it finishes. The
+likely middle ground is periodic checkpointed commits (buffer chunks, flush a
+durable update on an interval or byte threshold, whichever comes first), but
+the right cadence, and whether a `cat` mid-stream should see partial content
+or block until the next checkpoint, are not yet decided.
+
+**Decision:** answer this with a dummy stream fixture before wiring any real
+model. Extend `FixtureConfig` with an optional slow-feed mode — content for a
+given path arrives in configured chunks on a timer rather than all at once —
+and drive `ctl` and the background-execution/checkpoint mechanics above
+against it. This proves the mechanism (non-blocking execution, checkpoint
+cadence, partial-read semantics) with no network dependency, no model server
+to run, and a fully deterministic test. Wire in a real LM Studio endpoint
+only once this experiment settles what a durable, watchable stream should
+actually look like.
+
 ### Trace capture and reification
 
-**Decision:** `review bind SOURCE ARTIFACT_DIRECTORY` is renamed to two
+**Decision:** M6 replaces `review bind SOURCE ARTIFACT_DIRECTORY` with two
 top-level, symmetric commands that name what actually happens — `trace SOURCE
 ARTIFACT_DIRECTORY` captures a **trace** of a provider-backed artifact at a
-moment in time; `reify ARTIFACT_DIRECTORY` reconstructs the artifact a trace
-refers to. Neither is a `mount`-style namespace with subcommands: trace and
-reify are peers (capture / reconstruct), not one operation's variant of the
-other. `abstract`/`reify` was considered and rejected specifically for
+moment in time; `reify ARTIFACT_DIRECTORY DESTINATION` reconstructs the
+artifact it records. Neither is a `mount`-style namespace with subcommands:
+trace and reify are peers (capture / reconstruct), not one operation's variant
+of the other. `abstract`/`reify` was considered and rejected specifically for
 `abstract` as a bare verb — read in isolation, without the pairing already in
 mind, it's ambiguous between "extract a reference to" and "make generic,"
 which a command name shouldn't require context to parse. `snapshot` was
@@ -277,11 +349,10 @@ distinct concept (VFS/WAL snapshots) elsewhere in this system, and reusing it
 here would blur two things that need to stay separate. The mechanism
 generalizes to any provider-backed source; nothing about it is review-specific.
 
-The current implementation records only a collection-level revision digest
-(a hash of the entire fetched query result, not the individual resource) with
-no path to recover the underlying content once the mount refreshes or the
-resource drops out of a query window. That is not durable provenance; it is an
-unresolvable pointer. A trace must support two things a pointer alone cannot:
+The M5 source binding recorded only a collection-level revision digest (a hash
+of the entire fetched query result, not the individual resource). M6 replaces
+that unresolvable pointer with durable captured content and two facts a pointer
+alone cannot provide:
 
 - **Independent verification**: the trace should record the provider's own
   immutable reference for that specific resource where one exists — a PR's
@@ -294,18 +365,18 @@ unresolvable pointer. A trace must support two things a pointer alone cannot:
   store (fetched entries hashed and written once to something like
   `.yafs/blobs/<digest>`, deduplicated by content) that a trace's digest can be
   resolved against, independent of the current published snapshot. A `reify
-  TRACE` operation checks that store first; if the entry has been reclaimed,
+TRACE` operation checks that store first; if the entry has been reclaimed,
   and the provider supports point lookup by immutable reference, it may
   attempt a scoped, capability-checked re-fetch pinned to that exact
   reference; otherwise it fails cleanly, naming the reference it could not
   resolve, rather than silently returning current-not-historical content.
 
 This store is not new scope invented for traces alone: it is also most of
-what the cache provider (M6) needs — a durable, digest-addressed local store
+what the cache provider (M6.1) needs — a durable, digest-addressed local store
 with a retention policy. Building it once, driven by the trace/reification
 need, is preferable to solving durability three separate times: this is the
 same gap behind the orphaned-notes case already named in the M5 demo
-(`source.json` remaining meaningful after its PR leaves the query window) and
+(`trace.json` remaining reifiable after its PR leaves the query window) and
 the WAL-determinism requirement already stated above ("a future provider whose
 snapshots live in a content-addressed store must sync content before syncing
 the WAL record that names its digest").
@@ -316,21 +387,117 @@ merely because no mount currently references it, or reification silently
 degrades into the same unresolvable-pointer problem this decision exists to
 fix.
 
-**Interface sketch**, small enough to state now without committing to it:
-`put(bytes) -> digest` (content-addressed; identical content already has the
-identical digest, so this is dedup for free), `get(digest) -> bytes |
-undefined`, `retain(digest, ownerId)` / `release(digest, ownerId)` for
-reference counting, and `gc()`, which reclaims anything with a zero count.
-`gc()` must run as an ordinary serialized command through the same queue as
-every other mutation, never a free-running timer — a background GC racing an
-in-flight activation that's about to reference the exact digest being
-reclaimed is a real, not hypothetical, failure mode. Reference counts
-themselves should not be their own persisted ledger: deriving them by
-replaying the journal and scanning trace files at startup keeps the WAL as the
-single source of truth, the same way `MountManager`'s in-memory records are
-already reconstructed by replay rather than trusted from a separate durable
-counter. A second persisted ref-count is one more thing that can drift from
-reality; a replay-derived one cannot, at the cost of a startup scan.
+**Implemented M6 foundation:** local content-addressed blobs, `trace`, local
+`reify`, recovery-time retention reconstruction, explicit serialized `blobs
+gc`, and an injectable, reference-only provider reifier hook. GitHub traces
+record a PR `{ repository, number, headSha }`; a daemon defaults to a GitHub
+point-reifier (`GitHubTraceReifier`) that re-fetches the pinned pull by number
+and reconstructs the missing entry, verified against the recorded digest
+before it's trusted — so a missing GitHub blob is recoverable without an
+operator installing anything, as long as the pull itself is still reachable.
+It remains overridable via `StartOptions.traceReifier` for other providers or
+tests.
+
+#### Trace artifact contract
+
+**Decision:** `trace SOURCE ARTIFACT_DIRECTORY` writes a durable
+`ARTIFACT_DIRECTORY/trace.json`; `reify ARTIFACT_DIRECTORY DESTINATION`
+materializes the captured tree only at the explicit destination. `reify` never
+replaces the trace directory, never mutates a provider mount, and fails if the
+destination already exists. This makes reconstruction a visible local mutation,
+not an implicit remount or a substitution of current provider state.
+
+`trace.json` is a versioned UTF-8 manifest. Its minimum v1 shape is:
+
+```json
+{
+  "kind": "yafs-trace",
+  "version": 1,
+  "sourcePath": "/reviews/pulls/42",
+  "capturedAt": "…",
+  "origin": {
+    "kind": "provider",
+    "mountId": "review",
+    "provider": "github",
+    "revision": "…"
+  },
+  "resourceReference": {
+    "kind": "github-pr",
+    "repository": "acme/widget",
+    "number": 42,
+    "headSha": "…"
+  },
+  "capturedAt": "…",
+  "entries": [
+    { "path": "diff.patch", "digest": "0123abcd...64-lowercase-hex-characters" }
+  ]
+}
+```
+
+Each `entries` path is relative, normalized, and names one blob containing the
+exact captured UTF-8 file bytes. The collection revision/fetch time is context,
+not a substitute for the per-resource immutable reference. A v1 `reify`
+resolves every entry from local blobs first. A daemon-installed provider
+reifier is an explicit miss path: it receives only the trace and recorded
+`resourceReference`; Yafs verifies its digest and writes recovered bytes to the
+blob store before materializing anything. It otherwise reports an unresolved
+trace. It never reads the current
+collection path as fallback.
+
+```ts
+type BlobStore = {
+  put(bytes: Uint8Array): Promise<string>; // returns a digest
+  get(digest: string): Promise<Uint8Array | undefined>;
+  retain(digest: string, ownerId: string): void;
+  release(digest: string, ownerId: string): void;
+  gc(): Promise<{ reclaimed: string[] }>;
+};
+```
+
+- **Content addressing and layout.** A digest is `sha256(bytes)` hex-encoded,
+  the same primitive `Journal`/`MountPersistence` already use for checksums.
+  Blobs live at `.yafs/blobs/<digest[0:2]>/<digest>`, sharded by the first two
+  hex characters — git's own `.git/objects` layout, adopted now rather than
+  after a large flat directory forces a migration later.
+- **The store holds bytes only, nothing else.** No TTL, no owner list, no
+  metadata envelope. Those belong to whichever caller is using the store — a
+  future trace file, a future cache entry — as their own durable record
+  referencing a digest. The store does not know or care what a blob means.
+- **Durability** follows the pattern `MountPersistence`'s `writeSynced`
+  already establishes: write to a uniquely-named temporary file, `fsync`,
+  rename into place, `fsync` the containing shard directory. `put` for
+  already-present content is a no-op after an existence check — no rewrite,
+  no re-sync.
+- **Concurrent `put` of identical content is safe by construction, not by
+  locking.** Two writers racing to store the same bytes write to two
+  different temp files and both rename to the same final path; because the
+  path is derived from the content, whichever rename wins is byte-identical
+  to the one it clobbers. No coordination needed.
+- **`get`/`retain`/`release` must reject a malformed digest** (wrong length,
+  non-hex characters) before it ever reaches path construction — the same
+  discipline `Manifest.ts`'s `relative()` and `SnapshotMaterializer`'s
+  fixture-path check already apply to caller-supplied strings that become
+  file paths.
+- **The dangerous lifecycle case, stated explicitly so it can be tested
+  against:** `retain`/`release` are in-memory only and start empty on every
+  construction. If `gc()` is ever called before every owner has replayed its
+  own durable state and re-issued `retain()` for what it still references,
+  every blob on disk looks unreferenced and `gc()` will delete all of them.
+  The store does not enforce this ordering itself — it has no way to know
+  when replay is "done" — so the contract is a caller obligation: finish
+  every owner's replay-time `retain()` calls before the first `gc()` after
+  construction, not a property the store can check for you.
+- **`gc()` must run as an ordinary serialized command**, through the same
+  queue as every other mutation, never a free-running timer — a background
+  GC racing an in-flight activation that's about to reference the exact
+  digest being reclaimed is a real, not hypothetical, failure mode.
+- **Reference counts are not their own persisted ledger.** Deriving them by
+  replaying the journal and scanning durable owner records at startup keeps
+  the WAL as the single source of truth, the same way `MountManager`'s
+  in-memory records are already reconstructed by replay rather than trusted
+  from a separate durable counter. A second persisted ref-count is one more
+  thing that can drift from reality; a replay-derived one cannot, at the cost
+  of a startup scan.
 
 ### Historical views and federation
 
@@ -430,13 +597,13 @@ bind mount or Docker daemon capability.
 Yash should feel excellent interactively, but it should not imitate every
 historical shell behavior.
 
-| Need | Contract |
-| --- | --- |
-| Interactive use | Prompt templates, local persisted history, up/down, Ctrl-R, and virtual-path completion belong in Yash. |
-| Automation | Versioned RPC returns typed output/error/session information; terminal text is not the API. |
-| Familiar commands | Start with `pwd`, `cd`, `ls`, `cat`, `mkdir`, `echo`, links, inspection, and explicit mount commands. |
-| Small language | Add quoting, variables, arithmetic expansion, command substitution, redirection, pipes, and exit status in documented increments. |
-| Explicit incompatibility | No POSIX-script promise, job control, signals/traps, aliases, globbing, or ambient host executable lookup. |
+| Need                     | Contract                                                                                                                          |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Interactive use          | Prompt templates, local persisted history, up/down, Ctrl-R, and virtual-path completion belong in Yash.                           |
+| Automation               | Versioned RPC returns typed output/error/session information; terminal text is not the API.                                       |
+| Familiar commands        | Start with `pwd`, `cd`, `ls`, `cat`, `mkdir`, `echo`, links, inspection, and explicit mount commands.                             |
+| Small language           | Add quoting, variables, arithmetic expansion, command substitution, redirection, pipes, and exit status in documented increments. |
+| Explicit incompatibility | No POSIX-script promise, job control, signals/traps, aliases, globbing, or ambient host executable lookup.                        |
 
 `PROMPT` is a client template over server-provided state, for example
 `{user}@{server}:{cwd} [{revision}]$`. The server reports state; it does not
@@ -456,9 +623,9 @@ logical command object registered in a command registry:
 
 ```ts
 interface BuiltinCommand {
-  readonly name: string
-  readonly synopsis: string
-  execute(context: CommandContext, args: string[]): string
+  readonly name: string;
+  readonly synopsis: string;
+  execute(context: CommandContext, args: string[]): string;
 }
 ```
 
@@ -471,14 +638,14 @@ context-free; the interpreter supplies context only at invocation time.
 
 Adopt familiar commands only when their Yafs meaning is documented:
 
-| Tier | Commands | Rule |
-| --- | --- | --- |
-| Core VFS | `pwd`, `cd`, `ls`, `cat`, `mkdir`, `ln`, `stat`, `lstat`, `readlink`, `origins`, `mounts`, `inspect` | Operate through the VFS and preserve mount/provider semantics. |
-| Safe session | `help`, `version`, `whoami`, `true`, `false`, `date` | Need no host-process access. `date` uses an injected server clock and an explicit stable format. |
-| Metadata-aware | `touch` | Add only with node timestamps and a defined create/update policy; never pretend an empty-file shortcut has POSIX touch semantics. |
-| Stream-oriented | `printf`, `head`, `tail`, `wc`, `grep`, `sort` | Add after typed stdin/stdout streams and pipe behavior are settled. |
-| Transactional/destructive | `rm`, `mv`, `cp`, `chmod` | Add only with provider write/delete, rollback, and audit semantics. |
-| Process-oriented | `time`, `ps`, `kill`, jobs | Defer until Yafs deliberately owns process execution. `time` is not meaningful while commands are not yet composable processes. |
+| Tier                      | Commands                                                                                             | Rule                                                                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Core VFS                  | `pwd`, `cd`, `ls`, `cat`, `mkdir`, `ln`, `stat`, `lstat`, `readlink`, `origins`, `mounts`, `inspect` | Operate through the VFS and preserve mount/provider semantics.                                                                    |
+| Safe session              | `help`, `version`, `whoami`, `true`, `false`, `date`                                                 | Need no host-process access. `date` uses an injected server clock and an explicit stable format.                                  |
+| Metadata-aware            | `touch`                                                                                              | Add only with node timestamps and a defined create/update policy; never pretend an empty-file shortcut has POSIX touch semantics. |
+| Stream-oriented           | `printf`, `head`, `tail`, `wc`, `grep`, `sort`                                                       | Add after typed stdin/stdout streams and pipe behavior are settled.                                                               |
+| Transactional/destructive | `rm`, `mv`, `cp`, `chmod`                                                                            | Add only with provider write/delete, rollback, and audit semantics.                                                               |
+| Process-oriented          | `time`, `ps`, `kill`, jobs                                                                           | Defer until Yafs deliberately owns process execution. `time` is not meaningful while commands are not yet composable processes.   |
 
 This is compatibility by clear semantics, not a promise of a growing POSIX
 clone. A separate `now`/RPC field may be preferable to text `date` for
@@ -520,15 +687,18 @@ kernel journal. The kernel resolves paths, links, unions, identity, mount
 boundaries, authorization, revision assignment, and audit events.
 
 ```ts
-type ProviderMode = 'read-only' | 'authoritative' | 'staged'
+type ProviderMode = "read-only" | "authoritative" | "staged";
 
 interface Provider {
-  describe(): { mode: ProviderMode, capabilities: string[] }
-  stat(path: RelativePath, options: { followLinks: boolean }): Promise<Node | undefined>
-  list(path: RelativePath): AsyncIterable<DirEntry>
-  read(path: RelativePath): AsyncIterable<Uint8Array>
-  refresh?(): Promise<{ revision: string }>
-  write?(change: StagedChange): Promise<{ revision: string }>
+  describe(): { mode: ProviderMode; capabilities: string[] };
+  stat(
+    path: RelativePath,
+    options: { followLinks: boolean },
+  ): Promise<Node | undefined>;
+  list(path: RelativePath): AsyncIterable<DirEntry>;
+  read(path: RelativePath): AsyncIterable<Uint8Array>;
+  refresh?(): Promise<{ revision: string }>;
+  write?(change: StagedChange): Promise<{ revision: string }>;
 }
 ```
 
@@ -609,22 +779,22 @@ same prepared snapshot through the normal WAL-then-publication path as `mount
 refresh` — there is no separate refresh mechanism for the daemon-scheduled
 case.
 
-
 ## Valuable increments
 
-| Milestone | Product proof | Acceptance checkpoint |
-| --- | --- | --- |
-| M0 — composable VFS | A tree can represent composed state predictably. | Canonical paths, links with loop handling, read-only ordered unions, origins, and explicit errors. **Complete.** |
-| M1 — command/session contract | Yash and RPC describe the same safe operation. | Typed result (`stdout`, `stderr`, status, structured error, session state); `help`, `version`, `whoami`, `mounts`, and `inspect`; documented built-ins and deterministic error codes. |
-| M2 — usable Yash | A human can comfortably explore a persistent workspace. | Prompt templates, persisted local history, up/down, Ctrl-R, basic final-token path completion, `yash -c`, and JSON result output. **Baseline complete; polish remains.** |
-| M3 — durable local service | Work survives restart and recovery is principled. | Versioned bounded loopback protocol; checksummed, sync-before-apply VFS operations; torn-final-record recovery; corruption refusal; snapshots/compaction; exclusive data-dir lock; `yash --local`; and managed `yafsd serve/start/stop/restart/status` lifecycle. **Complete for the single-tenant local appliance.** |
-| M4 — mount/provider contract | External state enters without special cases. | Strict schema-validated YAML mounts, explicit validate/activate/unmount lifecycle, durable zero-capability fixture mount, structured provenance, and activation audit. **Read-only fixture slice complete.** |
-| M4.5 — published snapshots | Composed paths cannot observe divergent provider copies. | One synchronous resolver over atomically published snapshots; node-level provenance/read-only metadata; explicit refresh; and recovery/unmount/link/union consistency tests. |
-| M5 — review workspace | The product helps with a real task. | Bounded GitHub query collection, explicit/interval refresh, source revision/freshness, and local review artifacts bound to their source revision. |
-| M6 — cache provider *(decision gate)* | Yafs is useful as an observable state service. | Durable local TTL cache, atomic replacement, expiry metadata, eviction/limit policy, concurrent-write tests. |
-| M7 — agent workspace *(decision gate)* | An agent can work visibly and safely. | Durable runs, scoped context/capabilities, artifacts, restart behavior, audit trail. |
-| M8 — remote/multi-user *(decision gate)* | The service works safely beyond localhost. | Authenticated transport, per-user authorization, quotas, remote Yash/SSH adapter, audit retention. |
-| M9 — runtime bridge *(decision gate)* | Workspaces intentionally drive external processes. | Allowlisted execution against materialized snapshots; staged imports with base-revision conflict checks and explicit commit. |
+| Milestone                                           | Product proof                                                    | Acceptance checkpoint                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 — composable VFS                                 | A tree can represent composed state predictably.                 | Canonical paths, links with loop handling, read-only ordered unions, origins, and explicit errors. **Complete.**                                                                                                                                                                                                                                     |
+| M1 — command/session contract                       | Yash and RPC describe the same safe operation.                   | Typed result (`stdout`, `stderr`, status, structured error, session state); `help`, `version`, `whoami`, `mounts`, and `inspect`; documented built-ins and deterministic error codes.                                                                                                                                                                |
+| M2 — usable Yash                                    | A human can comfortably explore a persistent workspace.          | Prompt templates, persisted local history, up/down, Ctrl-R, basic final-token path completion, `yash -c`, and JSON result output. **Baseline complete; polish remains.**                                                                                                                                                                             |
+| M3 — durable local service                          | Work survives restart and recovery is principled.                | Versioned bounded loopback protocol; checksummed, sync-before-apply VFS operations; torn-final-record recovery; corruption refusal; snapshots/compaction; exclusive data-dir lock; `yash --local`; and managed `yafsd serve/start/stop/restart/status` lifecycle. **Complete for the single-tenant local appliance.**                                |
+| M4 — mount/provider contract                        | External state enters without special cases.                     | Strict schema-validated YAML mounts, explicit validate/activate/unmount lifecycle, durable zero-capability fixture mount, structured provenance, and activation audit. **Read-only fixture slice complete.**                                                                                                                                         |
+| M4.5 — published snapshots                          | Composed paths cannot observe divergent provider copies.         | One synchronous resolver over atomically published snapshots; node-level provenance/read-only metadata; explicit refresh; and recovery/unmount/link/union consistency tests.                                                                                                                                                                         |
+| M5 — review workspace                               | The product helps with a real task.                              | Bounded GitHub query collection, explicit/interval refresh, source revision/freshness, and local review artifacts bound to their source revision. **Mechanically complete and exercised against a real GitHub Enterprise Cloud repository; product-value evidence (repeated real use, not a single session) is still open — see "Extension gates."** |
+| M6 — durable artifacts and traces _(decision gate)_ | External work remains inspectable after the source view changes. | Durable content-addressed blobs, provider-neutral `trace`, local-only `reify`, replay-derived retention, and explicit serialized GC.                                                                                                                                                                                                                 |
+| M6.1 — cache provider _(decision gate)_             | Yafs is useful as an observable state service.                   | Durable local TTL cache, atomic replacement, expiry metadata, eviction/limit policy, concurrent-write tests.                                                                                                                                                                                                                                         |
+| M7 — agent workspace _(decision gate)_              | An agent can work visibly and safely.                            | Durable runs, scoped context/capabilities, artifacts, restart behavior, audit trail.                                                                                                                                                                                                                                                                 |
+| M8 — remote/multi-user _(decision gate)_            | The service works safely beyond localhost.                       | Authenticated transport, per-user authorization, quotas, remote Yash/SSH adapter, audit retention.                                                                                                                                                                                                                                                   |
+| M9 — runtime bridge _(decision gate)_               | Workspaces intentionally drive external processes.               | Allowlisted execution against materialized snapshots; staged imports with base-revision conflict checks and explicit commit.                                                                                                                                                                                                                         |
 
 Each increment is useful on its own and proves a product property needed by the
 next one.
@@ -738,9 +908,9 @@ remote write: durable intent → idempotent provider call → durable outcome �
   promise, or a bypass for mount capabilities/provider write policy.
 - **Wire-protocol gateways are adapters, and a different thing from Yash
   commands with similar-sounding semantics.** A Yash command like `cache put
-  --ttl` only ever serves yash/RPC clients — it is not compatibility with
+--ttl` only ever serves yash/RPC clients — it is not compatibility with
   anything. A gateway that speaks an existing wire protocol (Redis's RESP; a
-  bounded S3 REST subset) lets an *unmodified* existing client talk to Yafs
+  bounded S3 REST subset) lets an _unmodified_ existing client talk to Yafs
   without knowing it exists, which is the actual value in "Redis/S3
   compatibility" and is not delivered by the commands alone. Both are
   legitimate, but naming a mount "Redis-compatible" should mean the gateway,
@@ -784,26 +954,27 @@ annotate through one durable tree:
 
 ```text
 /reviews/acme/widget/
-  source/pulls/482/       # read-only PR metadata, changed files, diff, revision
+  source/pulls/482/       # read-only PR metadata and diff
   source/pulls/483/
-  notes/                  # durable local writable files
-    482/source.json       # provider/resource/revision/freshness binding
-    482/alice.md
-    482/reviewer-b.md
-    482/safety.json
+  artifacts/              # durable local reviewer artifacts
+    482/alice/trace.json  # source provenance, PR head SHA, captured blobs
+    482/alice/review.md
+    482/reviewer-b/trace.json
+    482/reviewer-b/review.md
 ```
 
 The demo succeeds when two independent sessions inspect a PR from the same
-filtered source collection, add separate notes without provider write authority,
+filtered source collection, add separate artifacts without provider write authority,
 and a later reader can answer which revision they saw, which artifacts each
-produced, and when the source was fetched. `source.json` persists that binding:
-if a later query refresh removes the PR, local notes remain and inspection says
-the bound source is no longer in the live collection. A local LM Studio client may
+produced, and when the source was fetched. `trace.json` persists exact captured
+content, provenance, and a PR head SHA where GitHub provides one: if a later
+query refresh removes the PR, local reviewer artifacts remain reifiable without
+reading the live collection. A local LM Studio client may
 participate as one such reviewer, but it is not yet an agent runtime provider.
 This is the product proof for provenance, composition, and shared inspectable
 state.
 
-M5 implementation may begin only after the external-read path has a named
+M5 implementation began only after the external-read path had a named
 GitHub network grant, an explicit secret-reference policy if authentication is
 needed, and revision/freshness fields in the provider record. It remains
 read-only; no GitHub write, autonomous loop, host execution, or public MCP
@@ -843,7 +1014,7 @@ collection revision, and fetch time are durable; endpoint and token are not.
   must state whether it is a read-only mirror, a writable source of truth, a
   cache, or a staged proposal. Shell access grants actions allowed by that
   provider and identity; it does not erase provider write policy.
-- **Persistence versus watch:** WAL safety does *not* require public file-watch
+- **Persistence versus watch:** WAL safety does _not_ require public file-watch
   events. It requires serial mutation, durable journal commit before success,
   atomic snapshots, and recovery. Watches/events are a separate consumer
   feature, though a sequenced internal mutation log can later support them.
@@ -867,3 +1038,8 @@ collection revision, and fetch time are durable; endpoint and token are not.
    wait for actual review-workspace usage to reveal the next need?
 3. Should Yash scripts use only the small language, or should JSON-lines RPC be
    a first-class scripting surface?
+4. Should `ctl` be generalized now from "the provider that owns this fetched
+   mount" to any directory with a registered handler, given personas need the
+   latter and GitHub only ever needed the former as a special case of it?
+5. What checkpoint cadence for a streamed `ctl` result balances WAL load
+   against a meaningfully "live" `cat` during a long-running response?

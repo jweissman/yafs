@@ -12,9 +12,13 @@ import { YafsOperationQueue } from './YafsOperationQueue';
 import { YafsWorkspace } from './YafsWorkspace';
 import { execute, executeAsync, executeWrite, planExecution, planExecutionAsync, planWrite } from './YafsExecution';
 import { YafsCommandRuntime } from './YafsCommandRuntime';
+import { BlobStore } from './protocol/BlobStore';
+import { memoryBlobStore } from './protocol/MemoryBlobStore';
+import { TraceService } from './traces/TraceService';
 
 type YafsOptions = {
-  store?: NodeStore, user?: User, clock?: Clock, mounts?: MountManager
+  store?: NodeStore, user?: User, clock?: Clock, mounts?: MountManager, blobs?: BlobStore,
+  traces?: TraceService
 }
 
 export default class Yafs {
@@ -27,12 +31,21 @@ export default class Yafs {
   workspace: YafsWorkspace
   operationQueue: YafsOperationQueue
   clock: Clock
+  blobs: BlobStore
+  traces: TraceService
   commands = new YafsCommandRuntime(this)
 
   constructor(options: YafsOptions = {}) {
-    this.clock = options.clock || systemClock
-    this.store = options.store || new NodeStore(this.clock)
-    this.configure(options)
+    this.initialize(options)
+  }
+
+  private initialize(options: YafsOptions) {
+    this.clock = options.clock || systemClock; this.store = options.store || new NodeStore(this.clock)
+    this.initializeTraces(options); this.configure(options)
+  }
+  private initializeTraces(options: YafsOptions) {
+    this.blobs = options.blobs || memoryBlobStore()
+    this.traces = options.traces || new TraceService(this.blobs)
   }
 
   private configure(options: YafsOptions) {

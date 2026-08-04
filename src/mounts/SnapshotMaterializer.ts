@@ -13,8 +13,9 @@ export const defaultSnapshotLimits: SnapshotLimits = { files: 4096, bytes: 1024 
 export class SnapshotMaterializer {
   constructor(private readonly store: NodeStore, private readonly limits = defaultSnapshotLimits) {}
 
-  prepare(record: MountRecord, entries: [string, string][]): PreparedMountRecord {
-    const snapshot = this.snapshot(entries)
+  prepare(record: MountRecord, entries: [string, string][], resourceReferences?: Record<string, object>):
+    PreparedMountRecord {
+    const snapshot = this.snapshot(entries, resourceReferences)
     return { ...record, snapshot }
   }
 
@@ -33,9 +34,10 @@ export class SnapshotMaterializer {
     store.mkdir(record.path); record.snapshot.entries.forEach(entry => this.write(store, record.path, entry))
     store.setProviderOrigin(record.path, this.origin(record))
   }
-  private snapshot(entries: [string, string][]): PublishedSnapshot {
+  private snapshot(entries: [string, string][], resourceReferences?: Record<string, object>): PublishedSnapshot {
     const byteCount = this.byteCount(entries); this.assertWithinLimits(entries.length, byteCount)
-    return { entries: entries.map(([path, content]) => [path, content]), fileCount: entries.length, byteCount }
+    return { entries: entries.map(([path, content]) => [path, content]), fileCount: entries.length,
+      byteCount, resourceReferences }
   }
   private byteCount(entries: [string, string][]) { return entries.reduce(this.countBytes, 0) }
   private countBytes(count: number, [, content]: [string, string]) { return count + Buffer.byteLength(content) }

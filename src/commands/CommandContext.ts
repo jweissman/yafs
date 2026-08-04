@@ -1,4 +1,5 @@
 import { Clock } from '../core/Clock';
+import { TraceService } from '../traces/TraceService';
 import { AbsolutePath } from '../core/AbsolutePath';
 import { MountRecord, PreparedMountRecord, Provenance } from '../mounts/types';
 
@@ -10,12 +11,14 @@ export type CommandContext = {
   resolve(path: string): AbsolutePath;
   required(command: string, args: string[], index: number): string;
   help(): string;
+  exists(path: AbsolutePath): boolean;
   read(path: AbsolutePath): string;
   readlink(path: AbsolutePath): string;
   list(path: AbsolutePath): string[];
   type(path: AbsolutePath, followFinal?: boolean): 'file' | 'directory' | 'symlink';
   origins(path: AbsolutePath): string[];
   provenance(path: AbsolutePath): Provenance[];
+  resourceReference(path: AbsolutePath): object | undefined;
   mounts(): string[];
   planMount(path: AbsolutePath, id?: string): MountRecord;
   prepareMount(record: MountRecord): PreparedMountRecord | Promise<PreparedMountRecord>;
@@ -30,4 +33,6 @@ export type CommandContext = {
   mount(record: PreparedMountRecord): void;
   refresh(record: PreparedMountRecord): void;
   unmount(id: string): void;
+  afterCommit(effect: () => void): void;
+  traces: TraceService;
 }

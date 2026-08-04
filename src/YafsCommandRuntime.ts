@@ -46,10 +46,10 @@ export class YafsCommandRuntime {
     finally { this.restore(state) }
   }
 
-  private state() { return { cwd: this.yafs.shell.pwd, operationCount: this.yafs.operationQueue.count() } }
+  private state() { return { cwd: this.yafs.shell.pwd, operationState: this.yafs.operationQueue.count() } }
 
-  private restore(state: { cwd: AbsolutePath, operationCount: number }) {
-    this.yafs.shell.enter(state.cwd); this.yafs.operationQueue.restore(state.operationCount)
+  private restore(state: { cwd: AbsolutePath, operationState: { operations: number, effects: number } }) {
+    this.yafs.shell.enter(state.cwd); this.yafs.operationQueue.restore(state.operationState)
   }
 
   private run(name: string, args: string[]): string | Promise<string> {

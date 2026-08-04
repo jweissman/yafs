@@ -10,13 +10,7 @@ Kubernetes, or Docker replacement.
 
 ## Getting started
 
-One-time setup so `yafsd` and `yash` are plain commands on your `PATH`:
-
-```sh
-bun link
-```
-
-Then start the daemon and connect a client:
+Start the daemon and connect a client:
 
 ```sh
 yafsd start

@@ -33,6 +33,10 @@ export class MountManager {
     return this.prepareActivation(this.planner.refresh(path, id), actor)
   }
   mounts() { return [...this.records] }
+  resourceReference(path: AbsolutePath) {
+    const record = this.records.find(item => path.startsWith(`${item.path}/`))
+    return record?.snapshot.resourceReferences?.[path.slice(record.path.length + 1)]
+  }
 
   activate(record: PreparedMountRecord, actor: string) {
     this.snapshots.materialize(record); this.records.push(record); this.save()

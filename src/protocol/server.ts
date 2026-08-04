@@ -6,33 +6,33 @@ import { VfsOperation } from '../vfs/VfsOperation'
 import { Journal } from './Journal'
 import { MountManager } from '../mounts/MountManager'
 import { ProviderRegistry } from '../mounts/ProviderRegistry'
-import { MountRefreshScheduler } from '../mounts/MountRefreshScheduler'
 import { openServices, listen } from './ServerServices'
 import { attachLines, isWriteRequest, parseRequest, persistenceFailure, requestFailure, respond,
   Request } from './Framing'
+import { TraceReifier, TraceService } from '../traces/TraceService'
+import { ServerRefresh } from './ServerRefresh'
 
 export type StartOptions = {
   walPath?: string, dataDir?: string, port?: number, host?: string, providers?: ProviderRegistry,
-  now?: () => number
+  now?: () => number, traceReifier?: TraceReifier
 }
 
 export class YafsServer {
   private readonly server: Server
   private queue: Promise<void> = Promise.resolve()
   private sockets = new Set<Socket>()
-  private readonly scheduler: MountRefreshScheduler
-  private refreshTimer?: Timer
+  private readonly refreshes: ServerRefresh
 
   private constructor(private readonly store: NodeStore, private readonly journal: Journal,
-    private readonly mounts: MountManager, now?: () => number) {
+    private readonly mounts: MountManager, private readonly traces: TraceService, now?: () => number) {
     this.server = createServer(socket => this.accept(socket))
-    this.scheduler = new MountRefreshScheduler(() => this.mounts.mounts(), record => this.enqueueRefresh(record), now)
+    this.refreshes = new ServerRefresh(mounts, journal, work => this.enqueueWork(work), now)
   }
 
   static async start(options: StartOptions): Promise<YafsServer> {
     const services = await openServices(options)
-    const yafsServer = new YafsServer(services.store, services.journal, services.mounts, options.now)
-    await listen(yafsServer.server, options); yafsServer.startRefreshTimer(); return yafsServer
+    const yafsServer = new YafsServer(services.store, services.journal, services.mounts, services.traces, options.now)
+    await listen(yafsServer.server, options); yafsServer.refreshes.start(); return yafsServer
   }
 
   address(): { host: string, port: number } {
@@ -42,7 +42,7 @@ export class YafsServer {
   }
 
   async close(): Promise<void> {
-    if (this.refreshTimer) clearInterval(this.refreshTimer)
+    this.refreshes.close()
     this.closeSockets(); await this.closeNetwork(); await this.journal.close()
   }
 
@@ -55,7 +55,7 @@ export class YafsServer {
 
   private accept(socket: Socket) {
     this.observe(socket)
-    this.attachSession(socket, new Yafs({ store: this.store, mounts: this.mounts }))
+    this.attachSession(socket, new Yafs({ store: this.store, mounts: this.mounts, traces: this.traces }))
   }
 
   private observe(socket: Socket) {
@@ -69,8 +69,12 @@ export class YafsServer {
   }
 
   private enqueue(session: Yafs, line: string, socket: Socket) {
-    this.queue = this.queue.then(() => this.executeLine(session, line, socket))
-      .catch(() => { socket.destroy() })
+    const run = () => this.executeLine(session, line, socket)
+    this.queue = this.queue.then(run).catch(error => this.abort(socket, error))
+  }
+
+  private abort(socket: Socket, error: unknown) {
+    console.error('Unhandled error executing command:', error); socket.destroy()
   }
 
   private async executeLine(session: Yafs, line: string, socket: Socket) {
@@ -105,17 +109,6 @@ export class YafsServer {
     try { await this.journal.compact(this.store) } catch (error) { console.error('Journal compaction failed:', error) }
   }
 
-  async refreshDue() { return this.scheduler.tick() }
-  private startRefreshTimer() {
-    this.refreshTimer = setInterval(() => void this.refreshDue().catch(console.error), 60_000)
-  }
-
-  private enqueueRefresh(record: import('../mounts/types').PreparedMountRecord) {
-    this.queue = this.queue.then(() => this.refresh(record)); return this.queue
-  }
-  private async refresh(record: import('../mounts/types').PreparedMountRecord) {
-    const prepared = await this.mounts.prepareRefresh(record.manifestPath, record.id, 'system')
-    await this.journal.commit([{ type: 'refresh', record: prepared, at: new Date().toISOString() }])
-    this.mounts.refresh(prepared, 'system')
-  }
+  async refreshDue() { return this.refreshes.due() }
+  private enqueueWork(work: () => Promise<void>) { this.queue = this.queue.then(work); return this.queue }
 }

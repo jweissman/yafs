@@ -8,16 +8,17 @@ import { ProviderRegistry } from '../src/mounts/ProviderRegistry'
 import { YashClient } from '../src/protocol/client'
 import { YafsServer } from '../src/protocol/server'
 
-test('two review sessions share one GitHub revision and leave separate durable artifacts', async () => {
+test('two review sessions share one GitHub revision and leave separate durable traces', async () => {
   const server = await YafsServer.start({ dataDir: await mkdtemp(join(tmpdir(), 'yafs-review-')),
     providers: new ProviderRegistry(new GitHubCollectionSource({ pulls: async () => [pull()] })) })
   const alice = await YashClient.connect(server.address()); const bob = await YashClient.connect(server.address())
   await alice.exec(`printf '${manifest()}' > .yafsmeta`); await alice.exec('mount activate .yafsmeta')
-  await alice.exec('mkdir notes'); await alice.exec('mkdir notes/42'); await alice.exec('review bind reviews/pulls/42 notes/42/alice')
-  await bob.exec('review bind /home/root/reviews/pulls/42 /home/root/notes/42/bob')
-  const aliceBinding = JSON.parse(await alice.exec('cat notes/42/alice/source.json'))
-  const bobBinding = JSON.parse(await bob.exec('cat /home/root/notes/42/bob/source.json'))
-  expect(aliceBinding.revision).toMatch(/^github:/); expect(bobBinding.revision).toBe(aliceBinding.revision)
+  await alice.exec('mkdir notes'); await alice.exec('mkdir notes/42'); await alice.exec('trace reviews/pulls/42 notes/42/alice')
+  await bob.exec('trace /home/root/reviews/pulls/42 /home/root/notes/42/bob')
+  const aliceTrace = JSON.parse(await alice.exec('cat notes/42/alice/trace.json'))
+  const bobTrace = JSON.parse(await bob.exec('cat /home/root/notes/42/bob/trace.json'))
+  expect(aliceTrace.origin.revision).toMatch(/^github:/)
+  expect(bobTrace.origin.revision).toBe(aliceTrace.origin.revision)
   await alice.close(); await bob.close(); await server.close()
 })
 
