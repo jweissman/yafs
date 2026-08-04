@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import { parseDocument } from 'yaml'
 
 import { Manifest, ManifestMount } from './types'
+import { fixtureStreams } from './FixtureStreamManifest'
+import { object, only, relative } from './ManifestValidation'
 
 type YamlDocument = ReturnType<typeof parseDocument>
 type YamlNode = {
@@ -67,9 +69,15 @@ function validateMountFields(mount: Record<string, unknown>) {
 }
 
 function fixture(value: unknown) {
-  const config = object(value, 'fixture config'); only(config, ['files'], 'fixture config'); const files = object(config.files, 'fixture files')
-  if (!Object.entries(files).every(([path, content]) => relative(path) && typeof content === 'string')) throw new Error('Invalid fixture files')
-  return { files: files as Record<string, string> }
+  const config = object(value, 'fixture config'); only(config, ['files', 'streams'], 'fixture config')
+  const files = validFixtureFiles(config.files)
+  return { files, streams: fixtureStreams(config.streams) }
+}
+
+function validFixtureFiles(value: unknown) {
+  const files = object(value, 'fixture files')
+  const valid = Object.entries(files).every(entry => relative(entry[0]) && typeof entry[1] === 'string')
+  if (!valid) throw new Error('Invalid fixture files'); return files as Record<string, string>
 }
 
 function github(value: unknown) {
@@ -86,12 +94,6 @@ function validGitHubConfig(repositoryValue: unknown, query: unknown, max: unknow
   return repository(repositoryValue) && typeof query === 'string' && Number.isInteger(max)
     && typeof max === 'number' && max >= 1 && max <= 100
 }
-
-function object(value: unknown, name: string): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid ${name}`); return value as Record<string, unknown> }
-
-function only(value: Record<string, unknown>, keys: string[], name: string) { if (Object.keys(value).some(key => !keys.includes(key))) throw new Error(`Unknown ${name} field`) }
-
-function relative(value: unknown): value is string { return typeof value === 'string' && value !== '' && !value.startsWith('/') && !value.split('/').some(part => !part || part === '.' || part === '..') }
 
 function provider(value: unknown): value is ManifestMount['provider'] { return value === 'fixture' || value === 'github' }
 

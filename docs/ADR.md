@@ -189,17 +189,32 @@ kernel command-dispatch primitive. The write is never stored as content. The
 provider that owns the mount recognizes `ctl` and interprets the written bytes
 as a structured action request (JSON, with a schema the provider declares,
 validated the same way `.yafsmeta` config already is per provider) scoped to
-exactly that resource's path. The kernel's role does not change: resolve the
-path, check the mount's capability grants, pass the write through the same
-structured write path ordinary content writes already use. The provider's role
-is new: recognize `ctl`, validate the action, and perform it using a capability
-checked the same way `secret.github-token` is today — most likely a distinct,
-per-action capability (e.g. `action.gh-comment`), since "post a comment on a
-remote system" is not the same authority as "write inside this mount," which
-the existing Writes capability class already covers. An action's result is
-never the write's return value; it appears as any other reconciled-resource
-change does — new files, an updated `status.json`, visible on the next `ls`
-or `cat`.
+exactly that resource's path. The provider's role is new: recognize `ctl`,
+validate the action, and perform it using a capability checked the same way
+`secret.github-token` is today — most likely a distinct, per-action capability
+(e.g. `action.gh-comment`), since "post a comment on a remote system" is not
+the same authority as "write inside this mount," which the existing Writes
+capability class already covers. An action's result is never the write's
+return value; it appears as any other reconciled-resource change does — new
+files, an updated `status.json`, visible on the next `ls` or `cat`.
+
+The kernel's role turned out not to be quite as unchanged as first written
+here. Every provider-published node is marked read-only, and the write guard
+checks it on every ancestor of a path — so a write to `ctl` inside a
+provider-owned, read-only-mounted resource never reached `CtlDispatch` at all;
+it was rejected by the guard before dispatch had a chance to intercept it.
+This was invisible in testing until `ctl` was exercised against a real,
+read-only-mounted provider rather than a plain writable directory. The fix is
+a narrow, kernel-level exemption: `nodeStoreWriteGuard.assertWritable` allows
+a write whose path is named exactly `ctl`, regardless of mount read-only
+state, since such a write is never stored as content — `CtlDispatch` still
+decides afterward whether a handler is registered and either dispatches or
+passes it through as an ordinary write. The exemption is unconditional on the
+name, not on whether a handler happens to be registered at that exact path;
+an unregistered `ctl` file under a read-only mount can therefore be written as
+ordinary content. That is an accepted, narrow gap for a local-only, single-
+user system, not a solved problem — revisit before any multi-user (M8)
+context makes it a real boundary.
 
 Two things this decision does not yet resolve: whether a `ctl` action is
 synchronous (the write blocks until the provider confirms, e.g. the comment
@@ -322,15 +337,46 @@ durable update on an interval or byte threshold, whichever comes first), but
 the right cadence, and whether a `cat` mid-stream should see partial content
 or block until the next checkpoint, are not yet decided.
 
-**Decision:** answer this with a dummy stream fixture before wiring any real
-model. Extend `FixtureConfig` with an optional slow-feed mode — content for a
-given path arrives in configured chunks on a timer rather than all at once —
-and drive `ctl` and the background-execution/checkpoint mechanics above
-against it. This proves the mechanism (non-blocking execution, checkpoint
-cadence, partial-read semantics) with no network dependency, no model server
-to run, and a fully deterministic test. Wire in a real LM Studio endpoint
-only once this experiment settles what a durable, watchable stream should
-actually look like.
+**Decision:** answer this with a dummy, timer-driven chunk delivery before
+wiring any real model — and it must be a real, manifest-activated provider an
+operator can run and watch, not an internal primitive only exercised by
+tests written by the same person who wrote the code. An earlier draft of this
+decision concluded a fixture mount couldn't stream into its own published
+tree because every provider-published node is marked read-only
+(`providerOrigin.readOnly`), and the write guard checks it on every ancestor
+of a path — true, but the conclusion drawn from it was wrong. `SnapshotMaterializer.replace()`
+already updates a mount's read-only content legitimately, for ordinary
+scheduled refresh: it builds a candidate copy of the store, repopulates the
+mount's subtree there, and swaps the live store's whole state to match — a
+full state replacement, not a guarded in-place write, so the guard never
+enters into it. Streaming a fixture mount's file is the same operation at a
+faster cadence: `FixtureConfig` gained an optional `streams` field
+(`Record<string, { chunks: string[], intervalMs: number }>`), and
+`FixtureStreamDriver` polls active fixture mounts, and for each due stream,
+constructs an updated `PreparedMountRecord` (existing snapshot entries, with
+one more chunk appended to the streamed path), commits it to the WAL as an
+ordinary `refresh` operation, and calls the same `MountManager.refresh()`
+ordinary scheduled refresh already calls. The wait between chunks happens
+outside the serialized command queue; only the act of committing each
+delivered chunk touches it, structurally identical to what a real streaming
+HTTP response would use. A real manifest can declare this today:
+
+```yaml
+mounts:
+  - id: demo
+    path: demo
+    provider: fixture
+    config:
+      files: { "output.txt": "" }
+      streams: { "output.txt": { chunks: ["one-", "two-", "three"], intervalMs: 250 } }
+    capabilities: []
+```
+
+`mount activate .yafsmeta` against a running `yafsd`, then repeated
+`cat demo/output.txt` from an ordinary `yash` session, shows the file grow in
+place — proof against the real product surface, not a proxy for it. Wire in
+a real LM Studio endpoint only once this settles what a durable, watchable
+stream should actually look like.
 
 ### Trace capture and reification
 
@@ -571,6 +617,60 @@ Any later public cache endpoint is an adapter with its own narrow service
 identity, path/capability scope, quotas, and audit trail. Providers may declare
 such endpoints, but the kernel—not provider code alone—enforces identity,
 mount scope, and resource limits.
+
+### M6.1 concrete design: the cache falls out of the blob store, mostly
+
+The vision above leaves TTL, eviction, atomic replacement, and concurrent
+writes as open requirements. Each has a direct answer once M6's blob store
+and retention model are taken as given, because a cache entry and a trace
+entry are the same underlying problem — durable bytes plus a caller-relevant
+record pointing at them — differing only in one place: a trace is captured
+once and never overwritten; a cache entry is overwritten by design.
+
+- **Storage**: cache bytes are put through the same `BlobStore.put()` M6
+  already built. A separate durable record — `metadata/<key>.json`, an
+  ordinary VFS file, not a new persistence layer — holds
+  `{ digest, createdAt, expiresAt }`. `values/<key>` is not a second copy; it
+  is materialized from the recorded digest the same way `reify` materializes
+  a trace entry, so the blob is the only place the bytes actually live.
+- **Retention**: `retain(digest, `cache:${key}`)` / `release(digest, ...)` —
+  the identical owner-key pattern `TraceRetention` already uses for
+  `` `trace:${path}` ``. A `cache put` that overwrites an existing key
+  releases the old digest's retain and retains the new one; nothing new
+  needed in the blob store itself.
+- **Expiry vs. reclamation, kept separate**: visibility and physical cleanup
+  are different concerns with different urgency. A read against an expired
+  key (`now >= expiresAt`) must report absence immediately — `cat`ing a
+  `values/<key>` past its expiry is a correctness bug if it still returns the
+  old bytes, not a caching nicety. Reclaiming the underlying blob is not
+  urgent the same way, and — consistent with `blobs gc` already being an
+  explicit, ordinary serialized command rather than a background timer, to
+  avoid racing an in-flight activation — eviction is `cache gc` (or an
+  extension of `blobs gc`), invoked deliberately, never on an internal
+  schedule inside `yafsd`.
+- **Atomic replacement**: not a new mechanism. `SnapshotMaterializer`'s
+  candidate-copy-then-`store.restore()` swap already gives whole-state atomic
+  replacement, and `FixtureStreamDriver` already reuses it to update
+  published content after activation. A `cache put` republishing
+  `values/<key>` and `metadata/<key>.json` together is the same swap, so a
+  reader never observes one updated and the other stale.
+- **Concurrent writes**: two `cache put`s racing on the same key resolve
+  exactly like any two commands racing today — the server's single serialized
+  command queue orders them, last write wins deterministically. No new lock
+  or transaction concept is needed; this is the same guarantee the ADR's
+  "Persistence versus watch" contract already requires (serial mutation,
+  durable commit before success).
+
+**Left open, deliberately:** whether `/cache/<name>` is modeled as a
+`MountProvider` at all. Every existing provider fetches external content and
+publishes it read-only; a cache's content is entirely caller-written, never
+fetched — the same mismatch already named for `/agents` in the `ctl` section
+above. Building both before generalizing either is intentional: forcing a
+shared abstraction into existence from one example is guessing, not design.
+If personas and cache both end up needing "a durable, caller-writable
+directory with its own command verbs, outside the fetch-and-publish provider
+shape," that commonality should get named after it's proven twice, not
+before.
 
 ### Agent workspace — later, after authority and durability
 

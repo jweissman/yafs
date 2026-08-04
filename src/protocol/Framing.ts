@@ -28,6 +28,16 @@ export function respond(socket: Socket, response: Response | ProtocolFailure) {
   if (!socket.destroyed) socket.write(JSON.stringify(response) + '\n')
 }
 
+export function requestOrReject(line: string, socket: Socket): Request | undefined {
+  try { return parseRequest(line) } catch (error) { return rejectRequest(error, socket) }
+}
+
+function rejectRequest(error: unknown, socket: Socket): undefined {
+  const failure = requestFailure(error)
+  if (failure) { respond(socket, failure); return undefined }
+  socket.destroy(); return undefined
+}
+
 export function persistenceFailure(id: number, error: unknown): ProtocolFailure {
   const message = error instanceof Error ? error.message : String(error)
   return failure(id, 'persistence_error', message)

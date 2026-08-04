@@ -1,7 +1,8 @@
 import { AbsolutePath } from '../core/AbsolutePath'
 
 export type MountState = 'active' | 'failed'
-export type FixtureConfig = { files: Record<string, string> }
+export type StreamSpec = { chunks: string[], intervalMs: number }
+export type FixtureConfig = { files: Record<string, string>, streams?: Record<string, StreamSpec> }
 export type GitHubConfig = { repository: string, query: string, max: number }
 export type MountProvider = 'fixture' | 'github'
 export type MountConfig = FixtureConfig | GitHubConfig
