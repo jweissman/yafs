@@ -28,34 +28,42 @@ hello
 journal — useful for trying the shell without any durable state. `yash -c
 'COMMAND'` runs one command non-interactively.
 
-## Mounting a provider
+## Configuring plugin projections
 
-A `.yafsmeta` manifest declares a provider-backed subtree. `mount` is a
-control-plane command with four subcommands — see the "Mount lifecycle" row
-in the [command reference](COMMANDS.md#commands) for the full syntax and side
-effects of each. Concretely, with the fixture provider (no network access
-needed, so this works with nothing else configured):
+Host-side infrastructure configuration declares provider-backed subtrees. Keep
+it outside `.yafs`; the daemon data directory holds runtime state, not desired
+configuration. A minimal fixture configuration looks like this:
 
-```sh
-yash:/home/root$ printf '{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hi}}, capabilities: []}]}' > .yafsmeta
-yash:/home/root$ mount validate .yafsmeta
-{"id":"demo","path":"/home/root/fixture","provider":"fixture","config":{"files":{"hello.txt":"hi"}},"manifestPath":"/home/root/.yafsmeta","manifestDigest":"d7dcff...","revision":"fixture:d7dcff6f4aef","state":"active","activatedAt":"2026-08-03T22:19:39.987Z","correlationId":"demo:2026-08-03T22:19:39.987Z","capabilities":[]}
-yash:/home/root$ mount activate .yafsmeta
-demo active
-yash:/home/root$ cat fixture/hello.txt
-hi
-yash:/home/root$ inspect fixture/hello.txt
-{"path":"/home/root/fixture/hello.txt","type":"file","origins":[{"kind":"provider","path":"/home/root/fixture/hello.txt","mountId":"demo","provider":"fixture","revision":"fixture:d7dcff6f4aef","activatedAt":"2026-08-03T22:19:40.040Z","readOnly":true}]}
+```yaml title="yafs.plugins.yaml"
+version: 1
+plugins:
+  - id: demo
+    plugin: fixture
+    path: fixture
+    config: { files: { hello.txt: hi } }
+    capabilities: []
 ```
 
-`validate` is a pure dry run — it parses and reports the proposed mount
-record with no side effects, network activity, or durable state; nothing
-changes until `activate`. Once active, the mount is read-only (`echo x >
-fixture/hello.txt` fails with `read_only_mount`) and every path beneath it
-carries structured provenance — `inspect` shows exactly which mount and
-provider a file came from, not just its content. See [M5
-validation](M5-VALIDATION.md) for the same flow against a real GitHub
-collection, including GitHub Enterprise Cloud/Server host configuration.
+Start the daemon with that configuration, then inspect and use the published
+projection:
+
+```sh
+yafsd start --config yafs.plugins.yaml
+yash -c 'plugins status'
+yash -c 'cat fixture/hello.txt'
+yash -c 'inspect fixture/hello.txt'
+```
+
+`plugins status` reports active instances without revealing the host pathname
+of the configuration. `plugins plan` is a machine-readable diff: `[]` means
+the active namespace is already in sync. After editing the YAML, inspect the
+proposed change with `plugins plan` and publish it with `plugins apply`.
+
+Once active, a projection is read-only (`echo x > fixture/hello.txt` fails
+with `read_only_mount`) and every path beneath it carries structured
+provenance. `inspect` shows which plugin and revision produced a file, not
+just its content. See [M5 validation](M5-VALIDATION.md) for the same flow
+against a real GitHub collection.
 
 ## Automation and agents
 
@@ -86,6 +94,8 @@ reference](COMMANDS.md#automation-and-mcp) for the exact rejection rules.
 
 - [Yash command reference](COMMANDS.md) — available syntax, commands, and exclusions.
 - [M5 validation](M5-VALIDATION.md) — walkthrough for mounting a real GitHub collection.
+- [M6 validation](M6-VALIDATION.md) — walkthrough for the agent persona against a real local model server.
+- [M6.3 validation](M6.3-VALIDATION.md) — external plugin-instance configuration and lifecycle walkthrough.
 - [Product spec](PRODUCT-SPEC.md) — operator-facing provider promise and acceptance criteria.
 - [Architecture decision record](ADR.md) — kernel decisions, invariants, and deferred design work.
 - [Feature roadmap](FEATURE-ROADMAP.md) — implementation order, current status, and what's gated.

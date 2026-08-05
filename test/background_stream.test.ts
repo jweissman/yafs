@@ -54,29 +54,33 @@ test('unregistering a ctl handler restores ordinary write behavior for that path
   await client.close(); await server.close()
 })
 
-test('a synchronously throwing ctl handler is logged rather than breaking the connection', async () => {
+test('a synchronously throwing ctl handler rejects the write without breaking the connection', async () => {
   const server = await YafsServer.start({ dataDir: await mkdtemp(join(tmpdir(), 'yafs-ctl-error-')) })
   const client = await YashClient.connect(server.address()); await client.exec('mkdir stream')
   server.registerCtl('/home/root/stream/ctl' as AbsolutePath, () => { throw new Error('boom') })
-  await client.exec('printf go > stream/ctl')
+  await expect(client.exec('printf go > stream/ctl')).rejects.toThrow('boom')
   expect(await client.exec('echo still alive')).toBe('still alive')
   await client.close(); await server.close()
 })
 
-test('a ctl handler that rejects asynchronously is logged rather than breaking the connection', async () => {
+test('an asynchronously rejecting ctl handler rejects the write without breaking the connection', async () => {
   const server = await YafsServer.start({ dataDir: await mkdtemp(join(tmpdir(), 'yafs-ctl-async-error-')) })
   const client = await YashClient.connect(server.address()); await client.exec('mkdir stream')
   server.registerCtl('/home/root/stream/ctl' as AbsolutePath, async () => { throw new Error('boom') })
-  await client.exec('printf go > stream/ctl')
+  await expect(client.exec('printf go > stream/ctl')).rejects.toThrow('boom')
   expect(await client.exec('echo still alive')).toBe('still alive')
   await client.close(); await server.close()
 })
 
 function restart(server: YafsServer, path: AbsolutePath, chunks: string[], intervalMs: number): () => Promise<void> {
   return async () => {
+    void stream(server, path, chunks, intervalMs)
+  }
+}
+
+async function stream(server: YafsServer, path: AbsolutePath, chunks: string[], intervalMs: number) {
     await server.commitBackground([{ type: 'write', path, content: '', at: new Date().toISOString() }])
     await deliver(server, path, chunks, intervalMs)
-  }
 }
 
 async function deliver(server: YafsServer, path: AbsolutePath, chunks: string[], intervalMs: number) {

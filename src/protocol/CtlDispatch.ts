@@ -11,17 +11,15 @@ export class CtlDispatch {
   register(path: AbsolutePath, handler: CtlHandler) { this.handlers.set(path, handler) }
   unregister(path: AbsolutePath) { this.handlers.delete(path) }
 
-  intercept(operations: VfsOperation[]): VfsOperation[] {
-    return operations.filter(operation => !this.dispatch(operation))
+  async intercept(operations: VfsOperation[]): Promise<VfsOperation[]> {
+    const kept: VfsOperation[] = []
+    for (const operation of operations) { if (!await this.dispatch(operation)) kept.push(operation) }
+    return kept
   }
 
-  private dispatch(operation: VfsOperation): boolean {
+  private async dispatch(operation: VfsOperation): Promise<boolean> {
     if (operation.type !== 'write') return false
     const handler = this.handlers.get(operation.path); if (!handler) return false
-    void this.run(handler, operation.content, operation.path); return true
-  }
-
-  private async run(handler: CtlHandler, payload: string, path: AbsolutePath) {
-    try { await handler(payload) } catch (error) { console.error(`ctl handler failed for ${path}:`, error) }
+    await handler(operation.content); return true
   }
 }

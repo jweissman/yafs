@@ -2,10 +2,11 @@ import { createConnection, type Socket } from 'node:net'
 
 import type { ExecutionResult } from '../types/ExecutionResult'
 import { PROTOCOL_VERSION } from './version'
+import { CacheRequest } from '../cache/CacheRequest'
 
 type Response = { version: number, id: number, result: ExecutionResult }
 type ProtocolFailure = { version: number, id: number, error: { code: string, message: string } }
-type Payload = { command: string } | { write: { path: string, content: string } }
+type Payload = { command: string } | { write: { path: string, content: string } } | { cache: CacheRequest }
 
 export class YashClient {
   private nextId = 1
@@ -37,6 +38,11 @@ export class YashClient {
   writeFile(path: string, content: string): Promise<ExecutionResult> {
     return this.send({ write: { path, content } })
   }
+  cachePut(key: string, value: string, ttlMs: number) { return this.cache({ operation: 'put', key, value, ttlMs }) }
+  cacheGet(key: string) { return this.cache({ operation: 'get', key }) }
+  cacheStat(key: string) { return this.cache({ operation: 'stat', key }) }
+  cacheDelete(key: string) { return this.cache({ operation: 'delete', key }) }
+  cacheGc() { return this.cache({ operation: 'gc' }) }
 
   async close(): Promise<void> {
     this.socket.end()
@@ -53,6 +59,7 @@ export class YashClient {
     this.buffer += chunk
     this.responses().forEach(response => this.resolve(response))
   }
+  private cache(request: CacheRequest) { return this.send({ cache: request }) }
 
   private send(payload: Payload): Promise<ExecutionResult> {
     const id = this.nextId++

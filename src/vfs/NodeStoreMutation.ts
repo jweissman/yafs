@@ -1,15 +1,21 @@
 import { AbsolutePath } from '../core/AbsolutePath'
-import { PathResolver } from '../core/PathResolver'
 import { FSNode } from './FSNode'
 import { nodeStoreWriteGuard } from './NodeStoreWriteGuard'
 import { NodeStoreResolver } from './NodeStoreResolver'
+import { NodeStoreRmdir } from './NodeStoreRmdir'
 import { NodeStoreState } from './NodeStoreState'
+import { NodeStoreWritability } from './NodeStoreWritability'
 import { canonicalUnionLayers } from './UnionLayers'
 import { VfsOperation } from './VfsOperation'
 
 export class NodeStoreMutation {
   private readonly guard = nodeStoreWriteGuard
-  constructor(private readonly state: NodeStoreState, private readonly resolver: NodeStoreResolver) {}
+  private readonly writability: NodeStoreWritability
+  private readonly rmdirOp: NodeStoreRmdir
+  constructor(private readonly state: NodeStoreState, private readonly resolver: NodeStoreResolver) {
+    this.writability = new NodeStoreWritability(state, resolver)
+    this.rmdirOp = new NodeStoreRmdir(path => this.assertWritable(path), path => this.parent(path))
+  }
 
   mkdir(path: AbsolutePath, at = this.state.clock.now()) { this.create(path, true, at) }
   touch(path: AbsolutePath, at = this.state.clock.now()) {
@@ -32,6 +38,7 @@ export class NodeStoreMutation {
     parent.children!.splice(index, 1)
   }
   private assertFile(node: FSNode, path: AbsolutePath) { if (node.dir) throw new Error(`Is a directory: ${path}`) }
+  rmdir(path: AbsolutePath) { this.rmdirOp.run(path) }
   removeTree(path: AbsolutePath) {
     const { parent, name } = this.parent(path)
     const index = parent.children?.findIndex(child => child.name === name) ?? -1
@@ -63,6 +70,11 @@ export class NodeStoreMutation {
   private applyWrite(operation: Exclude<VfsOperation, { type: 'mount' | 'unmount' | 'refresh' | 'mkdir' | 'touch' }>, at: Date) {
     if (operation.type === 'write') return this.write(operation.path, operation.content, at)
     if (operation.type === 'symlink') return this.symlink(operation.target, operation.path, at)
+    return this.applyRemoval(operation, at)
+  }
+  private applyRemoval(operation: Exclude<VfsOperation,
+    { type: 'mount' | 'unmount' | 'refresh' | 'mkdir' | 'touch' | 'write' | 'symlink' }>, at: Date) {
+    if (operation.type === 'rmdir') return this.rmdir(operation.path)
     return operation.type === 'union' ? this.union(operation.path, operation.layers, at) : this.remove(operation.path)
   }
   private create(path: AbsolutePath, dir: boolean, at: Date) {
@@ -82,18 +94,5 @@ export class NodeStoreMutation {
     return { parent, name }
   }
   private assertAbsent(parent: FSNode, name: string, path: AbsolutePath) { if (parent.children?.some(child => child.name === name)) throw new Error(`Path already exists: ${path}`) }
-  private assertWritable(path: AbsolutePath, depth = 0) {
-    if (depth > 40) throw new Error('Too many symbolic links'); this.writable(this.state.origin, path.slice(1).split('/'), path, depth)
-  }
-  private writable(node: FSNode, parts: string[], path: AbsolutePath, depth: number) {
-    this.guard.assertWritable(node, path)
-    const child = node.children?.find(item => item.name === parts[0]); if (!child) return
-    this.writableChild(child, parts, path, depth)
-  }
-  private writableChild(child: FSNode, parts: string[], path: AbsolutePath, depth: number) {
-    if (child.symlinkTarget) return this.writableLink(child, parts.slice(1), depth)
-    if (parts.length > 1) return this.writable(child, parts.slice(1), path, depth)
-    if (child.unionLayers) throw new Error(`Read-only union mount: ${path}`)
-  }
-  private writableLink(link: FSNode, rest: string[], depth: number) { const target = this.resolver.linkTarget(link); const path = rest.length ? `${target}/${rest.join('/')}` : target; this.assertWritable(PathResolver.resolve(path, '/'), depth + 1) }
+  private assertWritable(path: AbsolutePath) { this.writability.assertWritable(path) }
 }

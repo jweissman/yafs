@@ -3,7 +3,7 @@ import { NodeStore } from '../vfs/NodeStore'
 import { MountPersistence } from './MountPersistence'
 import { MountPlanner } from './MountPlanner'
 import { SnapshotLimits, SnapshotMaterializer } from './SnapshotMaterializer'
-import { MountRecord, PreparedMountRecord } from './types'
+import { ManifestMount, MountRecord, PreparedMountRecord } from './types'
 import { ProviderRegistry } from './ProviderRegistry'
 
 export class MountManager {
@@ -25,6 +25,9 @@ export class MountManager {
 
   validate(path: AbsolutePath) { return this.planner.validate(path) }
   planActivation(path: AbsolutePath, id?: string) { return this.planner.plan(path, id) }
+  planDesired(mount: ManifestMount, digest: string, root: AbsolutePath) {
+    const record = this.planner.desired(mount, digest, root); this.assertDesiredAvailable(record); return record
+  }
   prepareActivation(record: MountRecord, actor = 'system') {
     if (record.capabilities.length) this.persistence.audit(record, actor, 'fetch', { outcome: 'started' })
     return this.prepared(record, actor)
@@ -32,7 +35,9 @@ export class MountManager {
   prepareRefresh(path: AbsolutePath, id?: string, actor?: string) {
     return this.prepareActivation(this.planner.refresh(path, id), actor)
   }
+  prepareRefreshRecord(record: MountRecord, actor = 'system') { return this.prepareActivation(record, actor) }
   mounts() { return [...this.records] }
+  plugins(name?: string) { return this.providers.describe(name) }
   resourceReference(path: AbsolutePath) {
     const record = this.records.find(item => path.startsWith(`${item.path}/`))
     return record?.snapshot.resourceReferences?.[path.slice(record.path.length + 1)]
@@ -43,10 +48,14 @@ export class MountManager {
     this.persistence.audit(record, actor, 'activation', { outcome: 'success', after: record.revision })
   }
 
-  refresh(record: PreparedMountRecord, actor: string) {
+  refresh(record: PreparedMountRecord, actor: string, detail?: string) {
     const previous = this.planUnmount(record.id)
     this.snapshots.replace(record); this.records = this.records.map(item => item.id === record.id ? record : item)
-    this.save(); this.persistence.audit(record, actor, 'refresh', { outcome: 'success', before: previous.revision, after: record.revision })
+    this.save(); this.auditRefresh(record, actor, previous.revision, detail)
+  }
+
+  private auditRefresh(record: PreparedMountRecord, actor: string, before: string | undefined, detail?: string) {
+    this.persistence.audit(record, actor, 'refresh', { outcome: 'success', before, after: record.revision, detail })
   }
 
   planUnmount(id: string): PreparedMountRecord {
@@ -78,8 +87,14 @@ export class MountManager {
   }
 
   private save() { this.persistence.save(this.records) }
+  private assertDesiredAvailable(record: MountRecord) {
+    const existing = this.records.find(item => item.id === record.id)
+    if (existing && existing.path !== record.path) throw new Error(`Desired mount path changed: ${record.id}`)
+    if (!existing) this.planner.assertAvailable(record.path)
+  }
   private prepared(record: MountRecord, actor: string) {
-    const prepared = this.providers.prepare(record, this.snapshots)
+    const current = this.records.find(item => item.id === record.id)
+    const prepared = this.providers.prepare(record, this.snapshots, current)
     return prepared instanceof Promise ? prepared.catch(error => this.fetchFailed(record, actor, error)) : prepared
   }
   private fetchFailed(record: MountRecord, actor: string, error: unknown): never {

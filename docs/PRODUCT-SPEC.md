@@ -68,7 +68,8 @@ path from acquiring network or secret authority.
 
 `.yafsmeta` is restricted YAML, not arbitrary plugin code. It is schema
 validated, versioned, rejects unknown fields, duplicate keys, tags, aliases,
-and anchors, and requests capabilities rather than granting them.
+and anchors, and requests capabilities rather than granting them. It describes
+a workspace declaration; it is not the daemon's deployment configuration.
 
 ```yaml
 version: 1
@@ -109,13 +110,32 @@ declared → validated → authorized → activating → active → refreshing |
 The fixture implements the active/unmounted portion. A real provider must not
 fetch, execute code, or reveal a secret merely because a manifest was found.
 
+### Daemon-owned desired configuration
+
+An operator may make mount declarations persistent across deployments through
+the daemon's configured desired-state file. This file lives beside daemon data,
+not at a virtual path: it is the operator's deployment input and remains
+present even if the virtual workspace is reset. `yafsd start --config FILE` is
+an explicit override for a container image, service manager, or development
+environment. Normal clients use the daemon's selected configuration through
+`mounts plan`, `mounts apply`, and `mounts status`.
+
+Planning is read-only and reports additions, changed declarations, and—only
+when requested—removals. Applying is idempotent. It refreshes a declaration
+whose validated configuration or requested grants changed, but does not prune a
+mount simply because it is absent from a file unless the operator explicitly
+chooses that policy. This keeps configuration reconciliation distinct from
+ordinary VFS mutation and makes deployment authority visible.
+
 ## Resource namespaces and controllers
 
 Provider roots may project a collection of resources or reconcile declared
-resources. A provider may separately register named actions with typed RPC
-requests and concise Yash syntax. In every case, reads are never side effects;
-only explicit durable mutations can request creation, refresh, start, stop, or
-deletion.
+resources. A provider contributes a composition of a validated configuration,
+published snapshot/layout, and optional typed actions; it does not receive a
+general-purpose mutable VFS object. A provider may separately register named
+actions with typed RPC requests and concise Yash syntax. In every case, reads
+are never side effects; only explicit durable mutations can request creation,
+refresh, start, stop, or deletion.
 
 | Namespace kind | Example | Meaning |
 | --- | --- | --- |

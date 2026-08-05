@@ -4,13 +4,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { clearState, currentState, isRunning, paths, readState, writeState } from '../src/daemon'
+import { configArgument, restartConfig, selectedConfig } from '../src/DaemonConfig'
+
+test('daemon configuration selects explicit values and reuses saved state', () => {
+  expect(configArgument('/etc/yafs/plugins.yaml')).toEqual(['--config', '/etc/yafs/plugins.yaml'])
+  expect(selectedConfig(['bun', 'yafsd', '--config', 'plugins.yaml'], {})).toEndWith('/plugins.yaml')
+  expect(restartConfig(undefined, { configPath: '/etc/yafs/plugins.yaml' })).toBe('/etc/yafs/plugins.yaml')
+})
 
 test('daemon state helpers validate, replace, and remove state', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'yafs-daemon-state-'))
   const statePath = paths(directory).state
   expect(await readState(statePath)).toBeUndefined()
-  const state = await writeState(statePath, { host: '127.0.0.1', port: 7337 })
+  const state = await writeState(statePath, { host: '127.0.0.1', port: 7337 }, '/etc/yafs/plugins.yaml')
   expect(await currentState(statePath)).toEqual(state)
+  expect(state.configPath).toBe('/etc/yafs/plugins.yaml')
   await clearState(statePath); expect(await readState(statePath)).toBeUndefined()
   await writeFile(statePath, '{invalid')
   await expect(readState(statePath)).rejects.toThrow()

@@ -13,6 +13,7 @@
     "yafsd": "bun run src/yafsd.ts",
     "yash": "bun run src/yash.ts",
     "mcp": "bun run src/yafs-mcp.ts",
+    "validate:m6.3": "zsh script/validate-m6-3.sh",
     "check": "bun test && bun lint && bun typecheck"
   },
   "dependencies": {

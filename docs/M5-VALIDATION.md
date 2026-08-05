@@ -7,13 +7,11 @@ bun check
 bun test test/review_workspace.test.ts test/trace_recovery.test.ts
 ```
 
-For a live GitHub collection, make daemon-held configuration available before
-starting the service:
+For a live GitHub collection, make daemon-held credentials available and create
+an external desired configuration before starting the service:
 
 ```sh
 export YAFS_GITHUB_TOKEN=...
-bun run yafsd -- start
-bun run yash
 ```
 
 `YAFS_GITHUB_TOKEN` never enters a manifest, VFS file, WAL, provenance record,
@@ -26,26 +24,31 @@ Create a bounded collection manifest:
 
 ```yaml
 version: 1
-mounts:
+plugins:
   - id: review
     path: reviews
-    provider: github
+    plugin: github
     config: { repository: acme/widget, query: "is:pr is:open", max: 25 }
     refresh: { interval: 15m }
     capabilities: [network.github-api, secret.github-token]
 ```
 
-Then validate the operator flow:
+Save it as `yafs.plugins.yaml`, start the daemon, then validate the operator
+flow:
 
 ```sh
-mount validate .yafsmeta
-mount activate .yafsmeta
+bun run yafsd -- start --config yafs.plugins.yaml
+bun run yash
+plugins status
+plugins plan
 cat reviews/pulls/42/diff.patch
 mkdir notes; mkdir notes/42
 trace reviews/pulls/42 notes/42/alice
 inspect reviews/pulls/42/diff.patch
 cat notes/42/alice/trace.json
-mount refresh .yafsmeta review
+# after changing the desired configuration, inspect and publish its refresh:
+plugins plan
+plugins apply
 reify notes/42/alice restored-42
 cat restored-42/diff.patch
 ```

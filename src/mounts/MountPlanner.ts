@@ -25,6 +25,12 @@ export class MountPlanner {
     this.providers.assertGranted(declaration); return this.refreshRecord(path, declaration, digest)
   }
 
+  desired(mount: ManifestMount, digest: string, root: AbsolutePath): MountRecord {
+    this.providers.assertGranted(mount)
+    const path = PathResolver.resolve(mount.path, root)
+    return this.activeRecord(path, '/.yafs/daemon-mounts.yaml' as AbsolutePath, mount, digest)
+  }
+
   private details(path: AbsolutePath, id?: string): Details {
     const { manifest, digest } = this.validate(path)
     return { declaration: this.declaration(manifest.mounts, id), digest }
@@ -72,7 +78,7 @@ export class MountPlanner {
     return { manifestPath, manifestDigest: digest, revision: `fixture:${digest.slice(0, 12)}` }
   }
 
-  private assertAvailable(path: AbsolutePath) {
+  assertAvailable(path: AbsolutePath) {
     if (this.store.get(path, false)) throw new Error(`Mount path already exists: ${path}`)
     if (this.records().some(record => record.path === path)) throw new Error(`Mount already active: ${path}`)
     if (this.overlaps(path)) throw new Error(`Overlapping mount: ${path}`)

@@ -1,0 +1,40 @@
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, test } from 'bun:test'
+
+import { fakeMessageModel, manifest, waitForStatus } from './agent_test_helpers'
+import { YafsServer } from '../src/protocol/server'
+import { YashClient } from '../src/protocol/client'
+
+test('restart marks an accepted in-flight run interrupted', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'yafs-agents-recover-'))
+  const server = await YafsServer.start({ dataDir: directory, modelFor: () => pendingModel() })
+  const client = await YashClient.connect(server.address())
+  await client.exec(`printf '${manifest({ reviewer: 'prompt' })}' > .yafsmeta`)
+  await client.exec('mount activate .yafsmeta'); await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl')
+  const runId = await waitForStatus(client, 'agents/reviewer/runs', status => status.state === 'running')
+  await client.close(); await server.close()
+  const restarted = await YafsServer.start({ dataDir: directory, modelFor: () => fakeMessageModel([]) })
+  const recovered = await YashClient.connect(restarted.address())
+  const status = JSON.parse(await recovered.exec(`cat agents/reviewer/runs/${runId}/status.json`))
+  expect(status.state).toBe('interrupted'); expect(status.error).toContain('Daemon restarted')
+  await recovered.close(); await restarted.close()
+})
+
+test('a malformed persisted agent record is inert during driver recovery', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'yafs-agents-invalid-'))
+  await writeFile(join(directory, 'mounts.json'), JSON.stringify({ version: 1, mounts: [invalidAgent()] }))
+  const server = await YafsServer.start({ dataDir: directory, modelFor: () => fakeMessageModel([]) })
+  const client = await YashClient.connect(server.address())
+  expect(await client.exec('echo recovered')).toBe('recovered')
+  await client.close(); await server.close()
+})
+
+function pendingModel() { return { complete: () => new Promise<string>(() => undefined) } }
+
+function invalidAgent() {
+  return { id: 'agents', path: '/home/root/agents', provider: 'agent', config: {}, manifestPath: '/legacy',
+    manifestDigest: 'legacy', revision: 'legacy', state: 'active', activatedAt: '2026-01-01T00:00:00.000Z',
+    correlationId: 'legacy', capabilities: [], snapshot: { entries: [], fileCount: 0, byteCount: 0 } }
+}

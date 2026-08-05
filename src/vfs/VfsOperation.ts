@@ -12,7 +12,8 @@ export type VfsIntent =
   { type: 'mount', record: PreparedMountRecord } |
   { type: 'refresh', record: PreparedMountRecord } |
   { type: 'unmount', id: string } |
-  { type: 'remove', path: AbsolutePath }
+  { type: 'remove', path: AbsolutePath } |
+  { type: 'rmdir', path: AbsolutePath }
 
 export type VfsOperation = TimedOperation & (
   { type: 'mkdir', path: AbsolutePath } |
@@ -23,5 +24,6 @@ export type VfsOperation = TimedOperation & (
   { type: 'mount', record: PreparedMountRecord } |
   { type: 'refresh', record: PreparedMountRecord } |
   { type: 'unmount', id: string } |
-  { type: 'remove', path: AbsolutePath }
+  { type: 'remove', path: AbsolutePath } |
+  { type: 'rmdir', path: AbsolutePath }
 )

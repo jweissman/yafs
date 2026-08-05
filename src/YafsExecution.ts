@@ -3,6 +3,9 @@ import { errorCode } from './core/errors'
 import { ExecutionPlan } from './types/ExecutionPlan'
 import { ExecutionResult } from './types/ExecutionResult'
 import Yafs from './index'
+import { CacheRequest } from './cache/CacheRequest'
+import { cacheRequest } from './commands/CacheCommands'
+import { yafsContext } from './YafsContext'
 
 export function execute(yafs: Yafs, input: string): ExecutionResult {
   const plan = planExecution(yafs, input)
@@ -38,6 +41,15 @@ export function planWrite(yafs: Yafs, path: string, content: string): ExecutionP
   yafs.operationQueue.reset()
   try { return plannedWrite(yafs, path, content) }
   catch (error) { return { result: failure(yafs, error), operations: [] } }
+}
+export async function planCache(yafs: Yafs, request: CacheRequest): Promise<ExecutionPlan> {
+  yafs.operationQueue.reset()
+  try { return await cachePlan(yafs, request) }
+  catch (error) { return { result: failure(yafs, error), operations: [] } }
+}
+async function cachePlan(yafs: Yafs, request: CacheRequest): Promise<ExecutionPlan> {
+  const stdout = await cacheRequest(yafsContext(yafs), request); yafs.operationQueue.validate()
+  return { result: success(yafs, stdout), operations: yafs.operationQueue.all() }
 }
 
 function plannedWrite(yafs: Yafs, path: string, content: string): ExecutionPlan {

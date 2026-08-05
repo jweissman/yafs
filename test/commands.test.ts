@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test'
 import Yafs from '../src'
 import { commandPath } from '../src/commands/commandPath'
 import { CommandContext } from '../src/commands/CommandContext'
+import { CacheService } from '../src/cache/CacheService'
 import { memoryBlobStore } from '../src/protocol/MemoryBlobStore'
 import { TraceService } from '../src/traces/TraceService'
 
@@ -19,6 +20,20 @@ test('session command objects provide the standard session commands', () => {
   expect(yafs.exec('pwd')).toBe('/home/root'); yafs.exec('mkdir next'); expect(yafs.exec('cd next')).toBe('')
 })
 
+test('rmdir removes an empty directory but refuses a non-empty one, a file, or a read-only mount', () => {
+  const yafs = new Yafs(); yafs.exec('mkdir empty'); yafs.exec('mkdir full'); yafs.exec('touch full/inside')
+  expect(yafs.exec('rmdir empty')).toBe(''); expect(yafs.execute('cat empty').error?.code).toBe('not_found')
+  expect(yafs.execute('rmdir full').error?.code).toBe('not_empty')
+  expect(yafs.execute('rmdir full/inside').error?.code).toBe('not_directory')
+  expect(yafs.execute('rmdir missing').error?.code).toBe('not_found')
+  yafs.store.write('/home/root/.yafsmeta', fixtureManifest()); yafs.exec('mount activate .yafsmeta')
+  expect(yafs.execute('rmdir fixture').error?.code).toBe('read_only_mount')
+})
+
+function fixtureManifest() {
+  return '{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}'
+}
+
 test('read-only text commands query virtual files without host processes', () => {
   const yafs = new Yafs(); yafs.store.write('/home/root/words', 'alpha\nbeta\nalphabet')
   expect(yafs.exec('grep -n alpha words')).toBe('1:alpha\n3:alphabet')
@@ -33,17 +48,19 @@ test('read-only text commands query virtual files without host processes', () =>
 function commandContext(): CommandContext {
   const resolve = (path: string) => `/home/root/${path}` as const
   return { clock: { now: () => new Date(0) }, user: () => 'root', pwd: () => '/home/root', cd: () => undefined, resolve,
-    required: (_command, args, index) => args[index] || '', help: () => '', read: () => '', readlink: () => '', list: () => [], type: () => 'file', origins: () => [], provenance: () => [], mounts: () => [], ...mountContext(), ...writeContext() }
+    required: (_command, args, index) => args[index] || '', help: () => '', read: () => '', readlink: () => '', list: () => [], type: () => 'file', origins: () => [], provenance: () => [], mounts: () => [], plugins: () => [], ...mountContext(), ...writeContext() }
 }
 
 function mountContext() {
   return { planMount: () => { throw new Error() }, prepareMount: () => { throw new Error() },
     planRefresh: () => { throw new Error() }, planUnmount: () => { throw new Error() },
-    mount: () => undefined, refresh: () => undefined, unmount: () => undefined, resourceReference: () => undefined }
+    mount: () => undefined, refresh: () => undefined, unmount: () => undefined, resourceReference: () => undefined,
+    desiredStatus: async () => ({}), desiredPlan: async () => [], applyDesired: async () => [] }
 }
 
 function writeContext() {
-  return { exists: () => false, traces: new TraceService(memoryBlobStore()), mkdir: () => undefined,
+  const blobs = memoryBlobStore()
+  return { exists: () => false, traces: new TraceService(blobs), cache: new CacheService(blobs), mkdir: () => undefined,
     afterCommit: () => undefined, touch: () => undefined, write: () => undefined, remove: () => undefined,
-    symlink: () => undefined, union: () => undefined }
+    rmdir: () => undefined, symlink: () => undefined, union: () => undefined }
 }

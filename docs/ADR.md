@@ -216,14 +216,22 @@ ordinary content. That is an accepted, narrow gap for a local-only, single-
 user system, not a solved problem — revisit before any multi-user (M8)
 context makes it a real boundary.
 
-Two things this decision does not yet resolve: whether a `ctl` action is
-synchronous (the write blocks until the provider confirms, e.g. the comment
-posted) or staged (the write records intent; something else performs it and
-reports outcome asynchronously, mirroring the reconciled-agent pattern). The
-"Writes and external side effects" contract above already requires durable
-intent, an idempotency key, and a durable outcome for any remote mutation —
-`ctl` is the first concrete mechanism that contract needs to apply to, not a
-new invariant.
+This decision left open whether a `ctl` action is synchronous (the write
+blocks until the provider confirms) or staged (the write records intent;
+something else performs it and reports outcome asynchronously). Building the
+fixture-stream `restart` action and the agent persona's `chat.completion`
+call answered it: staged, always. The write itself only needs to resolve or
+reject on whether the action was *accepted* — parsed, capability-checked,
+handler found — never on whether the underlying work finished. The actual
+work (a model call, a future provider API call) runs outside the server's
+serialized command queue entirely; only the durable result — a run record, an
+updated file — gets committed back through it, as a normal fast operation.
+A synchronous `ctl` that blocked on the real work would reintroduce exactly
+the concurrency bug the GitHub-timeout and scheduled-refresh fixes exist to
+prevent. The "Writes and external side effects" contract's requirement of
+durable intent, an idempotency key, and a durable outcome for any remote
+mutation still applies in full — `ctl` satisfies it by recording the run
+durably once the work completes, not by blocking the write until then.
 
 ### Pseudobinaries are a Yash convenience, not a kernel feature
 
@@ -267,24 +275,105 @@ answering it by building the full agent workspace first.
 
 ### Agent personas and the ctl execution model
 
-**Decision:** a persona is a standing, named directory —
-`/agents/<name>/prompt.md` — not an anonymous `model.invoke` action. Each
-persona gets its own capability grant and its own durable run history under
-`runs/<run-id>/`, the same shape the agent workspace sketch above already
-uses (`status.json`, `transcript.ndjson`). The one-shot experiment above
-becomes concrete this way: write a prompt to `/agents/<name>/ctl`, get back a
-recorded, inspectable run.
+**Decision:** an agent mount hosts one or more personas, declared and
+activated exactly like any other mount — `provider: agent, config: {
+personas: { <name>: { prompt, endpoint?, model? }, ... } }` — not an
+anonymous `model.invoke` action and not a directory a caller writes into ad
+hoc. A `mount` is the natural unit of "one set of agents I brought in
+together," not a single persona: `/agents/<name>/prompt.md` exists per
+persona under the one mount, each with its own capability grant
+(`chat.completion`, checked at invocation time, not just at `mount
+activate`) and its own durable run history under
+`<persona>/runs/<run-id>/`. The one-shot experiment above becomes concrete
+this way: `mount activate` a manifest declaring one or more personas, then
+write a message to `/agents/<name>/ctl` and get back a recorded, inspectable
+run.
 
-Persona directories are not fetched content, unlike every provider mount so
-far — `prompt.md` is written directly into the VFS by whoever configures the
-persona, not published by a provider fetching from an external source. So
-`ctl` cannot stay coupled to "the provider that owns this fetched mount," as
-originally scoped; it needs to be a directory-scoped handler convention any
-registered handler can claim, whether or not the directory sits under a
-fetch-based provider mount. GitHub's `ctl` handler and a persona's `ctl`
-handler are the same mechanism serving structurally different directories,
-which is a stronger validation of the mechanism than a second fetch-based
-provider would have been.
+Two earlier versions of this decision were each corrected before shipping.
+The first concluded personas don't fit the mount model at all — "`prompt.md`
+is written directly into the VFS by whoever configures the persona, not
+published by a provider fetching from an external source, so `ctl` can't
+stay coupled to the provider that owns this mount." That was wrong:
+`FixtureConfig` already proves a provider can publish content it never
+fetched — `files` is literally config-sourced, static content, published
+read-only exactly like a persona's prompt would be. The second shipped one
+mount per persona (`config: { prompt, endpoint?, model? }` directly on the
+mount), which technically worked but didn't match how the rest of the
+system groups configuration — GitHub's per-repository config lives one
+level up from any single resource, and personas should too: a mount is "an
+agent capability I brought into this workspace," which may bundle several
+named personas the same way a GitHub mount bundles several files. Building
+personas outside the mount system in the first place meant building a
+second, thinner version of a discipline the mount system already gets
+right: no manifest declaration, no capability check before the network call
+`chat.completion` gates, no audit entry. `ctl` itself still generalizes
+correctly beyond "the provider that owns this fetched mount" — GitHub's
+`ctl` handler and a persona's `ctl` handler are the same dispatch mechanism
+serving structurally different providers — but the provider boundary itself
+was never the thing to bend.
+
+Per-persona model endpoints matter for the same reason per-repository GitHub
+config matters: one daemon, many agents, no reason they share an endpoint or
+model, and no reason every persona on one mount has to either. Resolution
+falls back through three levels — a persona's own `endpoint`/`model`, then
+the mount's, then an env-var default (`YAFS_LLM_BASE_URL`/`YAFS_LLM_MODEL`)
+— the same default-with-per-mount-override shape `YAFS_GITHUB_HOST` already
+has, one level deeper. The env var name is deliberately generic, not
+`YAFS_LMSTUDIO_URL`: every local inference server in practical reach (LM
+Studio, Ollama's OpenAI-compatible mode, vLLM, llama.cpp's server) speaks
+the same `/chat/completions` shape, so the client and its settings
+(`ChatCompletionClient`/`ChatCompletionSettings`) name the protocol, not a
+vendor, and nothing in this system depends on which one is actually
+listening on `localhost:1234`.
+
+Every accepted `ctl`-triggered run is visible before model work starts:
+writing `{"message": "..."}` to a persona's `ctl` durably records
+`<persona>/runs/<run-id>/status.json` as `queued` and its `request.md`, then
+the background worker moves it through `running` to `complete` or `failed`.
+`response.md` lands beside it on success. Invalid requests and denied grants
+reject before a run exists. This closes a real gap the first cut had: an
+agent-provider built without it left a malformed model response as a
+`TypeError` in a background daemon log — invisible in the VFS, invisible to
+`yafs_read`, invisible to anything except someone tailing `.yafs/daemon.log`
+by hand. That is exactly the failure mode invariant 5 ("errors appear as
+files or explicit metadata, not silent drops or hidden logs") exists to
+prevent, and it went unnoticed until real validation against a live model
+server hit it.
+
+**Fixed gap:** that durability claim initially did not survive an operator
+running `mount refresh` on an agent mount — a bug found during a
+documentation cross-check, not by a test. `ctl`-triggered runs are merged
+onto the mount's existing snapshot by the driver itself
+(`AgentRunStore.applyEntries`), but `mount refresh MANIFEST [ID]` — the
+ordinary command, not a special path — went through
+`ProviderRegistry.agentSnapshot`, which rebuilt the snapshot from `config`
+alone with no notion of what the driver had already appended, silently
+dropping every persona's `runs/` directory on that mount. The same shape hit
+`FixtureConfig`'s `streams` for the same reason: `FixtureProvider.entries()`
+only reads `config.files`. `ProviderRegistry.prepare()` now takes an optional
+`current: PreparedMountRecord` — the mount's currently active record, looked
+up by `MountManager.prepared()` before calling into the provider — and
+`agentSnapshot`/`fixtureSnapshot` carry forward whichever of `current`'s
+entries the driver owns (`<persona>/runs/**` for agents, any path also
+named under `config.streams` for fixtures) rather than only ever
+regenerating from `config`. GitHub's `githubSnapshot` never receives or
+uses `current`; wholesale replacement on every refresh is still correct
+there, since a stale PR disappearing from the collection is the intended
+behavior, not data loss. Proven by `mount refresh` after a live `ctl` run
+still resolving old runs while a changed persona prompt takes effect
+(`test/agent_mount_refresh.test.ts`), and the equivalent for a fixture
+stream's delivered chunks (`test/fixture_stream_provider.test.ts`).
+
+**Also fixed:** the audit trail could not tell one persona's activity apart
+from another's on the same mount — every `ctl`-triggered `refresh` audit
+event carried only `mountId` and the mount's full capability list, the same
+for every persona sharing that mount. `MountManager.refresh()` now takes an
+optional `detail` string, and `AgentRunStore` supplies
+`persona=<name> run=<run-id> state=<running|complete|failed>` for every
+status write it commits, so `.yafs/audit.ndjson` answers "which persona did
+this, and what happened" directly instead of requiring a manual VFS diff.
+GitHub and fixture-stream refreshes are unaffected — `detail` is optional
+and only agents populate it so far.
 
 **Decision:** nothing fires without an explicit trigger the user wrote
 themselves. A persona is inert by default — a `ctl` write is the only way to
@@ -418,7 +507,7 @@ TRACE` operation checks that store first; if the entry has been reclaimed,
   resolve, rather than silently returning current-not-historical content.
 
 This store is not new scope invented for traces alone: it is also most of
-what the cache provider (M6.1) needs — a durable, digest-addressed local store
+what the local cache service (M6.1) needs — a durable, digest-addressed local store
 with a retention policy. Building it once, driven by the trace/reification
 need, is preferable to solving durability three separate times: this is the
 same gap behind the orphaned-notes case already named in the M5 demo
@@ -598,12 +687,12 @@ generated artifacts, model outputs, or build intermediates.
 ```
 
 ```sh
-yash:/cache/http$ cache put --ttl 5m github:openai:yafs:pr:482.json < payload.json
+yash:/cache/http$ cache put --ttl 5m review-482 '{"state":"pending"}'
 yash:/cache/http$ cat metadata/github:openai:yafs:pr:482.json
 # {"createdAt":"…","expiresAt":"…","source":"github",…}
 ```
 
-The cache provider must define TTL, eviction, atomic replacement, size limits,
+The local cache service must define TTL, eviction, atomic replacement, size limits,
 and concurrent-write semantics. It should not claim Redis compatibility unless
 it deliberately supports its atomic operations, pub/sub, transactions, and
 wire protocol. The initial promise is a durable observable cache with a
@@ -613,10 +702,45 @@ The first cache is durable local state only. It may be populated explicitly by
 its caller, but it does not fetch or refresh declared upstreams; that is a
 mirror/provider concern and should not be smuggled into cache semantics.
 
+**Implemented M6.1 slice:** cache entries are caller-writable local resources,
+not `MountProvider` snapshots. `cache put --ttl DURATION KEY VALUE` writes
+durable metadata at `cache/metadata/<encoded-key>.json` and retains the sole
+UTF-8 value blob after the VFS mutation commits. `get`, `stat`, `delete`, and
+explicit `gc` complete the local contract. Active retention is rebuilt from
+metadata on daemon restart before collection. Values are bounded to 1 MiB and
+TTLs to one year; expired metadata remains inspectable but its blob becomes
+reclaimable. The daemon also accepts typed local JSON-lines cache requests,
+which is the intended seam for a Ruby or HTTP adapter—not shell parsing.
+
 Any later public cache endpoint is an adapter with its own narrow service
 identity, path/capability scope, quotas, and audit trail. Providers may declare
 such endpoints, but the kernel—not provider code alone—enforces identity,
 mount scope, and resource limits.
+
+### M6.2 provider/controller foundation
+
+**Implemented foundation:** built-in providers use a compositional definition
+for their name, required capabilities, and bounded snapshot preparation.
+Manifest validation remains kernel-owned. This is intentionally not a mandatory
+inheritance hierarchy: fixture, GitHub, cache, and agent providers share
+kernel-owned lifecycle/audit/grant boundaries without pretending their data
+sources have the same implementation shape.
+
+An action is accepted only after request validation, grant checking, and a
+durable queued record. Background work can then transition that record through
+running and a terminal state. Registration belongs to mount activation,
+refresh, and unmount, rather than a polling loop. Friendly Yash commands and
+MCP tools adapt those action definitions; raw `ctl` data remains a diagnostic
+transport rather than the primary user contract.
+
+The daemon separately owns an opt-in desired-mount configuration outside
+the virtual tree. It offers plan/apply/status against that selected
+configuration; deployment may override its location with `yafsd --config`.
+Apply is idempotent and pruning is explicit. This preserves a clear boundary:
+the VFS holds operator data, while the daemon configuration declares how the
+appliance should be brought up. A provider-packaged action/layout ABI is still
+deferred: the built-in agent's typed `ctl` action and Yash adapter prove the
+lifecycle, but are not yet a compatibility promise for third-party packages.
 
 ### M6.1 concrete design: the cache falls out of the blob store, mostly
 
@@ -661,30 +785,73 @@ once and never overwritten; a cache entry is overwritten by design.
   "Persistence versus watch" contract already requires (serial mutation,
   durable commit before success).
 
-**Left open, deliberately:** whether `/cache/<name>` is modeled as a
-`MountProvider` at all. Every existing provider fetches external content and
-publishes it read-only; a cache's content is entirely caller-written, never
-fetched — the same mismatch already named for `/agents` in the `ctl` section
-above. Building both before generalizing either is intentional: forcing a
-shared abstraction into existence from one example is guessing, not design.
-If personas and cache both end up needing "a durable, caller-writable
-directory with its own command verbs, outside the fetch-and-publish provider
-shape," that commonality should get named after it's proven twice, not
-before.
+**Decision:** `/cache` is a built-in local service, not a `MountProvider`.
+Every existing provider publishes a bounded view; cache content is instead
+caller-written after startup. It therefore uses normal VFS mutations for its
+metadata and the blob store for its sole value bytes. The narrow M6.1 contract
+does not yet claim a general writable-resource abstraction: name one only when
+a second real caller-writable service establishes the shared lifecycle.
 
-### Agent workspace — later, after authority and durability
+### Agent workspace — the one-shot slice is built; the rest is still later
+
+The one-shot persona described in "Agent personas and the ctl execution
+model" above is implemented: `provider: agent`, personas keyed by name under
+one mount's `config`, `chat.completion` checked at invocation, and per-run
+`<persona>/runs/<run-id>/{status.json, request.md, response.md}` — including
+the `running`/`complete`/`failed` status lifecycle this section originally
+sketched as deferred. What remains genuinely deferred is the multi-step case
+this section originally sketched under a different shape (`/work/bug-184/`,
+`transcript.ndjson`) — a *run* with its own lifecycle beyond one exchange:
+durable multi-turn state, a full transcript rather than one request/response
+pair, restart/resume behavior if the daemon goes down mid-run, and — per the
+"recursive tool use" case already named above — an orchestrator loop where
+the model drives its own next `yafs_read`/`yafs_list`/write calls rather than
+producing one reply and stopping. That is M7's actual checkpoint, not a
+bigger persona directory.
+
+### M7 decision: local conversation channels before autonomous orchestration
+
+**Decision:** M7 begins with a bounded, local conversation channel, not an
+autonomous multi-agent loop. A channel is a durable resource with an
+append-only, attributable message history, declared participants, and an
+explicit source/context snapshot for each model invocation:
 
 ```text
-/work/bug-184/
-  prompt.md
-  context/
-  runs/<run-id>/status.json
-  runs/<run-id>/transcript.ndjson
-  output/
+/chats/review-482/
+  messages.ndjson          # immutable message records, in server order
+  participants.json        # declared human and agent identities
+  context/                 # explicitly selected readable material
+  runs/<run-id>/           # queued/running/terminal invocation records
+  status.json              # channel-level observed state
 ```
 
-An agent provider owns only its declared workspace and capabilities. It records
-inputs, run state, output, and failures as visible files.
+The first commands are `chat post CHANNEL MESSAGE`, `chat read CHANNEL`, and
+an explicit request for a named participant to reply. They adapt the existing
+durable agent action mechanism; they do not introduce a second transport or
+allow an agent to write arbitrary channel files. Automatic subscriptions,
+agent-to-agent turn taking, MCP tool use, and public chat endpoints are not in
+this first slice.
+
+Before implementation, settle these six contracts in an M7 design review:
+
+1. the canonical message record (ID, author, server order/time, body, reply
+   relation, and run/trace reference);
+2. whether messages are only appended (the default) and how redaction or
+   deletion is represented without rewriting history;
+3. the exact readable context snapshot given to each invocation and its size
+   limit;
+4. explicit invocation versus an opt-in subscription policy, including budget,
+   rate, retry, cancellation, and loop-prevention rules;
+5. how a response is atomically attributed to its run and the source snapshot;
+   and
+6. the first operator validation: a human and two named local personas review
+   one traced PR and leave an inspectable, interruptible conversation.
+
+The M7 exit criterion is not merely that two models exchanged text. It is that
+the validation can answer, from ordinary files, who said what, which exact
+source they read, which run produced a reply, why any automated turn happened,
+and how the operator stopped it. Only repeated use of that narrow channel
+earns the next decision on subscriptions or recursive tool use.
 
 ### Machine/image workspace — later still
 
@@ -890,9 +1057,10 @@ case.
 | M4 — mount/provider contract                        | External state enters without special cases.                     | Strict schema-validated YAML mounts, explicit validate/activate/unmount lifecycle, durable zero-capability fixture mount, structured provenance, and activation audit. **Read-only fixture slice complete.**                                                                                                                                         |
 | M4.5 — published snapshots                          | Composed paths cannot observe divergent provider copies.         | One synchronous resolver over atomically published snapshots; node-level provenance/read-only metadata; explicit refresh; and recovery/unmount/link/union consistency tests.                                                                                                                                                                         |
 | M5 — review workspace                               | The product helps with a real task.                              | Bounded GitHub query collection, explicit/interval refresh, source revision/freshness, and local review artifacts bound to their source revision. **Mechanically complete and exercised against a real GitHub Enterprise Cloud repository; product-value evidence (repeated real use, not a single session) is still open — see "Extension gates."** |
-| M6 — durable artifacts and traces _(decision gate)_ | External work remains inspectable after the source view changes. | Durable content-addressed blobs, provider-neutral `trace`, local-only `reify`, replay-derived retention, and explicit serialized GC.                                                                                                                                                                                                                 |
-| M6.1 — cache provider _(decision gate)_             | Yafs is useful as an observable state service.                   | Durable local TTL cache, atomic replacement, expiry metadata, eviction/limit policy, concurrent-write tests.                                                                                                                                                                                                                                         |
-| M7 — agent workspace _(decision gate)_              | An agent can work visibly and safely.                            | Durable runs, scoped context/capabilities, artifacts, restart behavior, audit trail.                                                                                                                                                                                                                                                                 |
+| M6 — durable artifacts and traces _(decision gate)_ | External work remains inspectable after the source view changes. | Durable content-addressed blobs, provider-neutral `trace`, local-only `reify`, replay-derived retention, and explicit serialized GC. **Complete, including a working `ctl`-triggered provider reifier against real GitHub; product-value evidence still open.** |
+| M6.1 — durable local cache _(decision gate)_        | Yafs is useful as an observable state service.                   | Durable local TTL cache, atomic replacement, expiry metadata, an explicit 1 MiB/value limit, serialized concurrent writes, and explicit expired-blob collection. **Bounded local slice complete; no active-entry eviction, upstream mirror, or public compatibility endpoint.**                                                                                                                                    |
+| M6.2 — provider/controller foundation _(delivery gate)_ | Provider views and actions share a safe lifecycle.            | Compositional built-in provider definitions; daemon-owned desired configuration; idempotent mount plan/apply; durable action acceptance; lifecycle-bound registration; and a context-bound one-shot review validation. **Foundation complete; a package-facing action/layout ABI remains deliberately deferred.** |
+| M7 — agent workspace _(decision gate)_              | An agent can work visibly and safely.                            | Durable runs, scoped context/capabilities, artifacts, restart behavior, audit trail. The existing one-shot `ctl` model round trip is an M6.2 experiment, not completion of this checkpoint.                                                    |
 | M8 — remote/multi-user _(decision gate)_            | The service works safely beyond localhost.                       | Authenticated transport, per-user authorization, quotas, remote Yash/SSH adapter, audit retention.                                                                                                                                                                                                                                                   |
 | M9 — runtime bridge _(decision gate)_               | Workspaces intentionally drive external processes.               | Allowlisted execution against materialized snapshots; staged imports with base-revision conflict checks and explicit commit.                                                                                                                                                                                                                         |
 
@@ -988,6 +1156,31 @@ remote write: durable intent → idempotent provider call → durable outcome �
   The current string-only fixture is deliberately not a final provider API.
 
 ### Capabilities, distribution, and adapters
+
+**Plugin-instance decision:** a plugin is an installed definition; a plugin
+instance is one external, declarative configuration that publishes a VFS
+projection and may accept typed actions. A mount remains the kernel's internal
+snapshot attachment mechanism, while a union remains the user-visible pure VFS
+composition operation. New operator vocabulary is therefore `plugins
+status|plan|apply` for the daemon-selected desired configuration and `plugin
+activate|refresh|deactivate` only for compatibility/development activation.
+The legacy `mount` terms remain accepted temporarily but are not the product
+model for new integrations.
+
+The canonical external YAML uses `plugins:` with `plugin:` per instance. It is
+deployment input, selected by `yafsd --config`, and can be version-controlled;
+the WAL/VFS holds observed snapshots, audit, run state, and user data. A
+definition is composed from focused ports—configuration validation, snapshot
+preparation, optional action declarations, and optional exposure declarations
+—not a common executable base class. The kernel owns grants, durable action
+acceptance, routing, lifecycle, and audit.
+
+An exposure declaration is deliberately not permission to listen. The current
+agent definition can describe a future HTTP conversation exposure, but Yafs
+opens no HTTP endpoint. Enabling an exposure later requires separate operator
+configuration for bind address, authentication, path scope, quota, and audit.
+Yash pseudobinaries are likewise client adapters over declared actions, never
+an alternative action or authorization path.
 
 - **Capabilities:** grants are kernel-owned, deny-by-default, and audited.
   The initial vocabulary is a narrowly configured model endpoint
@@ -1134,12 +1327,14 @@ collection revision, and fetch time are durable; endpoint and token are not.
 
 1. What specific evidence at M5 would justify continuing beyond the committed
    review-workspace horizon?
-2. Should the first cache provider be the first post-M5 extension, or should it
-   wait for actual review-workspace usage to reveal the next need?
+2. What repeated external use would justify a cache adapter (Ruby, HTTP, RESP,
+   or S3), rather than merely growing the local cache service?
 3. Should Yash scripts use only the small language, or should JSON-lines RPC be
    a first-class scripting surface?
-4. Should `ctl` be generalized now from "the provider that owns this fetched
-   mount" to any directory with a registered handler, given personas need the
-   latter and GitHub only ever needed the former as a special case of it?
+4. ~~Should `ctl` be generalized...~~ Resolved: `ctl` dispatch is already
+   directory-agnostic (any registered path, provider-owned or not); personas
+   turned out not to need an exception to the provider/mount boundary itself,
+   only proof that a provider can publish config-sourced rather than fetched
+   content — which `FixtureConfig` already established.
 5. What checkpoint cadence for a streamed `ctl` result balances WAL load
    against a meaningfully "live" `cat` during a long-running response?

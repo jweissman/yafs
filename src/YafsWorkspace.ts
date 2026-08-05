@@ -28,7 +28,7 @@ export class YafsWorkspace {
   private unionLines() { return this.store.mounts().map(mount => this.unionLine(mount)) }
   private unionLine(mount: { path: string, layers: string[] }) { return `${mount.path} union ${mount.layers.join(' ')}` }
   private providerLines() { return this.mounts().map(mount => this.providerLine(mount)) }
-  private providerLine(mount: MountRecord) { return `${mount.path} ${mount.provider} ${mount.state}` }
+  private providerLine(mount: MountRecord) { return `${mount.id} ${mount.path} ${mount.provider} ${mount.state}` }
   private provenanceItem(item: { path: string, origin?: import('./vfs/FSNode').ProviderOrigin }): Provenance {
     return item.origin ? { kind: 'provider', path: item.path, ...item.origin } : { kind: 'local', path: item.path }
   }

@@ -3,7 +3,7 @@ import { mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promis
 import { dirname, resolve } from 'node:path'
 
 export type DaemonState = {
-  version: 1, pid: number, host: string, port: number, startedAt: string, instanceId: string
+  version: 1, pid: number, host: string, port: number, startedAt: string, instanceId: string, configPath?: string
 }
 
 export function paths(dataDir: string) {
@@ -16,8 +16,8 @@ export async function readState(path: string): Promise<DaemonState | undefined> 
   catch (error: unknown) { return absentState(error) }
 }
 
-export async function writeState(path: string, address: { host: string, port: number }) {
-  const state = newState(address)
+export async function writeState(path: string, address: { host: string, port: number }, configPath?: string) {
+  const state = newState(address, configPath)
   await replace(path, `${path}.${state.instanceId}.tmp`, JSON.stringify(state))
   return state
 }
@@ -38,9 +38,9 @@ export async function currentState(path: string): Promise<DaemonState | undefine
 
 async function removeStaleState(path: string) { await clearState(path); return undefined }
 
-function newState(address: { host: string, port: number }): DaemonState {
+function newState(address: { host: string, port: number }, configPath?: string): DaemonState {
   return { version: 1, pid: process.pid, ...address, startedAt: new Date().toISOString(),
-    instanceId: randomUUID() }
+    instanceId: randomUUID(), ...(configPath && { configPath }) }
 }
 
 async function replace(path: string, temporary: string, contents: string) {
@@ -59,6 +59,7 @@ function invalidState(): never { throw new Error('Invalid daemon state') }
 function validState(state: DaemonState) {
   return state.version === 1 && Number.isInteger(state.pid) && typeof state.host === 'string'
     && Number.isInteger(state.port) && typeof state.startedAt === 'string' && typeof state.instanceId === 'string'
+    && (state.configPath === undefined || typeof state.configPath === 'string')
 }
 
 function absentState(error: unknown): undefined {

@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { parseDocument } from 'yaml'
-
 import { Manifest, ManifestMount } from './types'
 import { fixtureStreams } from './FixtureStreamManifest'
+import { agentConfig } from '../agents/AgentManifest'
 import { object, only, relative } from './ManifestValidation'
+import { declarationsFor, pluginName } from './ManifestPlugins'
 
 type YamlDocument = ReturnType<typeof parseDocument>
 type YamlNode = {
@@ -12,7 +13,7 @@ type YamlNode = {
 
 export function parseManifest(source: string): { manifest: Manifest, digest: string } {
   const manifest = validateManifest(decoded(source))
-  return { manifest, digest: createHash('sha256').update(canonical(manifest)).digest('hex') }
+  return { manifest, digest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex') }
 }
 
 function decoded(source: string) {
@@ -40,19 +41,23 @@ function assertChildren(node: YamlNode) {
 }
 
 function validateManifest(value: unknown): Manifest {
-  const root = object(value, 'manifest'); only(root, ['version', 'mounts'], 'manifest')
-  if (root.version !== 1 || !Array.isArray(root.mounts)) throw new Error('Invalid .yafsmeta manifest')
-  return { version: 1, mounts: root.mounts.map(validateMount) }
+  const root = object(value, 'manifest'); only(root, ['version', 'plugins', 'mounts'], 'manifest')
+  return manifestFor(root)
+}
+function manifestFor(root: Record<string, unknown>): Manifest {
+  const declarations = declarationsFor(root)
+  if (root.version !== 1 || !Array.isArray(declarations)) throw new Error('Invalid .yafsmeta manifest')
+  return { version: 1, mounts: declarations.map(validateMount) }
 }
 
 function validateMount(value: unknown): ManifestMount {
-  const mount = object(value, 'mount'); only(mount, ['id', 'path', 'provider', 'config', 'capabilities', 'refresh'], 'mount')
+  const mount = object(value, 'plugin'); only(mount, ['id', 'path', 'plugin', 'provider', 'config', 'capabilities', 'refresh'], 'plugin')
   validateMountFields(mount)
   return validatedMount(mount)
 }
 
 function validatedMount(mount: Record<string, unknown>): ManifestMount {
-  const provider = mount.provider as ManifestMount['provider']
+  const provider = pluginName(mount) as ManifestMount['provider']
   return { ...mountIdentity(mount, provider), config: config(provider, mount.config),
     capabilities: mount.capabilities as string[], refreshIntervalMs: interval(mount.refresh) }
 }
@@ -61,10 +66,13 @@ function mountIdentity(mount: Record<string, unknown>, provider: ManifestMount['
   return { id: mount.id as string, path: mount.path as string, provider }
 }
 
-function config(provider: ManifestMount['provider'], value: unknown) { return provider === 'fixture' ? fixture(value) : github(value) }
+function config(provider: ManifestMount['provider'], value: unknown) {
+  if (provider === 'fixture') return fixture(value)
+  return provider === 'agent' ? agentConfig(value) : github(value)
+}
 
 function validateMountFields(mount: Record<string, unknown>) {
-  if (typeof mount.id !== 'string' || !relative(mount.path) || !provider(mount.provider)) throw new Error('Invalid .yafsmeta mount')
+  if (typeof mount.id !== 'string' || !relative(mount.path) || !provider(pluginName(mount))) throw new Error('Invalid .yafsmeta plugin')
   if (!Array.isArray(mount.capabilities) || !mount.capabilities.every(capability => typeof capability === 'string')) throw new Error('Invalid .yafsmeta capabilities')
 }
 
@@ -89,13 +97,14 @@ function githubConfig(config: Record<string, unknown>) {
   const max = config.max; if (!validGitHubConfig(config.repository, config.query, max)) throw new Error('Invalid github config')
   return { repository: config.repository as string, query: config.query as string, max: max as number }
 }
-
 function validGitHubConfig(repositoryValue: unknown, query: unknown, max: unknown) {
   return repository(repositoryValue) && typeof query === 'string' && Number.isInteger(max)
     && typeof max === 'number' && max >= 1 && max <= 100
 }
 
-function provider(value: unknown): value is ManifestMount['provider'] { return value === 'fixture' || value === 'github' }
+function provider(value: unknown): value is ManifestMount['provider'] {
+  return value === 'fixture' || value === 'github' || value === 'agent'
+}
 
 function repository(value: unknown): value is string { return typeof value === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value) }
 
@@ -109,5 +118,3 @@ function intervalValue(value: unknown) {
   const match = /^(\d+)(m|h)$/.exec(value); if (!match) throw new Error('Invalid refresh interval')
   return Number(match[1]) * (match[2] === 'h' ? 60 : 1) * 60_000
 }
-
-function canonical(value: unknown) { return JSON.stringify(value) }

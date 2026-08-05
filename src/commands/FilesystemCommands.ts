@@ -5,6 +5,7 @@ import { CommandContext } from './CommandContext'
 class MkdirCommand { readonly name = 'mkdir'; readonly synopsis = 'mkdir PATH'; readonly access = 'mutate'; execute(context: CommandContext, args: string[]) { context.mkdir(commandPath(context, args, this.name)); return '' } }
 class TouchCommand { readonly name = 'touch'; readonly synopsis = 'touch PATH'; readonly access = 'mutate'; execute(context: CommandContext, args: string[]) { context.touch(commandPath(context, args, this.name)); return '' } }
 class RmCommand { readonly name = 'rm'; readonly synopsis = 'rm PATH'; readonly access = 'mutate'; execute(context: CommandContext, args: string[]) { context.remove(commandPath(context, args, this.name)); return '' } }
+class RmdirCommand { readonly name = 'rmdir'; readonly synopsis = 'rmdir PATH'; readonly access = 'mutate'; execute(context: CommandContext, args: string[]) { context.rmdir(commandPath(context, args, this.name)); return '' } }
 class LnCommand {
   readonly name = 'ln'; readonly synopsis = 'ln -s TARGET LINK'
   readonly access = 'mutate'
@@ -24,6 +25,6 @@ class CatCommand { readonly name = 'cat'; readonly synopsis = 'cat PATH'; readon
 class ReadlinkCommand { readonly name = 'readlink'; readonly synopsis = 'readlink PATH'; readonly access = 'read'; execute(context: CommandContext, args: string[]) { return context.readlink(commandPath(context, args, this.name)) } }
 class LsCommand { readonly name = 'ls'; readonly synopsis = 'ls [PATH]'; readonly access = 'read'; execute(context: CommandContext, args: string[]) { return context.list(context.resolve(args[0] || '.')).join('\n') } }
 export function filesystemCommands(): BuiltinCommand[] {
-  return [new MkdirCommand(), new TouchCommand(), new RmCommand(), new LnCommand(),
+  return [new MkdirCommand(), new TouchCommand(), new RmCommand(), new RmdirCommand(), new LnCommand(),
     new UnionCommand(), new CatCommand(), new ReadlinkCommand(), new LsCommand()]
 }

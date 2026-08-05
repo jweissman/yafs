@@ -8,25 +8,48 @@ const POLL_MS = 50
 
 export class FixtureStreamDriver {
   private timer?: Timer
+  private registered = new Set<AbsolutePath>()
 
   constructor(private readonly mounts: MountManager, private readonly journal: Journal,
     private readonly enqueue: (work: () => Promise<void>) => Promise<void>,
     private readonly registerCtl: (path: AbsolutePath, handler: CtlHandler) => void,
+    private readonly unregisterCtl: (path: AbsolutePath) => void,
     private readonly now = () => Date.now()) {}
 
-  start() { this.timer = setInterval(() => this.tick(), POLL_MS) }
-  close() { if (this.timer) clearInterval(this.timer) }
+  start() { this.sync(); this.timer = setInterval(() => this.tick(), POLL_MS) }
+  close() { if (this.timer) clearInterval(this.timer); this.clearControls() }
 
-  private tick() { this.mounts.mounts().forEach(record => this.tickRecord(record)) }
+  sync() {
+    const paths = this.currentControls(); this.unregisterMissing(paths); this.registered = paths
+  }
+
+  private currentControls() {
+    const paths = new Set<AbsolutePath>(); this.mounts.mounts().forEach(record => this.registerRecord(record, paths))
+    return paths
+  }
+
+  private unregisterMissing(paths: Set<AbsolutePath>) {
+    this.registered.forEach(path => { if (!paths.has(path)) this.unregisterCtl(path) })
+  }
+
+  private clearControls() { this.registered.forEach(path => this.unregisterCtl(path)); this.registered.clear() }
+
+  private tick() { this.sync(); this.mounts.mounts().forEach(record => this.tickRecord(record)) }
+
+  private registerRecord(record: PreparedMountRecord, paths: Set<AbsolutePath>) {
+    if (record.provider !== 'fixture') return
+    const streams = (record.config as FixtureConfig).streams || {}
+    if (Object.keys(streams).length) paths.add(this.registerStreamCtl(record))
+  }
 
   private tickRecord(record: PreparedMountRecord) {
     if (record.provider !== 'fixture') return
-    const streams = (record.config as FixtureConfig).streams || {}; this.registerStreamCtl(record, streams)
+    const streams = (record.config as FixtureConfig).streams || {}
     Object.entries(streams).forEach(([path, spec]) => this.tickStream(record, path, spec))
   }
 
-  private registerStreamCtl(record: PreparedMountRecord, streams: Record<string, StreamSpec>) {
-    if (Object.keys(streams).length) this.registerCtl(this.ctlPath(record), payload => this.restart(record.id, payload))
+  private registerStreamCtl(record: PreparedMountRecord): AbsolutePath {
+    const path = this.ctlPath(record); this.registerCtl(path, payload => this.restart(record.id, payload)); return path
   }
 
   private ctlPath(record: PreparedMountRecord): AbsolutePath { return `${record.path}/ctl` as AbsolutePath }

@@ -3,7 +3,7 @@ import { commandContext } from './YafsCommandContext'
 
 export function yafsContext(yafs: Yafs) {
   return commandContext({ ...session(yafs), workspace: yafs.workspace, mounts: yafs.mounts,
-    operations: yafs.operationQueue, traces: yafs.traces })
+    operations: yafs.operationQueue, traces: yafs.traces, cache: yafs.cache, desired: yafs.desired })
 }
 
 function session(yafs: Yafs) {

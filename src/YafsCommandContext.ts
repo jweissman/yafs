@@ -5,17 +5,20 @@ import { MountManager } from './mounts/MountManager'
 import { YafsOperationQueue } from './YafsOperationQueue'
 import { YafsWorkspace } from './YafsWorkspace'
 import { TraceService } from './traces/TraceService'
+import { DesiredMounts } from './mounts/DesiredMounts'
+import { CacheService } from './cache/CacheService'
 
 type Dependencies = {
   clock: Clock, user: () => string, pwd: () => AbsolutePath,
   resolve: (path: string) => AbsolutePath,
   required: CommandContext['required'], help: () => string, workspace: YafsWorkspace,
-  mounts: MountManager, operations: YafsOperationQueue, traces: TraceService
+  mounts: MountManager, operations: YafsOperationQueue, traces: TraceService,
+  cache: CacheService, desired?: DesiredMounts
 }
 
 export function commandContext(dependencies: Dependencies): CommandContext {
   return { ...session(dependencies), ...filesystem(dependencies), ...mounts(dependencies),
-    ...mutations(dependencies), traces: dependencies.traces }
+    ...mutations(dependencies), traces: dependencies.traces, cache: dependencies.cache }
 }
 
 function session({ clock, user, pwd, resolve, required, help, workspace }: Dependencies) {
@@ -37,14 +40,27 @@ function inspects(workspace: YafsWorkspace) {
     provenance: (path: AbsolutePath) => workspace.provenance(path), mounts: () => workspace.mountLines() }
 }
 
-function mounts({ mounts: manager, operations }: Dependencies) {
-  return { ...mountPlanning(manager), ...mountMutations(operations) }
+function mounts({ mounts: manager, operations, desired }: Dependencies) {
+  return { ...mountPlanning(manager), ...mountMutations(operations), ...desiredMounts(desired, operations),
+    plugins: (name?: string) => manager.plugins(name) }
 }
 
 function mountPlanning(manager: MountManager) {
   return { ...mountActivation(manager), ...resourceReferences(manager),
     planRefresh: (path: AbsolutePath, id?: string) => manager.prepareRefresh(path, id),
     planUnmount: (id: string) => manager.planUnmount(id) }
+}
+function desiredMounts(desired: DesiredMounts | undefined, operations: YafsOperationQueue) {
+  return desired ? configuredDesiredMounts(desired, operations) : missingDesiredMounts()
+}
+function configuredDesiredMounts(desired: DesiredMounts, operations: YafsOperationQueue) {
+  const mutations = mountMutations(operations)
+  return { desiredStatus: () => desired.status(), desiredPlan: () => desired.plan(),
+    applyDesired: (prune = false) => desired.apply(mutations, prune) }
+}
+function missingDesiredMounts() {
+  return { desiredStatus: () => Promise.resolve({ configured: false }), desiredPlan: () => Promise.resolve([]),
+    applyDesired: () => Promise.reject(new Error('No daemon mount configuration')) }
 }
 function resourceReferences(manager: MountManager) {
   return { resourceReference: (path: AbsolutePath) => manager.resourceReference(path) }
@@ -72,7 +88,8 @@ function afterCommit(operations: YafsOperationQueue) {
 
 function simpleMutations(operations: YafsOperationQueue) {
   return { ...fileMutations(operations),
-    remove: (path: AbsolutePath) => operations.add({ type: 'remove', path }) }
+    remove: (path: AbsolutePath) => operations.add({ type: 'remove', path }),
+    rmdir: (path: AbsolutePath) => operations.add({ type: 'rmdir', path }) }
 }
 
 function fileMutations(operations: YafsOperationQueue) {

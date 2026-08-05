@@ -22,7 +22,7 @@ export class ServerRefresh {
     catch (error) { console.error(`Scheduled refresh failed for mount ${record.id}:`, error) }
   }
   private async refreshOnce(record: PreparedMountRecord) {
-    const prepared = await this.mounts.prepareRefresh(record.manifestPath, record.id, 'system')
+    const prepared = await this.mounts.prepareRefreshRecord(record, 'system')
     await this.journal.commit([{ type: 'refresh', record: prepared, at: new Date().toISOString() }])
     this.mounts.refresh(prepared, 'system')
   }

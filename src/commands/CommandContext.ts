@@ -2,6 +2,7 @@ import { Clock } from '../core/Clock';
 import { TraceService } from '../traces/TraceService';
 import { AbsolutePath } from '../core/AbsolutePath';
 import { MountRecord, PreparedMountRecord, Provenance } from '../mounts/types';
+import { CacheService } from '../cache/CacheService';
 
 export type CommandContext = {
   clock: Clock;
@@ -20,6 +21,10 @@ export type CommandContext = {
   provenance(path: AbsolutePath): Provenance[];
   resourceReference(path: AbsolutePath): object | undefined;
   mounts(): string[];
+  plugins(name?: string): object[];
+  desiredStatus(): Promise<object>;
+  desiredPlan(): Promise<object[]>;
+  applyDesired(prune?: boolean): Promise<object[]>;
   planMount(path: AbsolutePath, id?: string): MountRecord;
   prepareMount(record: MountRecord): PreparedMountRecord | Promise<PreparedMountRecord>;
   planRefresh(path: AbsolutePath, id?: string): PreparedMountRecord | Promise<PreparedMountRecord>;
@@ -28,11 +33,13 @@ export type CommandContext = {
   touch(path: AbsolutePath): void;
   write(path: AbsolutePath, content: string): void;
   remove(path: AbsolutePath): void;
+  rmdir(path: AbsolutePath): void;
   symlink(target: string, path: AbsolutePath): void;
   union(path: AbsolutePath, layers: AbsolutePath[]): void;
   mount(record: PreparedMountRecord): void;
   refresh(record: PreparedMountRecord): void;
   unmount(id: string): void;
   afterCommit(effect: () => void): void;
+  cache: CacheService;
   traces: TraceService;
 }

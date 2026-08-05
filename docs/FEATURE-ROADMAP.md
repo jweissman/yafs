@@ -13,8 +13,9 @@ listed below.
 Yafs is a virtual filesystem service whose directories can acquire explicit
 provider views. A user can browse, inspect, and compose ordinary-looking
 paths, then preserve the exact external artifacts they acted on. Providers may
-separately expose named, typed actions through Yash and RPC. Mounting a view
-never implies authority to invoke an action.
+separately expose named, typed actions through Yash and RPC. A provider is a
+composition of a published view, optional resource layout, and optional
+actions; mounting a view never implies authority to invoke an action.
 
 The stable center is the VFS. The shell, network transports, and plugins are
 clients of it.
@@ -46,55 +47,49 @@ execution model.
 
 ## Illustrative future: an agent-backed directory
 
-An `agents` plugin could make a small, inspectable workspace around a
-long-lived workflow. It should expose files, not hide a proprietary state
-machine. This is deliberately an illustrative direction, not a current
-provider configuration contract or a promise that writing `prompt.md` starts a
-process; M7 must define that controller lifecycle first.
+The built-in `agent` provider now proves the narrow one-shot action slice:
+personas publish prompts, `agent send` durably accepts a request, and the run
+records queued/running/terminal state. The layout below is still a future,
+long-lived workflow shape. It should expose files, not hide a proprietary
+state machine; M7 must define its controller lifecycle before it is promised.
 
 ```text
 /work/bug-184/
-  .yafsmeta
-  prompt.md
-  context/
-    issue.md
-    reproduction.txt
-  runs/
-    2026-07-30T1412Z/
-      status.json
-      transcript.ndjson
-      patch.diff
-      artifacts/
-  output/
-    summary.md
+  agents/reviewer/
+    prompt.md
+    runs/
+      2026-07-30T1412Z/
+        status.json
+        transcript.ndjson
+        patch.diff
+        artifacts/
 ```
 
 ```yaml
 # /work/bug-184/.yafsmeta
+version: 1
 mounts:
   - id: reviewer
     path: agents/reviewer
     provider: agent
     config:
-      prompt: prompt.md
-      context: [context]
-    capabilities: [model.invoke]
+      personas:
+        reviewer:
+          prompt: "You are a careful reviewer."
+    capabilities: [chat.completion]
 ```
 
 From the Yafs REPL, a realistic first interaction could be:
 
 ```sh
-yafs:/work/bug-184$ ls
-agents  context  prompt.md
-yafs:/work/bug-184$ agent start agents
-run: 2026-07-30T1412Z
-yafs:/work/bug-184$ cat agents/runs/2026-07-30T1412Z/status.json
+yafs:/work/bug-184$ agent send agents/reviewer --context context/issue.md "Review the reproduction."
+accepted: agents/reviewer
+yafs:/work/bug-184$ cat agents/reviewer/runs/2026-07-30T1412Z/status.json
 {"state":"running","step":"reproducing"}
-yafs:/work/bug-184$ agent send agents "Try the smaller reproduction first."
-yafs:/work/bug-184$ cat agents/output/summary.md
+yafs:/work/bug-184$ cat agents/reviewer/runs/2026-07-30T1412Z/response.md
 ```
 
-`agent start` and `agent send` are Yafs commands backed by the plugin. The run
+`agent send` is a Yafs command backed by the provider. The run
 state, transcript, and output remain ordinary virtual files. This makes the
 important questions answerable with normal filesystem operations: what ran,
 what it was allowed to read, and what it produced.
@@ -239,24 +234,46 @@ the opt-in host bridge. [POSIX command search and execution](https://pubs.opengr
 
 ## Plugin model
 
-Each mount declares a provider, configuration, and granted capabilities in
-`.yafsmeta`. Plugin discovery must be separate from activation; merely finding
-metadata should not start an agent, clone a repository, or launch a container.
+Each mount declares a provider, configuration, and requested capabilities in
+`.yafsmeta`. A provider package contributes declarative metadata, snapshot
+preparation, and (where applicable) resource/action definitions. The kernel
+continues to own VFS mutation, path resolution, grants, journal commits,
+auditing, and lifecycle transitions. Plugin discovery must be separate from
+activation; merely finding metadata should not start an agent, clone a
+repository, or launch a container.
 
 ```ts
-interface VfsProvider {
+interface ProviderDefinition<Config> {
   manifest: { name: string; version: string; capabilities: Capability[] }
-  mount(config: unknown, context: MountContext): Promise<Mount>
+  validate(config: unknown): Config
+  prepare(config: Config, context: PrepareContext): Promise<PublishedSnapshot>
+  layout?(config: Config): ResourceLayout
+  actions?(config: Config): ActionDefinition[]
 }
 
-interface Mount {
-  stat(path: RelativePath): Promise<Node | undefined>
-  list(path: RelativePath): AsyncIterable<DirEntry>
-  read(path: RelativePath): AsyncIterable<Uint8Array>
-  write?(path: RelativePath, input: AsyncIterable<Uint8Array>): Promise<void>
-  command?(name: string, invocation: Invocation): Promise<CommandResult>
+interface ActionDefinition {
+  name: string
+  capability: Capability
+  request: RequestSchema
+  accept(request: unknown, context: ActionContext): Promise<AcceptedAction>
 }
 ```
+
+The current built-in contract is deliberately smaller: a compositional
+`ProviderDefinition` names a provider, declares its capabilities, and prepares
+its bounded published snapshot. Strict manifest validation remains kernel-owned.
+The agent provider is the first consumer of the optional layout/action seam;
+its `ctl` request and Yash adapter are typed today, but provider-defined action
+metadata has not yet become a package ABI. This avoids promising a third-party
+plugin inheritance hierarchy before built-in providers establish the right
+boundaries.
+
+`ResourceLayout` describes provider-owned files such as a persona's
+`prompt.md`, `runs/`, and status artifacts. `ActionDefinition` describes the
+typed request that the kernel must durably accept before background work may
+begin. Yash pseudobinaries and MCP tools are adapters over these definitions;
+they are not a second provider mechanism. A provider action can never mutate
+the VFS directly or bypass its mount scope.
 
 Design checkpoints for every plugin:
 
@@ -526,26 +543,77 @@ digest`, `get(digest) -> bytes | undefined`, `retain`/`release(digest,
 ownerId)`, and a `gc()` that reclaims zero-reference blobs. It is durable
 content substrate, not a cache API.
 
-### M6.1 — Cache provider *(decision gate)*
+### M6.1 — Durable local cache *(decision gate)*
 
 Checkpoint: durable local TTL entries have atomic replacement, expiry metadata,
 size/eviction limits, and concurrent-write tests. The cache accepts explicit
 caller-populated values; it does not silently become an upstream mirror.
 
-### M7 — Agents plugin *(decision gate)*
+**Implemented local slice:** `cache put/get/stat/delete/gc` stores UTF-8 values
+in the shared blob store, records durable metadata in the local VFS, requires
+an explicit bounded TTL, and rebuilds active-blob retention on restart. A
+typed local JSON-lines request exists for future Ruby/HTTP adapters. It is not
+RESP, S3, an upstream cache, active-entry eviction, or a public endpoint.
+The next decision is whether repeated external use warrants an adapter—not
+whether the cache core needs to imitate another datastore.
 
-Checkpoint: `agent start`, `agent send`, and `agent stop` manage a durable run;
-the prompt, allowed context, transcript, state, and generated artifacts are
-visible as files. Restarting the service recovers or clearly marks interrupted
-runs. The plugin has no implicit host-process or network capability.
+### M6.2 — Provider/controller foundation *(delivery gate)*
 
-Before this gate, a much smaller experiment is worth running: a one-shot
-`ctl`-triggered `model.invoke` action against a real local model (no run
-lifecycle, no recursive tool use — prompt in, text recorded out) is cheap
-relative to the full checkpoint above and answers the actual open question,
-whether an autonomous pass ever produces something worth reading, before
-committing to the orchestrator a real agent loop needs. See "A cheap
-experiment before the M7 decision gate" in the ADR.
+Checkpoint: built-in providers share a compositional definition for validated
+configuration, bounded published layouts, typed actions, required
+capabilities, and lifecycle hooks. The daemon owns an explicit desired-mount
+configuration outside the virtual tree and can report a side-effect-free
+reconciliation plan and apply it idempotently. A default daemon configuration
+location makes `plugins plan`, `plugins apply`, and `plugins status` ordinary
+client commands; a host file is only an explicit `yafsd --config` deployment
+override. Removal is never implicit: reconciliation needs an explicit prune
+choice.
+
+The first controller action must be accepted durably before it returns to the
+client, then run asynchronously with visible `queued`, `running`, terminal,
+and restart-interrupted state. Registration and unregistration are tied to
+mount lifecycle, not polling. This gate proves the common mechanism with the
+agent provider before adding a provider marketplace or another controller.
+
+**Current wave:** the compositional built-in provider registry, daemon-owned
+desired configuration (`yafsd --config` only as a deployment override),
+`plugins status|plan|apply [--prune]`, lifecycle-bound agent `ctl` registration,
+durable agent acceptance/cancellation/restart interruption, and a
+trace → reify → context-bound review run are implemented and regression-tested.
+The remaining delivery decision is whether to promote the built-in action
+schema into a stable package-facing ABI; it is intentionally not implied by
+the current provider object.
+
+### M6.3 — Plugin-instance contract *(pre-M7 delivery gate)*
+
+Checkpoint: the external configuration uses canonical `plugins`/`plugin`
+terminology; the daemon reconciles it without exposing host paths to Yash; and
+`plugins describe` makes built-in capabilities, typed actions, pseudobinary
+adapters, and designed-but-disabled exposure requests inspectable. `union`
+remains the VFS composition command. A public HTTP/RESP/S3 listener, package
+installation, and a stable third-party ABI are explicitly out of scope.
+
+**Current wave:** canonical configuration and lifecycle vocabulary are being
+implemented with compatibility aliases for `mounts`/`provider` and `mount`.
+This is the final terminology and action-boundary cleanup before M7, not a
+claim that `yash add` or public plugin endpoints exist.
+
+### M7 — Local conversation channel *(decision gate)*
+
+Checkpoint: a human and named local personas can use one durable,
+append-only channel to review a traced source snapshot. `chat post`, `chat
+read`, and explicit agent-reply commands expose messages, participants,
+per-reply runs, chosen context, cancellation, and terminal state as ordinary
+files. Restart marks an in-flight reply interrupted. The channel has no
+implicit host-process, network, MCP-tool, or recursive-agent authority.
+
+M7 is deliberately two stages. The first is this explicit-invocation channel;
+the second decision—earned only by repeated use—covers subscriptions,
+automatic turn scheduling, rate/budget limits, retries, and agent-to-agent
+conversation. A text exchange alone is not success: the validation must show
+who said what, the precise source/context they read, why a reply ran, and how
+the operator stopped it. The detailed data and lifecycle decisions live in the
+ADR's “M7 decision: local conversation channels” section.
 
 ### M8 — Remote/multi-user service *(decision gate)*
 

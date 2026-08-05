@@ -4,8 +4,11 @@ import { inspectionCommands } from './InspectionCommands'
 import { sessionCommands } from './SessionCommands'
 import { textCommands } from './TextCommands'
 import { traceCommands } from './TraceCommands'
+import { agentCommands } from './AgentCommands'
+import { cacheCommands } from './CacheCommands'
+import { pluginCommands } from './PluginCommands'
 
 export function commands(): BuiltinCommand[] {
   return [...sessionCommands(), ...filesystemCommands(), ...textCommands(), ...inspectionCommands(),
-    ...traceCommands()]
+    ...pluginCommands(), ...traceCommands(), ...agentCommands(), ...cacheCommands()]
 }

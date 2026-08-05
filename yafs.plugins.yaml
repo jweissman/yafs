@@ -1,0 +1,29 @@
+version: 1
+plugins:
+  - id: demo
+    plugin: fixture
+    path: demo
+    config:
+      files:
+        hello.txt: hello
+    capabilities: []
+
+  - id: reviews
+    plugin: github
+    path: reviews
+    config:
+      repository: software/vets-api
+      query: "is:pr is:open"
+      max: 10
+    refresh:
+      interval: 15m
+    capabilities: [network.github-api, secret.github-token]
+
+  - id: agents
+    plugin: agent
+    path: agents
+    config:
+      personas:
+        reviewer:
+          prompt: "You are a careful, concise code reviewer."
+    capabilities: [chat.completion]

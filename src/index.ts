@@ -10,15 +10,17 @@ import { builtinCommands } from './commands/registry';
 import { MountManager } from './mounts/MountManager';
 import { YafsOperationQueue } from './YafsOperationQueue';
 import { YafsWorkspace } from './YafsWorkspace';
-import { execute, executeAsync, executeWrite, planExecution, planExecutionAsync, planWrite } from './YafsExecution';
+import { execute, executeAsync, executeWrite, planCache, planExecution, planExecutionAsync, planWrite } from './YafsExecution';
 import { YafsCommandRuntime } from './YafsCommandRuntime';
 import { BlobStore } from './protocol/BlobStore';
 import { memoryBlobStore } from './protocol/MemoryBlobStore';
 import { TraceService } from './traces/TraceService';
+import { DesiredMounts } from './mounts/DesiredMounts';
+import { CacheService } from './cache/CacheService';
 
 type YafsOptions = {
   store?: NodeStore, user?: User, clock?: Clock, mounts?: MountManager, blobs?: BlobStore,
-  traces?: TraceService
+  traces?: TraceService, cache?: CacheService, desired?: DesiredMounts
 }
 
 export default class Yafs {
@@ -33,6 +35,8 @@ export default class Yafs {
   clock: Clock
   blobs: BlobStore
   traces: TraceService
+  cache: CacheService
+  desired?: DesiredMounts
   commands = new YafsCommandRuntime(this)
 
   constructor(options: YafsOptions = {}) {
@@ -46,12 +50,17 @@ export default class Yafs {
   private initializeTraces(options: YafsOptions) {
     this.blobs = options.blobs || memoryBlobStore()
     this.traces = options.traces || new TraceService(this.blobs)
+    this.cache = options.cache || new CacheService(this.blobs)
   }
 
   private configure(options: YafsOptions) {
     this.user = options.user || { name: 'root' }
-    this.mounts = options.mounts || new MountManager(this.store)
+    this.configureMounts(options)
     this.initializeShell(); this.initializeWorkspace(); this.initializeOperations()
+  }
+
+  private configureMounts(options: YafsOptions) {
+    this.mounts = options.mounts || new MountManager(this.store); this.desired = options.desired
   }
 
   private initializeWorkspace() {
@@ -84,6 +93,7 @@ export default class Yafs {
   plan(input: string): ExecutionPlan { return planExecution(this, input) }
   planAsync(input: string): Promise<ExecutionPlan> { return planExecutionAsync(this, input) }
   planWrite(path: string, content: string): ExecutionPlan { return planWrite(this, path, content) }
+  planCache(request: import('./cache/CacheRequest').CacheRequest) { return planCache(this, request) }
 
   handle(command: import('./types/Command').Command): string { return this.commands.handle(command) }
   handleAsync(command: import('./types/Command').Command) { return this.commands.handleAsync(command) }

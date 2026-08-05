@@ -4,7 +4,8 @@ export function object(value: unknown, name: string): Record<string, unknown> {
 }
 
 export function only(value: Record<string, unknown>, keys: string[], name: string) {
-  if (Object.keys(value).some(key => !keys.includes(key))) throw new Error(`Unknown ${name} field`)
+  const unknown = Object.keys(value).filter(key => !keys.includes(key))
+  if (unknown.length) throw new Error(`Unknown ${name} field: ${unknown.join(', ')} (expected one of: ${keys.join(', ')})`)
 }
 
 export function relative(value: unknown): value is string {

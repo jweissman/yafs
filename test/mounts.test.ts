@@ -33,7 +33,8 @@ test('mount activation persists state, audit, and fixture content across restart
 test('mount manifests reject unknown fields and unmount removes the provider view', () => {
   const yafs = new Yafs()
   yafs.store.write('/home/root/.yafsmeta', '{version: 1, mounts: [], unknown: true}')
-  expect(yafs.execute('mount validate .yafsmeta').stderr).toBe('Unknown manifest field')
+  expect(yafs.execute('mount validate .yafsmeta').stderr)
+    .toBe('Unknown manifest field: unknown (expected one of: version, plugins, mounts)')
   yafs.store.write('/home/root/.yafsmeta', fixtureManifest().replace('capabilities: []', 'capabilities: [network]'))
   expect(yafs.execute('mount activate .yafsmeta').stderr).toBe('Capabilities are not granted: network')
   yafs.store.write('/home/root/.yafsmeta', fixtureManifest()); yafs.exec('mount activate .yafsmeta')
@@ -85,8 +86,9 @@ function verifyFixture(yafs: Yafs) {
   expect(yafs.exec('ls')).toContain('fixture')
   expect(yafs.exec('cat fixture/hello.txt')).toBe('hello')
   expect(yafs.execute('readlink fixture/hello.txt').stderr).toContain('Not a symbolic link')
-  expect(yafs.exec('mounts')).toContain('/home/root/fixture fixture active')
+  expect(yafs.exec('mounts')).toContain('demo /home/root/fixture fixture active')
   expect(yafs.execute('echo changed > fixture/hello.txt').error?.code).toBe('read_only_mount')
+  expect(yafs.execute('touch fixture').error?.code).toBe('read_only_mount')
 }
 
 function fixtureManifest() {

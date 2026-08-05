@@ -24,7 +24,8 @@ test('a GitHub manifest declares its network capability and rejects unknown conf
   yafs.store.write('/home/root/.yafsmeta', githubManifest().replace('network.github-api', 'network.other'))
   expect(yafs.execute('mount activate .yafsmeta').stderr).toBe('Capabilities are not granted: network.other')
   yafs.store.write('/home/root/.yafsmeta', githubManifest().replace('max: 2', 'unknown: 2'))
-  expect(yafs.execute('mount validate .yafsmeta').stderr).toBe('Unknown github config field')
+  expect(yafs.execute('mount validate .yafsmeta').stderr)
+    .toBe('Unknown github config field: unknown (expected one of: repository, query, max)')
 })
 
 test('a declared secret grant selects an authenticated provider source', async () => {
