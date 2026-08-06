@@ -20,6 +20,14 @@ test('session command objects provide the standard session commands', () => {
   expect(yafs.exec('pwd')).toBe('/home/root'); yafs.exec('mkdir next'); expect(yafs.exec('cd next')).toBe('')
 })
 
+test('plugins desired-state commands report unconfigured instead of throwing when there is no daemon config', async () => {
+  const yafs = new Yafs()
+  expect(JSON.parse(await yafs.executeAsync('plugins status').then(result => result.stdout))).toEqual({ configured: false })
+  expect(JSON.parse(await yafs.executeAsync('plugins plan').then(result => result.stdout))).toEqual([])
+  expect((await yafs.executeAsync('plugins apply')).error?.message).toBe('No daemon mount configuration')
+  expect((await yafs.executeAsync('plugins refresh review')).error?.message).toBe('No daemon mount configuration')
+})
+
 test('rmdir removes an empty directory but refuses a non-empty one, a file, or a read-only mount', () => {
   const yafs = new Yafs(); yafs.exec('mkdir empty'); yafs.exec('mkdir full'); yafs.exec('touch full/inside')
   expect(yafs.exec('rmdir empty')).toBe(''); expect(yafs.execute('cat empty').error?.code).toBe('not_found')
@@ -55,7 +63,9 @@ function mountContext() {
   return { planMount: () => { throw new Error() }, prepareMount: () => { throw new Error() },
     planRefresh: () => { throw new Error() }, planUnmount: () => { throw new Error() },
     mount: () => undefined, refresh: () => undefined, unmount: () => undefined, resourceReference: () => undefined,
-    desiredStatus: async () => ({}), desiredPlan: async () => [], applyDesired: async () => [] }
+    desiredStatus: async () => ({}), desiredPlan: async () => [], applyDesired: async () => [],
+    refreshDesired: async () => ({}), agentPersona: () => { throw new Error() },
+    slackPlugin: () => { throw new Error() } }
 }
 
 function writeContext() {

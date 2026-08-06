@@ -38,6 +38,9 @@ export class MountManager {
   prepareRefreshRecord(record: MountRecord, actor = 'system') { return this.prepareActivation(record, actor) }
   mounts() { return [...this.records] }
   plugins(name?: string) { return this.providers.describe(name) }
+  audit(record: PreparedMountRecord, actor: string, action: string, detail: string) {
+    this.persistence.audit(record, actor, action, { outcome: 'quarantined', detail })
+  }
   resourceReference(path: AbsolutePath) {
     const record = this.records.find(item => path.startsWith(`${item.path}/`))
     return record?.snapshot.resourceReferences?.[path.slice(record.path.length + 1)]

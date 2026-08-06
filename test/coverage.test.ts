@@ -73,12 +73,21 @@ test('path and framing helpers validate protocol input and normalize paths', () 
   const socket = { destroyed: false, write: (value: string) => writes.push(value), on: () => undefined }
   respond(socket as never, { version: 1, id: 1, result: { stdout: '', stderr: '', status: 0, session: { user: 'root', cwd: '/' } } })
   attachLines(socket as never, () => undefined); expect(writes[0]).toContain('"id":1')
+  try { parseRequest('{"version":2,"id":1,"command":"pwd"}') } catch (error) {
+    expect(requestFailure(error)).toEqual({ version: 1, id: 1,
+      error: { code: 'unsupported_version', message: 'Unsupported protocol version: 2' } })
+  }
 })
 
 test('shell variables expose only explicit session state', () => {
   const yafs = new Yafs()
   expect(variable(yafs, 'USER')).toBe('root'); expect(variable(yafs, 'PWD')).toBe('/home/root')
   expect(variable(yafs, 'UNDECLARED')).toBe('')
+})
+
+test('arithmetic expressions may be grouped with parentheses, and substitution embeds nested output', () => {
+  const yafs = new Yafs(); expect(yafs.exec('echo $(((2+3)-1))')).toBe('4')
+  expect(yafs.exec('echo hi > greeting')).toBe(''); expect(yafs.exec('echo $(cat greeting)')).toBe('hi')
 })
 
 function providerOrigin() {

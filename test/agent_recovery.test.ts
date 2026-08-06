@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
@@ -30,6 +30,24 @@ test('a malformed persisted agent record is inert during driver recovery', async
   expect(await client.exec('echo recovered')).toBe('recovered')
   await client.close(); await server.close()
 })
+
+test('a malformed persisted agent record is visibly quarantined, not silently inert', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'yafs-agents-quarantine-'))
+  await writeFile(join(directory, 'mounts.json'), JSON.stringify({ version: 1, mounts: [invalidAgent()] }))
+  const server = await YafsServer.start({ dataDir: directory, modelFor: () => fakeMessageModel([]) })
+  const client = await YashClient.connect(server.address())
+  const status = JSON.parse(await client.exec('plugins status'))
+  expect(status.active).toContainEqual({ id: 'agents', plugin: 'agent', path: '/home/root/agents',
+    state: 'active', quarantined: true })
+  const events = await audit(directory)
+  expect(events.filter(event => event.action === 'quarantine')).toHaveLength(1)
+  await client.close(); await server.close()
+})
+
+function audit(directory: string) {
+  return readFile(join(directory, 'audit.ndjson'), 'utf8')
+    .then(source => source.trim().split('\n').map(line => JSON.parse(line)))
+}
 
 function pendingModel() { return { complete: () => new Promise<string>(() => undefined) } }
 

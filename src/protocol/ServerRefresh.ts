@@ -8,11 +8,12 @@ export class ServerRefresh {
   private timer?: Timer
 
   constructor(private readonly mounts: MountManager, private readonly journal: Journal,
-    private readonly enqueue: (work: () => Promise<void>) => Promise<void>, now?: () => number) {
+    private readonly enqueue: (work: () => Promise<void>) => Promise<void>, now?: () => number,
+    private readonly intervalMs = 60_000) {
     this.scheduler = new MountRefreshScheduler(() => mounts.mounts(), record => this.schedule(record), now)
   }
 
-  start() { this.timer = setInterval(() => void this.due().catch(console.error), 60_000) }
+  start() { this.timer = setInterval(() => void this.due().catch(console.error), this.intervalMs) }
   close() { if (this.timer) clearInterval(this.timer) }
   due() { return this.scheduler.tick() }
 

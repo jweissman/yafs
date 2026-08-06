@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises'
 
 import { AbsolutePath } from '../core/AbsolutePath'
-import { PathResolver } from '../core/PathResolver'
+import { agentConfig } from '../agents/AgentManifest'
 import { parseManifest } from './Manifest'
 import { MountManager } from './MountManager'
+import { Change, DesiredMountChanges } from './DesiredMountChanges'
 import { ManifestMount, PreparedMountRecord } from './types'
 
 type Mutations = {
@@ -11,23 +12,36 @@ type Mutations = {
   refresh(record: PreparedMountRecord): void
   unmount(id: string): void
 }
-type Change = { id: string, action: 'activate' | 'refresh' | 'unmount' }
 type DesiredMountsOptions = { path?: string, root?: AbsolutePath }
 
 export class DesiredMounts {
   private readonly path?: string
   private readonly root: AbsolutePath
+  private readonly planner: DesiredMountChanges
 
   constructor(private readonly mounts: MountManager, options: DesiredMountsOptions = {}) {
     this.path = options.path; this.root = options.root || '/home/root'
+    this.planner = new DesiredMountChanges(this.root)
   }
 
   async status() { return this.report(await this.loaded()) }
-  async plan() { const loaded = await this.loaded(); return loaded ? this.changes(loaded) : [] }
+  async plan() { const loaded = await this.loaded(); return loaded ? this.changesFor(loaded) : [] }
   async apply(mutations: Mutations, prune = false) {
-    const loaded = await this.required(); const changes = this.changes(loaded, prune)
+    const loaded = await this.required(); const changes = this.changesFor(loaded, prune)
     for (const change of changes) await this.applyChange(change, loaded.manifest.mounts, mutations)
     return changes
+  }
+  async refreshOne(id: string, mutations: Mutations) {
+    const loaded = await this.required(); const change: Change = { id, action: this.forcedAction(id) }
+    await this.applyChange(change, loaded.manifest.mounts, mutations); return change
+  }
+
+  private changesFor(loaded: NonNullable<ReturnType<DesiredMounts['parse']>>, prune = false) {
+    return this.planner.plan(this.mounts.mounts(), loaded.manifest.mounts, prune)
+  }
+
+  private forcedAction(id: string): 'activate' | 'refresh' {
+    return this.mounts.mounts().some(record => record.id === id) ? 'refresh' : 'activate'
   }
 
   private async applyChange(change: Change, declarations: ManifestMount[], mutations: Mutations) {
@@ -62,45 +76,17 @@ export class DesiredMounts {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error } }
   private parse(source: string | undefined) { return source && parseManifest(source) }
   private report(loaded: ReturnType<DesiredMounts['parse']>) {
-    return { configured: Boolean(loaded), changes: loaded ? this.changes(loaded) : [], active: this.active() }
+    return { configured: Boolean(loaded), changes: loaded ? this.changesFor(loaded) : [], active: this.active() }
   }
-  private active() { return this.mounts.mounts().map(record => ({ id: record.id, plugin: record.provider,
-    path: record.path, state: record.state })) }
-  private changes(loaded: NonNullable<ReturnType<DesiredMounts['parse']>>, prune = false): Change[] {
-    const active = this.mounts.mounts(); const declared = loaded.manifest.mounts
-    this.assertUnique(declared)
-    return [...this.declaredChanges(declared, active), ...this.removals(declared, active, prune)]
+  private active() { return this.mounts.mounts().map(record => this.activeEntry(record)) }
+
+  private activeEntry(record: PreparedMountRecord) {
+    const entry = { id: record.id, plugin: record.provider, path: record.path, state: record.state }
+    return this.quarantined(record) ? { ...entry, quarantined: true } : entry
   }
 
-  private assertUnique(declared: ManifestMount[]) {
-    if (new Set(declared.map(item => item.id)).size !== declared.length) throw new Error('Duplicate desired mount id')
-  }
-
-  private declaredChanges(declared: ManifestMount[], active: PreparedMountRecord[]): Change[] {
-    return declared.flatMap(item => this.change(item, active.find(record => record.id === item.id)))
-  }
-
-  private change(item: ManifestMount, active: PreparedMountRecord | undefined): Change[] {
-    if (!active) return [{ id: item.id, action: 'activate' }]
-    return this.matches(item, active) ? [] : [{ id: item.id, action: 'refresh' }]
-  }
-
-  private matches(item: ManifestMount, active: PreparedMountRecord) {
-    return JSON.stringify(this.activeShape(active)) === JSON.stringify(this.declaredShape(item))
-  }
-
-  private activeShape(record: PreparedMountRecord) {
-    return [record.path, record.provider, record.config, record.capabilities, record.refreshIntervalMs]
-  }
-
-  private declaredShape(item: ManifestMount) {
-    return [PathResolver.resolve(item.path, this.root), item.provider, item.config,
-      item.capabilities, item.refreshIntervalMs]
-  }
-
-  private removals(declared: ManifestMount[], active: PreparedMountRecord[], prune: boolean): Change[] {
-    if (!prune) return []
-    return active.filter(record => !declared.some(item => item.id === record.id))
-      .map(record => ({ id: record.id, action: 'unmount' as const }))
+  private quarantined(record: PreparedMountRecord) {
+    if (record.provider !== 'agent') return false
+    try { agentConfig(record.config); return false } catch { return true }
   }
 }

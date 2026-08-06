@@ -24,10 +24,23 @@ test('the daemon reconciles its selected configuration without exposing a host p
   await writeFile(config, manifest('second'))
   expect(JSON.parse(await client.exec('plugins plan'))).toEqual([{ id: 'demo', action: 'refresh' }])
   await client.exec('plugins apply'); expect(await client.exec('cat demo/value.txt')).toBe('second')
-  await writeFile(config, '{"version":1,"plugins":[]}')
-  expect(JSON.parse(await client.exec('plugins plan'))).toEqual([])
-  expect(JSON.parse(await client.exec('plugins apply --prune'))).toEqual([{ id: 'demo', action: 'unmount' }])
+  await writeFile(config, onlyManifest('keep'))
+  expect(JSON.parse(await client.exec('plugins plan'))).toEqual([{ id: 'keep', action: 'activate' }])
+  expect(JSON.parse(await client.exec('plugins apply --prune'))).toEqual(
+    expect.arrayContaining([{ id: 'demo', action: 'unmount' }, { id: 'keep', action: 'activate' }]))
   await expect(client.exec('cat demo/value.txt')).rejects.toThrow('No such file')
+  await client.close(); await server.close()
+})
+
+test('plugins refresh forces republishing one plugin from desired config without a manifest path', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'yafs-desired-refresh-')); const config = join(directory, 'mounts.yaml')
+  await writeFile(config, manifest('first'))
+  const server = await YafsServer.start({ dataDir: directory, configPath: config })
+  const client = await YashClient.connect(server.address())
+  await client.exec('plugins apply'); expect(JSON.parse(await client.exec('plugins plan'))).toEqual([])
+  expect(JSON.parse(await client.exec('plugins refresh demo'))).toEqual({ id: 'demo', action: 'refresh' })
+  expect(await client.exec('cat demo/value.txt')).toBe('first')
+  await expect(client.exec('plugins refresh nope')).rejects.toThrow('No desired mount')
   await client.close(); await server.close()
 })
 
@@ -50,4 +63,8 @@ test('a daemon does not discover desired configuration inside its data directory
 function manifest(value: string) {
   return JSON.stringify({ version: 1, plugins: [{ id: 'demo', path: 'demo', plugin: 'fixture',
     config: { files: { 'value.txt': value } }, capabilities: [] }] })
+}
+
+function onlyManifest(id: string) {
+  return JSON.stringify({ version: 1, plugins: [{ id, path: id, plugin: 'fixture', config: { files: {} }, capabilities: [] }] })
 }

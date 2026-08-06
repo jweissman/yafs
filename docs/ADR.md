@@ -738,9 +738,30 @@ the virtual tree. It offers plan/apply/status against that selected
 configuration; deployment may override its location with `yafsd --config`.
 Apply is idempotent and pruning is explicit. This preserves a clear boundary:
 the VFS holds operator data, while the daemon configuration declares how the
-appliance should be brought up. A provider-packaged action/layout ABI is still
-deferred: the built-in agent's typed `ctl` action and Yash adapter prove the
-lifecycle, but are not yet a compatibility promise for third-party packages.
+appliance should be brought up. A provider-packaged action/layout interface is
+still deferred (this document previously called it an "ABI," which is the
+wrong word — there is no binary boundary here, only an in-process TypeScript
+contract; "ABI" implied a compatibility guarantee this project never made):
+the built-in agent's typed `ctl` action and Yash adapter prove the lifecycle,
+but are not yet a compatibility promise for third-party packages.
+
+Every built-in provider now implements `ProviderDefinition`
+(`name`/`capabilities()`/`prepare()`, optionally `actions()`/`exposures()`) as
+a complete, self-contained module — `FixturePlugin.ts`, `GitHubPlugin.ts`,
+`AgentPlugin.ts` — rather than being partly inlined in `ProviderRegistry`,
+which is now a thin registry with no provider-specific logic of its own.
+This closes a real gap found by inspection, not by design: `AgentPlugin.ts`
+used to export only the descriptive half of the interface (`actions()`/
+`exposures()`), while `capabilities()` and the actual snapshot-building logic
+lived as private, `.bind(this)`-attached methods on `ProviderRegistry`
+itself — meaning a plugin author couldn't actually write one file to define
+a provider, contrary to what the file's name implied. Fixture and GitHub had
+no separate file at all before this. `trace`'s correctness still silently
+depends on pointing it at the exact directory level a provider's
+`resourceReferences` happen to be keyed at (proven for GitHub: per-PR, not
+per-collection) — `ProviderDefinition` does not yet declare that boundary,
+so `trace` cannot validate against it. That's the next real gap, not yet
+closed.
 
 ### M6.1 concrete design: the cache falls out of the blob store, mostly
 
@@ -1059,7 +1080,7 @@ case.
 | M5 — review workspace                               | The product helps with a real task.                              | Bounded GitHub query collection, explicit/interval refresh, source revision/freshness, and local review artifacts bound to their source revision. **Mechanically complete and exercised against a real GitHub Enterprise Cloud repository; product-value evidence (repeated real use, not a single session) is still open — see "Extension gates."** |
 | M6 — durable artifacts and traces _(decision gate)_ | External work remains inspectable after the source view changes. | Durable content-addressed blobs, provider-neutral `trace`, local-only `reify`, replay-derived retention, and explicit serialized GC. **Complete, including a working `ctl`-triggered provider reifier against real GitHub; product-value evidence still open.** |
 | M6.1 — durable local cache _(decision gate)_        | Yafs is useful as an observable state service.                   | Durable local TTL cache, atomic replacement, expiry metadata, an explicit 1 MiB/value limit, serialized concurrent writes, and explicit expired-blob collection. **Bounded local slice complete; no active-entry eviction, upstream mirror, or public compatibility endpoint.**                                                                                                                                    |
-| M6.2 — provider/controller foundation _(delivery gate)_ | Provider views and actions share a safe lifecycle.            | Compositional built-in provider definitions; daemon-owned desired configuration; idempotent mount plan/apply; durable action acceptance; lifecycle-bound registration; and a context-bound one-shot review validation. **Foundation complete; a package-facing action/layout ABI remains deliberately deferred.** |
+| M6.2 — provider/controller foundation _(delivery gate)_ | Provider views and actions share a safe lifecycle.            | Compositional built-in provider definitions; daemon-owned desired configuration; idempotent mount plan/apply; durable action acceptance; lifecycle-bound registration; and a context-bound one-shot review validation. **Foundation complete; a package-facing action/layout interface remains deliberately deferred.** |
 | M7 — agent workspace _(decision gate)_              | An agent can work visibly and safely.                            | Durable runs, scoped context/capabilities, artifacts, restart behavior, audit trail. The existing one-shot `ctl` model round trip is an M6.2 experiment, not completion of this checkpoint.                                                    |
 | M8 — remote/multi-user _(decision gate)_            | The service works safely beyond localhost.                       | Authenticated transport, per-user authorization, quotas, remote Yash/SSH adapter, audit retention.                                                                                                                                                                                                                                                   |
 | M9 — runtime bridge _(decision gate)_               | Workspaces intentionally drive external processes.               | Allowlisted execution against materialized snapshots; staged imports with base-revision conflict checks and explicit commit.                                                                                                                                                                                                                         |
@@ -1167,6 +1188,17 @@ activate|refresh|deactivate` only for compatibility/development activation.
 The legacy `mount` terms remain accepted temporarily but are not the product
 model for new integrations.
 
+**Removal policy, decided now rather than left to drift:** `mount`/`mounts`/
+`provider:` (manifest field) are removed no later than M7 entry — the same
+gate that already requires `bun check` to pass with the M6.3 evidence above.
+Until then they are undocumented in `COMMANDS.md` (the `plugin`/`plugins`
+forms are the only ones taught) but remain functional and covered by tests,
+so existing `.yafsmeta` files and scripts keep working through the
+transition. If M7 work surfaces a concrete reason to keep one alias longer
+(e.g. an external integration depending on it), that's a decision to make
+explicitly against this policy, not a reason for the policy to silently not
+apply.
+
 The canonical external YAML uses `plugins:` with `plugin:` per instance. It is
 deployment input, selected by `yafsd --config`, and can be version-controlled;
 the WAL/VFS holds observed snapshots, audit, run state, and user data. A
@@ -1188,7 +1220,7 @@ an alternative action or authorization path.
   Writes remain mount-relative; "write outside this mount" is not a grant.
   Host execution stays the separate, allowlisted M9 bridge.
 - **Provider distribution:** M0–M5 use built-in trusted providers while the
-  ABI changes. Later, `yash add @org/provider` may use GitHub as a registry,
+  interface changes. Later, `yash add @org/provider` may use GitHub as a registry,
   but must resolve an immutable revision, record it in a lockfile, inspect a
   declarative manifest without executing code, and require explicit enablement
   and grants. Discovery is never installation or execution.

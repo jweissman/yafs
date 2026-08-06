@@ -7,6 +7,8 @@ import { YafsWorkspace } from './YafsWorkspace'
 import { TraceService } from './traces/TraceService'
 import { DesiredMounts } from './mounts/DesiredMounts'
 import { CacheService } from './cache/CacheService'
+import { agentPersonaPath } from './agents/AgentPersonaLookup'
+import { slackPluginPath } from './mounts/SlackPluginLookup'
 
 type Dependencies = {
   clock: Clock, user: () => string, pwd: () => AbsolutePath,
@@ -42,7 +44,13 @@ function inspects(workspace: YafsWorkspace) {
 
 function mounts({ mounts: manager, operations, desired }: Dependencies) {
   return { ...mountPlanning(manager), ...mountMutations(operations), ...desiredMounts(desired, operations),
-    plugins: (name?: string) => manager.plugins(name) }
+    ...pluginLookups(manager) }
+}
+
+function pluginLookups(manager: MountManager) {
+  return { plugins: (name?: string) => manager.plugins(name),
+    agentPersona: (reference: string) => agentPersonaPath(manager, reference),
+    slackPlugin: (id: string) => slackPluginPath(manager, id) }
 }
 
 function mountPlanning(manager: MountManager) {
@@ -54,13 +62,14 @@ function desiredMounts(desired: DesiredMounts | undefined, operations: YafsOpera
   return desired ? configuredDesiredMounts(desired, operations) : missingDesiredMounts()
 }
 function configuredDesiredMounts(desired: DesiredMounts, operations: YafsOperationQueue) {
-  const mutations = mountMutations(operations)
-  return { desiredStatus: () => desired.status(), desiredPlan: () => desired.plan(),
-    applyDesired: (prune = false) => desired.apply(mutations, prune) }
+  const mutations = mountMutations(operations); const applyDesired = (prune = false) => desired.apply(mutations, prune)
+  return { desiredStatus: () => desired.status(), desiredPlan: () => desired.plan(), applyDesired,
+    refreshDesired: (id: string) => desired.refreshOne(id, mutations) }
 }
 function missingDesiredMounts() {
+  const missing = () => Promise.reject(new Error('No daemon mount configuration'))
   return { desiredStatus: () => Promise.resolve({ configured: false }), desiredPlan: () => Promise.resolve([]),
-    applyDesired: () => Promise.reject(new Error('No daemon mount configuration')) }
+    applyDesired: missing, refreshDesired: missing }
 }
 function resourceReferences(manager: MountManager) {
   return { resourceReference: (path: AbsolutePath) => manager.resourceReference(path) }

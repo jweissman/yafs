@@ -19,6 +19,9 @@ test('MCP exposes a narrow read and inspection bridge over Yafs', async () => {
   expect(text(await request(server, 9, 'tools/call', { name: 'yafs.query', arguments: { source: 'echo nope > unsafe' } }))).toContain('not read-only')
   expect(text(await request(server, 10, 'tools/call', { name: 'yafs.query', arguments: { source: 'echo $(mkdir unsafe)' } }))).toContain('not read-only')
   expect(text(await request(server, 11, 'tools/call', { name: 'yafs.query', arguments: { source: 'cd work' } }))).toContain('not read-only')
+  expect(text(await request(server, 12, 'tools/call', { name: 'yafs.query', arguments: { source: 'plugins apply' } }))).toContain('not read-only')
+  expect(await request(server, 13, 'unknown/method')).toMatchObject({ error: { code: -32601 } })
+  expect(await server.receive({ jsonrpc: '2.0', method: 'notifications/initialized' })).toBeUndefined()
   await client.close()
 })
 

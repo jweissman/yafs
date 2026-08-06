@@ -7,8 +7,9 @@ import { traceCommands } from './TraceCommands'
 import { agentCommands } from './AgentCommands'
 import { cacheCommands } from './CacheCommands'
 import { pluginCommands } from './PluginCommands'
+import { slackCommands } from './SlackCommands'
 
 export function commands(): BuiltinCommand[] {
   return [...sessionCommands(), ...filesystemCommands(), ...textCommands(), ...inspectionCommands(),
-    ...pluginCommands(), ...traceCommands(), ...agentCommands(), ...cacheCommands()]
+    ...pluginCommands(), ...traceCommands(), ...agentCommands(), ...cacheCommands(), ...slackCommands()]
 }

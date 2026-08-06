@@ -12,8 +12,11 @@ class MountsCommand {
 }
 
 class PluginsCommand {
-  readonly name = 'plugins'; readonly synopsis = 'plugins [describe [NAME]|status|plan|apply [--prune]]'
-  readonly access = 'read'
+  readonly name = 'plugins'
+  readonly synopsis = 'plugins [describe [NAME]|status|plan|apply [--prune]|refresh ID]'
+  // apply/refresh mutate; access is per-command, not per-subcommand, so the whole
+  // command must stay non-'read' — matching how `mount` already treats `validate`.
+  readonly access = 'control'
 
   execute(context: CommandContext, args: string[]): string | Promise<string> {
     if (!args.length || args[0] === 'describe') return this.describe(context, args)
@@ -36,13 +39,19 @@ class PluginLifecycleCommand {
 
 function desired(context: CommandContext, args: string[]) {
   if (args[0] === 'apply') return context.applyDesired(args[1] === '--prune').then(JSON.stringify)
+  if (args[0] === 'refresh') return desiredRefresh(context, args[1])
   return desiredRead(context, args[0])
+}
+
+function desiredRefresh(context: CommandContext, id: string | undefined) {
+  if (!id) throw new Error('plugins refresh requires an id')
+  return context.refreshDesired(id).then(JSON.stringify)
 }
 
 function desiredRead(context: CommandContext, action: string) {
   if (action === 'status') return context.desiredStatus().then(JSON.stringify)
   if (action === 'plan') return context.desiredPlan().then(JSON.stringify)
-  throw new Error('plugins expects describe, status, plan, or apply [--prune]')
+  throw new Error('plugins expects describe, status, plan, apply [--prune], or refresh ID')
 }
 
 function lifecycle(context: CommandContext, args: string[], name: string, deactivate: string) {

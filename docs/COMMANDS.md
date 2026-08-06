@@ -101,7 +101,9 @@ A daemon configuration is external infrastructure-as-code, selected by
 `yafsd --config FILE` or `YAFS_CONFIG`; it has no implicit data-directory
 default. Its canonical YAML uses `plugins:` and each declaration uses `plugin:`. The older `mounts:`/
 `provider:` spelling and `mount` command remain temporary compatibility
-aliases; they are not the vocabulary for new integrations.
+aliases; they are not the vocabulary for new integrations, and are removed
+no later than M7 entry (see the ADR's "Capabilities, distribution, and
+adapters" removal policy) — don't build new tooling against them.
 
 ```yaml
 version: 1

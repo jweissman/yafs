@@ -8,6 +8,8 @@ class MemoryBlobStore implements BlobStore {
   private readonly blobs = new Map<string, Uint8Array>()
   private readonly owners = new Map<string, Set<string>>()
 
+  constructor() {}
+
   async put(bytes: Uint8Array) {
     const digest = sha256(bytes); if (!this.blobs.has(digest)) this.blobs.set(digest, bytes); return digest
   }

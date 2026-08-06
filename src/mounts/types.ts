@@ -6,8 +6,9 @@ export type FixtureConfig = { files: Record<string, string>, streams?: Record<st
 export type GitHubConfig = { repository: string, query: string, max: number }
 export type PersonaConfig = { prompt: string, endpoint?: string, model?: string }
 export type AgentConfig = { personas: Record<string, PersonaConfig>, endpoint?: string, model?: string }
-export type MountProvider = 'fixture' | 'github' | 'agent'
-export type MountConfig = FixtureConfig | GitHubConfig | AgentConfig
+export type SlackConfig = { channel: string, max?: number }
+export type MountProvider = 'fixture' | 'github' | 'agent' | 'slack'
+export type MountConfig = FixtureConfig | GitHubConfig | AgentConfig | SlackConfig
 export type PublishedSnapshot = {
   entries: [string, string][], fileCount: number, byteCount: number, resourceReferences?: Record<string, object>
 }

@@ -41,6 +41,18 @@ test('a 200 response with an unexpected shape reports the raw body, not just a g
   await expect(client.complete('system', 'message')).rejects.toThrow('no message content: {"ok":true}')
 })
 
+test('a 200 response whose body is not JSON at all still reports the raw body', async () => {
+  const client = new ChatCompletionClient({ apiUrl: 'http://localhost:1234/v1' },
+    async () => new Response('<html>gateway error</html>', { status: 200 }))
+  await expect(client.complete('system', 'message')).rejects.toThrow('no message content: <html>gateway error</html>')
+})
+
+test('a non-timeout connection failure propagates as-is instead of being relabeled', async () => {
+  const client = new ChatCompletionClient({ apiUrl: 'http://localhost:1234/v1' },
+    async () => { throw new Error('ECONNREFUSED') })
+  await expect(client.complete('system', 'message')).rejects.toThrow('ECONNREFUSED')
+})
+
 test('chatCompletionSettings defaults to the standard local endpoint and honors env overrides', () => {
   expect(chatCompletionSettings({})).toEqual({ apiUrl: 'http://localhost:1234/v1', model: undefined })
   const custom = chatCompletionSettings({ YAFS_LLM_BASE_URL: 'http://elsewhere:9999/v1/', YAFS_LLM_MODEL: 'llama' })
@@ -48,10 +60,13 @@ test('chatCompletionSettings defaults to the standard local endpoint and honors 
 })
 
 test('chatCompletionClientFor prefers persona config, then mount config, then the env default', () => {
-  const persona = chatCompletionClientFor({ prompt: 'p', endpoint: 'http://persona:1/v1' }, { endpoint: 'http://mount:1/v1' })
+  const persona = chatCompletionClientFor({ prompt: 'p', endpoint: 'http://persona:1/v1', model: 'a' },
+    { endpoint: 'http://mount:1/v1', model: 'b' })
   expect(persona).toBeInstanceOf(ChatCompletionClient)
-  const mountFallback = chatCompletionClientFor({ prompt: 'p' }, { endpoint: 'http://mount:1/v1' })
+  const mountFallback = chatCompletionClientFor({ prompt: 'p' }, { endpoint: 'http://mount:1/v1', model: 'b' })
   expect(mountFallback).toBeInstanceOf(ChatCompletionClient)
+  const envFallback = chatCompletionClientFor({ prompt: 'p' }, {})
+  expect(envFallback).toBeInstanceOf(ChatCompletionClient)
 })
 
 function fakeFetch(requests: Request[]) {

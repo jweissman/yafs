@@ -7,43 +7,33 @@ import { ModelClient } from './ChatCompletionClient'
 import { AgentRunStore } from './AgentRunStore'
 import { recoverAgentRuns } from './AgentRunRecovery'
 import { AgentRunCancellation, cancelId } from './AgentRunCancellation'
+import { AgentRegistration, validAgentConfig } from './AgentRegistration'
 import { agentError } from './AgentError'
 import { AgentRequest, completeAgent, parseAgentRequest } from './AgentRequest'
-import { agentConfig } from './AgentManifest'
 
 type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void
 type UnregisterCtl = (path: AbsolutePath) => void
 type ModelFor = (persona: PersonaConfig, mount: AgentConfig) => ModelClient
+type Enqueue = (work: () => Promise<void>) => Promise<void>
 type AgentTarget = { config: AgentConfig, persona: PersonaConfig }
 
 export class AgentDirectoryDriver {
   private readonly runs: AgentRunStore; private readonly cancels: AgentRunCancellation
-  private registered = new Set<AbsolutePath>()
+  private readonly registration: AgentRegistration
 
-  constructor(private readonly mounts: MountManager, journal: Journal,
-    enqueue: (work: () => Promise<void>) => Promise<void>, private readonly registerCtl: RegisterCtl,
-    private readonly unregisterCtl: UnregisterCtl, private readonly modelFor: ModelFor) {
+  constructor(private readonly mounts: MountManager, journal: Journal, enqueue: Enqueue,
+    registerCtl: RegisterCtl, unregisterCtl: UnregisterCtl, private readonly modelFor: ModelFor) {
     this.runs = new AgentRunStore(mounts, journal, enqueue); this.cancels = new AgentRunCancellation(mounts, this.runs)
+    this.registration = this.buildRegistration(registerCtl, unregisterCtl)
   }
-  close() { this.registered.forEach(path => this.unregisterCtl(path)); this.registered.clear() }
+
+  private buildRegistration(registerCtl: RegisterCtl, unregisterCtl: UnregisterCtl) {
+    return new AgentRegistration(this.mounts, registerCtl, unregisterCtl,
+      (mountId, name, payload) => this.invoke(mountId, name, payload))
+  }
+  close() { this.registration.close() }
   async recover() { return recoverAgentRuns(this.mounts, this.runs) }
-  sync() {
-    const paths = new Set<AbsolutePath>(); this.mounts.mounts().forEach(record => this.registerAgent(record, paths))
-    this.registered.forEach(path => { if (!paths.has(path)) this.unregisterCtl(path) }); this.registered = paths
-  }
-
-  private registerAgent(record: PreparedMountRecord, paths: Set<AbsolutePath>) {
-    if (record.provider !== 'agent') return
-    const config = this.validConfig(record.config)
-    if (config) Object.keys(config.personas).forEach(name => this.registerPersona(record, name, paths))
-  }
-  private validConfig(config: unknown) { try { return agentConfig(config) } catch { return undefined } }
-
-  private registerPersona(record: PreparedMountRecord, name: string, paths: Set<AbsolutePath>) {
-    const path = `${record.path}/${name}/ctl` as AbsolutePath
-    this.registerCtl(path, payload => this.invoke(record.id, name, payload))
-    paths.add(path)
-  }
+  sync() { this.registration.sync() }
 
   private async invoke(mountId: string, personaName: string, payload: string) {
     const cancellation = cancelId(payload)
@@ -58,7 +48,7 @@ export class AgentDirectoryDriver {
   }
 
   private async accept(mountId: string, personaName: string, request: AgentRequest) {
-    const startedAt = new Date().toISOString(); const runId = startedAt.replace(/[:.]/g, '-')
+    const startedAt = new Date().toISOString(); const runId = request.runId || startedAt.replace(/[:.]/g, '-')
     await this.runs.accept(mountId, personaName, runId, request.message, { state: 'queued', startedAt}, request.context)
     return { runId, startedAt }
   }
@@ -101,7 +91,7 @@ export class AgentDirectoryDriver {
   }
 
   private configuredAgent(record: PreparedMountRecord) {
-    const config = this.validConfig(record.config)
+    const config = validAgentConfig(record.config)
     if (!config) throw new Error(`Invalid persisted agent configuration: ${record.id}`)
     return config
   }

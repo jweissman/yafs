@@ -22,9 +22,12 @@ export type CommandContext = {
   resourceReference(path: AbsolutePath): object | undefined;
   mounts(): string[];
   plugins(name?: string): object[];
+  agentPersona(reference: string): AbsolutePath;
+  slackPlugin(id: string): AbsolutePath;
   desiredStatus(): Promise<object>;
   desiredPlan(): Promise<object[]>;
   applyDesired(prune?: boolean): Promise<object[]>;
+  refreshDesired(id: string): Promise<object>;
   planMount(path: AbsolutePath, id?: string): MountRecord;
   prepareMount(record: MountRecord): PreparedMountRecord | Promise<PreparedMountRecord>;
   planRefresh(path: AbsolutePath, id?: string): PreparedMountRecord | Promise<PreparedMountRecord>;

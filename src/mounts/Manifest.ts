@@ -3,6 +3,8 @@ import { parseDocument } from 'yaml'
 import { Manifest, ManifestMount } from './types'
 import { fixtureStreams } from './FixtureStreamManifest'
 import { agentConfig } from '../agents/AgentManifest'
+import { slackConfig } from './SlackManifest'
+import { githubConfig } from './GitHubManifest'
 import { object, only, relative } from './ManifestValidation'
 import { declarationsFor, pluginName } from './ManifestPlugins'
 
@@ -68,7 +70,8 @@ function mountIdentity(mount: Record<string, unknown>, provider: ManifestMount['
 
 function config(provider: ManifestMount['provider'], value: unknown) {
   if (provider === 'fixture') return fixture(value)
-  return provider === 'agent' ? agentConfig(value) : github(value)
+  if (provider === 'agent') return agentConfig(value)
+  return provider === 'slack' ? slackConfig(value) : githubConfig(value)
 }
 
 function validateMountFields(mount: Record<string, unknown>) {
@@ -88,25 +91,9 @@ function validFixtureFiles(value: unknown) {
   if (!valid) throw new Error('Invalid fixture files'); return files as Record<string, string>
 }
 
-function github(value: unknown) {
-  const config = object(value, 'github config'); only(config, ['repository', 'query', 'max'], 'github config')
-  return githubConfig(config)
-}
-
-function githubConfig(config: Record<string, unknown>) {
-  const max = config.max; if (!validGitHubConfig(config.repository, config.query, max)) throw new Error('Invalid github config')
-  return { repository: config.repository as string, query: config.query as string, max: max as number }
-}
-function validGitHubConfig(repositoryValue: unknown, query: unknown, max: unknown) {
-  return repository(repositoryValue) && typeof query === 'string' && Number.isInteger(max)
-    && typeof max === 'number' && max >= 1 && max <= 100
-}
-
 function provider(value: unknown): value is ManifestMount['provider'] {
-  return value === 'fixture' || value === 'github' || value === 'agent'
+  return value === 'fixture' || value === 'github' || value === 'agent' || value === 'slack'
 }
-
-function repository(value: unknown): value is string { return typeof value === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value) }
 
 function interval(value: unknown) {
   if (value === undefined) return undefined
