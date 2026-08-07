@@ -1,7 +1,7 @@
-import { NodeStore } from './vfs/NodeStore';
-import { PathResolver } from './core/PathResolver';
-import { AbsolutePath } from './core/AbsolutePath';
-import { User } from './types/User';
+import { NodeStore } from "./vfs/NodeStore";
+import { PathResolver } from "./core/PathResolver";
+import { AbsolutePath } from "./core/AbsolutePath";
+import { User } from "./types/User";
 
 export class Shell {
   store: NodeStore;
@@ -13,11 +13,16 @@ export class Shell {
   }
 
   cd(path: string) {
-    const absolutePath: AbsolutePath = PathResolver.resolve(path, this.pwd); if (!this.store.get(absolutePath)?.dir) throw new Error(`No such directory: ${absolutePath}`);
+    const absolutePath: AbsolutePath = PathResolver.resolve(path, this.pwd);
+    if (!this.store.get(absolutePath)?.dir) {
+      throw new Error(`No such directory: ${absolutePath}`);
+    }
     this.pwd = absolutePath;
   }
 
-  enter(path: AbsolutePath) { this.pwd = path }
+  enter(path: AbsolutePath) {
+    this.pwd = path;
+  }
 
   resolve(path: string): AbsolutePath {
     return PathResolver.resolve(path, this.pwd);

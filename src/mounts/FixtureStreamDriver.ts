@@ -1,110 +1,148 @@
-import { AbsolutePath } from '../core/AbsolutePath'
-import { CtlHandler } from '../protocol/CtlDispatch'
-import { Journal } from '../protocol/Journal'
-import { MountManager } from './MountManager'
-import { FixtureConfig, PreparedMountRecord, StreamSpec } from './types'
+import { Journal } from "../protocol/Journal";
+import { MountManager } from "./MountManager";
+import { FixtureConfig, PreparedMountRecord, StreamSpec } from "./types";
+import { commitDelivery, Delivery } from "./FixtureStreamCommit";
+import {
+  FixtureStreamRegistration,
+  RegisterCtl,
+  UnregisterCtl,
+} from "./FixtureStreamRegistration";
 
-const POLL_MS = 50
+const POLL_MS = 50;
+type Ctl = { registerCtl: RegisterCtl; unregisterCtl: UnregisterCtl };
 
 export class FixtureStreamDriver {
-  private timer?: Timer
-  private registered = new Set<AbsolutePath>()
+  private timer?: Timer;
+  private readonly registration: FixtureStreamRegistration;
 
-  constructor(private readonly mounts: MountManager, private readonly journal: Journal,
+  constructor(
+    private readonly mounts: MountManager,
+    private readonly journal: Journal,
     private readonly enqueue: (work: () => Promise<void>) => Promise<void>,
-    private readonly registerCtl: (path: AbsolutePath, handler: CtlHandler) => void,
-    private readonly unregisterCtl: (path: AbsolutePath) => void,
-    private readonly now = () => Date.now()) {}
+    ctl: Ctl,
+    private readonly now = () => Date.now(),
+  ) {
+    this.registration = new FixtureStreamRegistration(
+      mounts,
+      ctl.registerCtl,
+      ctl.unregisterCtl,
+      (mountId, payload) => this.restart(mountId, payload),
+    );
+  }
 
-  start() { this.sync(); this.timer = setInterval(() => this.tick(), POLL_MS) }
-  close() { if (this.timer) clearInterval(this.timer); this.clearControls() }
+  start() {
+    this.sync();
+    this.timer = setInterval(() => this.tick(), POLL_MS);
+  }
+  close() {
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+    this.registration.clear();
+  }
 
   sync() {
-    const paths = this.currentControls(); this.unregisterMissing(paths); this.registered = paths
+    this.registration.sync();
   }
 
-  private currentControls() {
-    const paths = new Set<AbsolutePath>(); this.mounts.mounts().forEach(record => this.registerRecord(record, paths))
-    return paths
-  }
-
-  private unregisterMissing(paths: Set<AbsolutePath>) {
-    this.registered.forEach(path => { if (!paths.has(path)) this.unregisterCtl(path) })
-  }
-
-  private clearControls() { this.registered.forEach(path => this.unregisterCtl(path)); this.registered.clear() }
-
-  private tick() { this.sync(); this.mounts.mounts().forEach(record => this.tickRecord(record)) }
-
-  private registerRecord(record: PreparedMountRecord, paths: Set<AbsolutePath>) {
-    if (record.provider !== 'fixture') return
-    const streams = (record.config as FixtureConfig).streams || {}
-    if (Object.keys(streams).length) paths.add(this.registerStreamCtl(record))
+  private tick() {
+    this.sync();
+    this.mounts.mounts().forEach((record) => this.tickRecord(record));
   }
 
   private tickRecord(record: PreparedMountRecord) {
-    if (record.provider !== 'fixture') return
-    const streams = (record.config as FixtureConfig).streams || {}
-    Object.entries(streams).forEach(([path, spec]) => this.tickStream(record, path, spec))
+    if (record.provider !== "fixture") {
+      return;
+    }
+    const streams = (record.config as FixtureConfig).streams || {};
+    Object.entries(streams).forEach(([path, spec]) =>
+      this.tickStream(record, path, spec),
+    );
   }
 
-  private registerStreamCtl(record: PreparedMountRecord): AbsolutePath {
-    const path = this.ctlPath(record); this.registerCtl(path, payload => this.restart(record.id, payload)); return path
+  private tickStream(
+    record: PreparedMountRecord,
+    path: string,
+    spec: StreamSpec,
+  ) {
+    const delivery = this.pendingDelivery(record, path, spec);
+    if (delivery) {
+      void this.enqueue(() => this.commit(delivery));
+    }
   }
 
-  private ctlPath(record: PreparedMountRecord): AbsolutePath { return `${record.path}/ctl` as AbsolutePath }
-
-  private tickStream(record: PreparedMountRecord, path: string, spec: StreamSpec) {
-    const content = this.content(record, path); const index = this.deliveredCount(content, spec.chunks)
-    if (index >= spec.chunks.length || !this.due(record, spec.intervalMs)) return
-    void this.enqueue(() => this.commit(record, path, content + spec.chunks[index], index + 1))
+  private pendingDelivery(
+    record: PreparedMountRecord,
+    path: string,
+    spec: StreamSpec,
+  ): Delivery | undefined {
+    const content = this.content(record, path);
+    const index = this.deliveredCount(content, spec.chunks);
+    const due = index < spec.chunks.length && this.due(record, spec.intervalMs);
+    return due
+      ? nextDelivery(record, path, content, spec.chunks[index], index)
+      : undefined;
   }
 
   private content(record: PreparedMountRecord, path: string): string {
-    return record.snapshot.entries.find(([entryPath]) => entryPath === path)?.[1] || ''
+    const found = record.snapshot.entries.find(
+      ([entryPath]) => entryPath === path,
+    );
+    return found?.[1] || "";
   }
 
   private deliveredCount(content: string, chunks: string[]): number {
-    let cumulative = ''; let count = 0
-    for (const chunk of chunks) { if (!content.startsWith(cumulative + chunk)) break; cumulative += chunk; count++ }
-    return count
+    let cumulative = "";
+    let count = 0;
+    for (const chunk of chunks) {
+      if (!content.startsWith(cumulative + chunk)) {
+        break;
+      }
+      cumulative += chunk;
+      count++;
+    }
+    return count;
   }
 
   private due(record: PreparedMountRecord, intervalMs: number): boolean {
-    const baseline = record.fetchedAt || record.activatedAt
-    return !baseline || this.now() - Date.parse(baseline) >= intervalMs
+    const baseline = record.fetchedAt || record.activatedAt;
+    return !baseline || this.now() - Date.parse(baseline) >= intervalMs;
   }
 
   private async restart(mountId: string, payload: string) {
-    const record = this.mounts.mounts().find(item => item.id === mountId); if (!record) return
-    const path = this.restartTarget(payload, (record.config as FixtureConfig).streams || {})
-    await this.commit(record, path, '', 0)
+    const record = this.mounts.mounts().find((item) => item.id === mountId);
+    if (!record) {
+      return;
+    }
+    const path = this.restartTarget(
+      payload,
+      (record.config as FixtureConfig).streams || {},
+    );
+    await this.commit({ record, path, content: "", count: 0 });
   }
 
-  private restartTarget(payload: string, streams: Record<string, StreamSpec>): string {
-    const path = (JSON.parse(payload) as { restart?: unknown }).restart
-    if (typeof path !== 'string' || !(path in streams)) throw new Error(`Invalid restart action: ${payload}`)
-    return path
+  private restartTarget(
+    payload: string,
+    streams: Record<string, StreamSpec>,
+  ): string {
+    const path = (JSON.parse(payload) as { restart?: unknown }).restart;
+    if (typeof path !== "string" || !(path in streams)) {
+      throw new Error(`Invalid restart action: ${payload}`);
+    }
+    return path;
   }
 
-  private async commit(record: PreparedMountRecord, path: string, content: string, count: number) {
-    const fresh = this.mounts.mounts().find(item => item.id === record.id); if (!fresh) return
-    const updated = this.appended(fresh, path, content, count)
-    await this.journal.commit([{ type: 'refresh', record: updated, at: new Date().toISOString() }]); this.mounts.refresh(updated, 'system')
+  private commit(delivery: Delivery) {
+    return commitDelivery(this.mounts, this.journal, delivery);
   }
+}
 
-  private appended(record: PreparedMountRecord, path: string, content: string, count: number): PreparedMountRecord {
-    const entries = this.withContent(record.snapshot.entries, path, content)
-    const fields = { fetchedAt: new Date().toISOString(), revision: this.revision(record, count) }
-    return { ...record, ...fields, snapshot: { ...record.snapshot, entries } }
-  }
-
-  private revision(record: PreparedMountRecord, count: number) {
-    return `${record.manifestDigest.slice(0, 12)}:${count}`
-  }
-
-  private withContent(entries: [string, string][], path: string, content: string): [string, string][] {
-    if (!entries.some(([entryPath]) => entryPath === path)) return [...entries, [path, content]]
-    return entries.map(([entryPath, value]) => [entryPath, entryPath === path ? content : value])
-  }
+function nextDelivery(
+  record: PreparedMountRecord,
+  path: string,
+  content: string,
+  chunk: string,
+  index: number,
+): Delivery {
+  return { record, path, content: content + chunk, count: index + 1 };
 }

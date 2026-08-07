@@ -1,110 +1,164 @@
-import { NodeStore } from './vfs/NodeStore';
-import { User } from './types/User';
-import { Shell } from './Shell';
-import { ExecutionResult } from './types/ExecutionResult';
-import { ExecutionPlan } from './types/ExecutionPlan';
-import { BuiltinCommand } from './commands/BuiltinCommand';
-import { Interpreter } from './lang/Interpreter';
-import { Clock, systemClock } from './core/Clock';
-import { builtinCommands } from './commands/registry';
-import { MountManager } from './mounts/MountManager';
-import { YafsOperationQueue } from './YafsOperationQueue';
-import { YafsWorkspace } from './YafsWorkspace';
-import { execute, executeAsync, executeWrite, planCache, planExecution, planExecutionAsync, planWrite } from './YafsExecution';
-import { YafsCommandRuntime } from './YafsCommandRuntime';
-import { BlobStore } from './protocol/BlobStore';
-import { memoryBlobStore } from './protocol/MemoryBlobStore';
-import { TraceService } from './traces/TraceService';
-import { DesiredMounts } from './mounts/DesiredMounts';
-import { CacheService } from './cache/CacheService';
+import { NodeStore } from "./vfs/NodeStore";
+import { User } from "./types/User";
+import { Shell } from "./Shell";
+import { ExecutionResult } from "./types/ExecutionResult";
+import { ExecutionPlan } from "./types/ExecutionPlan";
+import { BuiltinCommand } from "./commands/BuiltinCommand";
+import { Interpreter } from "./lang/Interpreter";
+import { Clock, systemClock } from "./core/Clock";
+import { builtinCommands } from "./commands/registry";
+import { MountManager } from "./mounts/MountManager";
+import { YafsOperationQueue } from "./YafsOperationQueue";
+import { YafsWorkspace } from "./YafsWorkspace";
+import {
+  execute,
+  executeAsync,
+  executeWrite,
+  planCache,
+  planExecution,
+  planExecutionAsync,
+  planWrite,
+} from "./YafsExecution";
+import { YafsCommandRuntime } from "./YafsCommandRuntime";
+import { BlobStore } from "./protocol/BlobStore";
+import { memoryBlobStore } from "./protocol/MemoryBlobStore";
+import { TraceService } from "./traces/TraceService";
+import { DesiredMounts } from "./mounts/DesiredMounts";
+import { CacheService } from "./cache/CacheService";
 
 type YafsOptions = {
-  store?: NodeStore, user?: User, clock?: Clock, mounts?: MountManager, blobs?: BlobStore,
-  traces?: TraceService, cache?: CacheService, desired?: DesiredMounts
-}
+  store?: NodeStore;
+  user?: User;
+  clock?: Clock;
+  mounts?: MountManager;
+  blobs?: BlobStore;
+  traces?: TraceService;
+  cache?: CacheService;
+  desired?: DesiredMounts;
+};
 
 export default class Yafs {
-  store: NodeStore
-  user: User
-  shell: Shell
-  interpreter: Interpreter
-  mounts: MountManager
-  builtins = new Map<string, BuiltinCommand>()
-  workspace: YafsWorkspace
-  operationQueue: YafsOperationQueue
-  clock: Clock
-  blobs: BlobStore
-  traces: TraceService
-  cache: CacheService
-  desired?: DesiredMounts
-  commands = new YafsCommandRuntime(this)
+  store: NodeStore;
+  user: User;
+  shell: Shell;
+  interpreter: Interpreter;
+  mounts: MountManager;
+  builtins = new Map<string, BuiltinCommand>();
+  workspace: YafsWorkspace;
+  operationQueue: YafsOperationQueue;
+  clock: Clock;
+  blobs: BlobStore;
+  traces: TraceService;
+  cache: CacheService;
+  desired?: DesiredMounts;
+  commands = new YafsCommandRuntime(this);
 
   constructor(options: YafsOptions = {}) {
-    this.initialize(options)
+    this.initialize(options);
   }
 
   private initialize(options: YafsOptions) {
-    this.clock = options.clock || systemClock; this.store = options.store || new NodeStore(this.clock)
-    this.initializeTraces(options); this.configure(options)
+    this.clock = options.clock || systemClock;
+    this.store = options.store || new NodeStore(this.clock);
+    this.initializeTraces(options);
+    this.configure(options);
   }
   private initializeTraces(options: YafsOptions) {
-    this.blobs = options.blobs || memoryBlobStore()
-    this.traces = options.traces || new TraceService(this.blobs)
-    this.cache = options.cache || new CacheService(this.blobs)
+    this.blobs = options.blobs || memoryBlobStore();
+    this.traces = options.traces || new TraceService(this.blobs);
+    this.cache = options.cache || new CacheService(this.blobs);
   }
 
   private configure(options: YafsOptions) {
-    this.user = options.user || { name: 'root' }
-    this.configureMounts(options)
-    this.initializeShell(); this.initializeWorkspace(); this.initializeOperations()
+    this.user = options.user || { name: "root" };
+    this.configureMounts(options);
+    this.initializeShell();
+    this.initializeWorkspace();
+    this.initializeOperations();
   }
 
   private configureMounts(options: YafsOptions) {
-    this.mounts = options.mounts || new MountManager(this.store); this.desired = options.desired
+    this.mounts = options.mounts || new MountManager(this.store);
+    this.desired = options.desired;
   }
 
   private initializeWorkspace() {
-    this.workspace = new YafsWorkspace(this.shell, this.store, () => this.mounts.mounts())
+    this.workspace = new YafsWorkspace(this.shell, this.store, () =>
+      this.mounts.mounts(),
+    );
   }
   private initializeOperations() {
-    this.operationQueue = new YafsOperationQueue(this.store, this.mounts, this.clock,
-      () => this.user.name)
+    this.operationQueue = new YafsOperationQueue(
+      this.store,
+      this.mounts,
+      this.clock,
+      () => this.user.name,
+    );
   }
 
   private initializeShell() {
-    this.shell = new Shell(this.user, this.store)
-    this.interpreter = new Interpreter(); this.registerBuiltins()
+    this.shell = new Shell(this.user, this.store);
+    this.interpreter = new Interpreter();
+    this.registerBuiltins();
   }
 
-  static exec(input: string) { return new Yafs().exec(input) }
+  static exec(input: string) {
+    return new Yafs().exec(input);
+  }
 
   exec(input: string): string {
-    const result = execute(this, input)
-    if (result.error) throw new Error(result.error.message)
-    return result.stdout
+    const result = execute(this, input);
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+    return result.stdout;
   }
 
-  execute(input: string): ExecutionResult { return execute(this, input) }
-  executeAsync(input: string): Promise<ExecutionResult> { return executeAsync(this, input) }
-  executeWrite(path: string, content: string): ExecutionResult { return executeWrite(this, path, content) }
+  execute(input: string): ExecutionResult {
+    return execute(this, input);
+  }
+  executeAsync(input: string): Promise<ExecutionResult> {
+    return executeAsync(this, input);
+  }
+  executeWrite(path: string, content: string): ExecutionResult {
+    return executeWrite(this, path, content);
+  }
 
-  apply(operations: import('./vfs/VfsOperation').VfsOperation[]) { this.operationQueue.apply(operations) }
+  apply(operations: import("./vfs/VfsOperation").VfsOperation[]) {
+    this.operationQueue.apply(operations);
+  }
 
-  plan(input: string): ExecutionPlan { return planExecution(this, input) }
-  planAsync(input: string): Promise<ExecutionPlan> { return planExecutionAsync(this, input) }
-  planWrite(path: string, content: string): ExecutionPlan { return planWrite(this, path, content) }
-  planCache(request: import('./cache/CacheRequest').CacheRequest) { return planCache(this, request) }
+  plan(input: string): ExecutionPlan {
+    return planExecution(this, input);
+  }
+  planAsync(input: string): Promise<ExecutionPlan> {
+    return planExecutionAsync(this, input);
+  }
+  planWrite(path: string, content: string): ExecutionPlan {
+    return planWrite(this, path, content);
+  }
+  planCache(request: import("./cache/CacheRequest").CacheRequest) {
+    return planCache(this, request);
+  }
 
-  handle(command: import('./types/Command').Command): string { return this.commands.handle(command) }
-  handleAsync(command: import('./types/Command').Command) { return this.commands.handleAsync(command) }
+  handle(command: import("./types/Command").Command): string {
+    return this.commands.handle(command);
+  }
+  handleAsync(command: import("./types/Command").Command) {
+    return this.commands.handleAsync(command);
+  }
 
   requiredArg(command: string, args: string[], index: number): string {
-    const value = args[index]
-    if (!value) throw new Error(`${command} requires argument ${index + 1}`)
-    return value
+    const value = args[index];
+    if (!value) {
+      throw new Error(`${command} requires argument ${index + 1}`);
+    }
+    return value;
   }
 
   private registerBuiltins() {
-    this.builtins = new Map(builtinCommands().map(command => [command.name, command]))
+    this.builtins = new Map(
+      builtinCommands().map((command) => [command.name, command]),
+    );
   }
 }

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "docs": "uvx --with mkdocs-material mkdocs serve",
+    "fmt": "bunx prettier src test --write && eslint --fix .",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "yafsd": "bun run src/yafsd.ts",

@@ -1,124 +1,168 @@
-import { mkdir, open, readFile } from 'node:fs/promises'
-import { spawn, type ChildProcess } from 'node:child_process'
-import { clearState, currentState, paths, writeState } from './daemon'
-import { configArgument, restartConfig, selectedConfig } from './DaemonConfig'
-import { YashClient } from './protocol/client'
-import { YafsServer } from './protocol/server'
+import { mkdir, open, readFile } from "node:fs/promises";
+import { spawn, type ChildProcess } from "node:child_process";
+import { clearState, currentState, paths, writeState } from "./daemon";
+import { configArgument, restartConfig, selectedConfig } from "./DaemonConfig";
+import { YafsServer } from "./protocol/server";
+import { delay, managedState, waitForStop } from "./DaemonHealth";
 
-const command = process.argv[2] || 'serve'
-const settings = { host: process.env.YAFS_HOST || '127.0.0.1', port: Number(process.env.YAFS_PORT || 7337),
-  dataDir: process.env.YAFS_DATA_DIR || '.yafs', configPath: selectedConfig(process.argv, process.env) }
-const statePaths = paths(settings.dataDir)
-await ({ serve, start, stop, restart, status }[command] || usage)()
+const command = process.argv[2] || "serve";
+const settings = {
+  host: process.env.YAFS_HOST || "127.0.0.1",
+  port: Number(process.env.YAFS_PORT || 7337),
+  dataDir: process.env.YAFS_DATA_DIR || ".yafs",
+  configPath: selectedConfig(process.argv, process.env),
+};
+const statePaths = paths(settings.dataDir);
+await ({ serve, start, stop, restart, status }[command] || usage)();
 async function serve() {
-  if (await managedState()) throw new Error(`yafsd already running for ${statePaths.directory}`)
-  const server = await startServer(); const state = await announce(server)
-  await waitForSignal(); await server.close(); await clearState(statePaths.state, state.instanceId)
+  if (await managedState(statePaths.state)) {
+    throw new Error(`yafsd already running for ${statePaths.directory}`);
+  }
+  const server = await startServer();
+  const state = await announce(server);
+  await waitForSignal();
+  await server.close();
+  await clearState(statePaths.state, state.instanceId);
 }
 async function startServer() {
-  try { return await YafsServer.start(settings) }
-  catch (error) { throw isAddressInUse(error) ? addressInUseError() : error }
+  try {
+    return await YafsServer.start(settings);
+  } catch (error) {
+    throw isAddressInUse(error) ? addressInUseError() : error;
+  }
 }
 
 function isAddressInUse(error: unknown) {
-  return Boolean(error && typeof error === 'object' && (error as NodeJS.ErrnoException).code === 'EADDRINUSE')
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    (error as NodeJS.ErrnoException).code === "EADDRINUSE",
+  );
 }
 
 function addressInUseError() {
-  return new Error(`Port ${settings.host}:${settings.port} is already in use; another yafsd `
-    + '(perhaps a different data directory, or one started outside this lifecycle) may already be listening')
+  return new Error(
+    `Port ${settings.host}:${settings.port} is already in use; another yafsd ` +
+      "(perhaps a different data directory, or one started outside this lifecycle) may already be listening",
+  );
 }
 
 async function announce(server: YafsServer) {
-  const address = server.address(); const state = await writeState(statePaths.state, address, settings.configPath)
-  console.log(`yafsd listening on ${address.host}:${address.port}; data: ${statePaths.directory}`); return state
+  const address = server.address();
+  const state = await writeState(
+    statePaths.state,
+    address,
+    settings.configPath,
+  );
+  console.log(
+    `yafsd listening on ${address.host}:${address.port}; data: ${statePaths.directory}`,
+  );
+  return state;
 }
 
 async function start(configPath = settings.configPath) {
-  if (await managedState()) return report('running')
-  const child = await launch(configPath)
-  await waitForState(child); report('started')
+  if (await managedState(statePaths.state)) {
+    return report("running");
+  }
+  const child = await launch(configPath);
+  await waitForState(child);
+  report("started");
 }
 
 async function launch(configPath?: string) {
-  await mkdir(statePaths.directory, { recursive: true }); return detach(await open(statePaths.log, 'a'), configPath)
+  await mkdir(statePaths.directory, { recursive: true });
+  return detach(await open(statePaths.log, "a"), configPath);
 }
 
 function detach(log: Awaited<ReturnType<typeof open>>, configPath?: string) {
-  const child = spawn(process.execPath, [import.meta.path, 'serve', ...configArgument(configPath)],
-    { detached: true, stdio: ['ignore', log.fd, log.fd], env: process.env }); child.unref(); void log.close(); return child
+  const child = spawn(
+    process.execPath,
+    [import.meta.path, "serve", ...configArgument(configPath)],
+    { detached: true, stdio: ["ignore", log.fd, log.fd], env: process.env },
+  );
+  child.unref();
+  void log.close();
+  return child;
 }
 
 async function stop() {
-  const state = await managedState(); if (!state) return report('stopped')
-  process.kill(state.pid, 'SIGTERM'); await waitForStop(state.pid); await clearState(statePaths.state, state.instanceId); report('stopped')
+  const state = await managedState(statePaths.state);
+  if (!state) {
+    return report("stopped");
+  }
+  process.kill(state.pid, "SIGTERM");
+  await waitForStop(statePaths.state, state.pid);
+  await clearState(statePaths.state, state.instanceId);
+  report("stopped");
 }
 
 async function restart() {
-  const configPath = restartConfig(settings.configPath, await managedState())
-  await stop(); await start(configPath)
+  const configPath = restartConfig(
+    settings.configPath,
+    await managedState(statePaths.state),
+  );
+  await stop();
+  await start(configPath);
 }
 
-async function status() { report(await managedState() ? 'running' : 'stopped') }
+async function status() {
+  report((await managedState(statePaths.state)) ? "running" : "stopped");
+}
 
-function usage(): never { throw new Error('Usage: yafsd [serve|start|stop|restart|status] [--config FILE]') }
+function usage(): never {
+  throw new Error(
+    "Usage: yafsd [serve|start|stop|restart|status] [--config FILE]",
+  );
+}
 
-function report(value: string) { console.log(`yafsd ${value}; data: ${statePaths.directory}`) }
+function report(value: string) {
+  console.log(`yafsd ${value}; data: ${statePaths.directory}`);
+}
 
 async function waitForState(child: ChildProcess) {
-  for (let count = 0; count < 30; count++) { if (await tick(child)) return; await delay(100) }
-  throw new Error(`Timed out starting yafsd; see ${statePaths.log}`)
+  for (let count = 0; count < 30; count++) {
+    if (await tick(child)) {
+      return;
+    }
+    await delay(100);
+  }
+  throw new Error(`Timed out starting yafsd; see ${statePaths.log}`);
 }
 
 async function tick(child: ChildProcess) {
-  if (await currentState(statePaths.state)) return true
-  if (child.exitCode !== null) throw await startupFailure(); return false
+  if (await currentState(statePaths.state)) {
+    return true;
+  }
+  if (child.exitCode !== null) {
+    throw await startupFailure();
+  }
+  return false;
 }
 
 async function startupFailure() {
-  return new Error((await errorLine()) || `yafsd failed to start; see ${statePaths.log}`)
+  return new Error(
+    (await errorLine()) || `yafsd failed to start; see ${statePaths.log}`,
+  );
 }
 
 async function errorLine() {
-  try { return lastError(await readFile(statePaths.log, 'utf8')) } catch { return undefined }
+  try {
+    return lastError(await readFile(statePaths.log, "utf8"));
+  } catch {
+    return undefined;
+  }
 }
 
 function lastError(content: string) {
-  const line = [...content.trim().split('\n')].reverse().find(entry => entry.startsWith('error:'))
-  return line && `yafsd failed to start: ${line.slice('error:'.length).trim()}`
+  const line = [...content.trim().split("\n")]
+    .reverse()
+    .find((entry) => entry.startsWith("error:"));
+  return line && `yafsd failed to start: ${line.slice("error:".length).trim()}`;
 }
 
-async function managedState() {
-  const state = await currentState(statePaths.state)
-  if (!state || await responds(state)) return state
-  throw new Error(`Recorded yafsd PID ${state.pid} is live but its endpoint is unavailable; refuse to signal it`)
+function waitForSignal() {
+  return new Promise<void>((resolve) => {
+    process.once("SIGINT", resolve);
+    process.once("SIGTERM", resolve);
+  });
 }
-
-async function responds(state: { host: string, port: number }) {
-  for (let i = 0; i < 3; i++) { if (await probe(state)) return true; if (i < 2) await pause() }
-  return false
-}
-
-function pause() { return delay(150) }
-
-async function probe(state: { host: string, port: number }) {
-  try { const client = await YashClient.connect(state); await client.exec('version'); await client.close(); return true } catch { return false }
-}
-
-async function waitForStop(pid: number) { await waitUntil(() => !currentState(statePaths.state) || !processAlive(pid), 'Timed out stopping yafsd') }
-
-async function waitUntil(check: () => Promise<unknown> | unknown, message: string) {
-  for (let count = 0; count < 30; count++) { if (await check()) return; await delay(100) }
-  throw new Error(message)
-}
-
-function processAlive(pid: number) {
-  try { process.kill(pid, 0); return true }
-  catch { return false }
-}
-
-function delay(milliseconds: number) {
-  return new Promise(resolve => setTimeout(resolve, milliseconds))
-}
-
-function waitForSignal() { return new Promise<void>(resolve => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve) }) }

@@ -1,98 +1,139 @@
-import { Journal } from '../protocol/Journal'
-import { MountManager } from '../mounts/MountManager'
-import { PreparedMountRecord } from '../mounts/types'
+import { Journal } from "../protocol/Journal";
+import { MountManager } from "../mounts/MountManager";
+import { PreparedMountRecord } from "../mounts/types";
+import {
+  contextEntry,
+  detail,
+  Entry,
+  requestEntry,
+  responseEntry,
+  RunId,
+  statusEntry,
+} from "./AgentRunEntries";
 
 export type Status = {
-  state: 'queued' | 'running' | 'complete' | 'failed' | 'interrupted' | 'cancelled', startedAt: string, completedAt?: string, error?: string
-}
+  state:
+    "queued" | "running" | "complete" | "failed" | "interrupted" | "cancelled";
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+};
 
 export class AgentRunStore {
-  constructor(private readonly mounts: MountManager, private readonly journal: Journal,
-    private readonly enqueue: (work: () => Promise<void>) => Promise<void>) {}
+  constructor(
+    private readonly mounts: MountManager,
+    private readonly journal: Journal,
+    private readonly enqueue: (work: () => Promise<void>) => Promise<void>,
+  ) {}
 
-  writeStatus(mountId: string, personaName: string, runId: string, status: Status) {
-    const detail = this.detail(personaName, runId, status)
-    return this.commitEntries(mountId, [this.statusEntry(personaName, runId, status)], detail)
+  writeStatus(id: RunId, status: Status) {
+    return this.commitEntries(
+      id,
+      [statusEntry(id, status)],
+      detail(id, status),
+    );
   }
 
-  accept(mountId: string, personaName: string, runId: string, message: string, status: Status, context?: string) {
-    const updates = this.acceptedEntries(personaName, runId, message, status, context)
-    return this.applyEntries(mountId, updates, this.detail(personaName, runId, status))
+  accept(id: RunId, message: string, status: Status, context?: string) {
+    const updates = this.acceptedEntries(id, message, status, context);
+    return this.applyEntries(id, updates, detail(id, status));
   }
 
-  private acceptedEntries(persona: string, runId: string, message: string, status: Status, context?: string) {
-    const entries = [this.statusEntry(persona, runId, status), this.requestEntry(persona, runId, message)]
-    return context === undefined ? entries : [...entries, this.contextEntry(persona, runId, context)]
+  private acceptedEntries(
+    id: RunId,
+    message: string,
+    status: Status,
+    context?: string,
+  ) {
+    const entries = [statusEntry(id, status), requestEntry(id, message)];
+    return context === undefined
+      ? entries
+      : [...entries, contextEntry(id, context)];
   }
 
-  interrupt(mountId: string, personaName: string, runId: string, status: Status) {
-    const updates = [this.statusEntry(personaName, runId, status)]
-    return this.applyEntries(mountId, updates, this.detail(personaName, runId, status))
+  interrupt(id: RunId, status: Status) {
+    return this.applyEntries(id, [statusEntry(id, status)], detail(id, status));
   }
 
-  cancel(mountId: string, personaName: string, runId: string, status: Status) {
-    return this.interrupt(mountId, personaName, runId, status)
+  cancel(id: RunId, status: Status) {
+    return this.interrupt(id, status);
   }
 
-  finish(mountId: string, personaName: string, runId: string, startedAt: string, message: string,
-    reply: string) {
-    const { updates, detail } = this.completion(personaName, runId, startedAt, message, reply)
-    return this.commitEntries(mountId, updates, detail)
+  finish(
+    request: RunId & { startedAt: string; message: string; reply: string },
+  ) {
+    const { startedAt, message, reply, ...id } = request;
+    const { updates, entryDetail } = this.completion(
+      id,
+      startedAt,
+      message,
+      reply,
+    );
+    return this.commitEntries(id, updates, entryDetail);
   }
 
-  private completion(personaName: string, runId: string, startedAt: string, message: string, reply: string) {
-    const status: Status = { state: 'complete', startedAt, completedAt: new Date().toISOString() }
-    const updates = this.runFiles(personaName, runId, status, message, reply)
-    return { updates, detail: this.detail(personaName, runId, status) }
+  private completion(
+    id: RunId,
+    startedAt: string,
+    message: string,
+    reply: string,
+  ) {
+    const status: Status = {
+      state: "complete",
+      startedAt,
+      completedAt: new Date().toISOString(),
+    };
+    const updates = this.runFiles(id, status, message, reply);
+    return { updates, entryDetail: detail(id, status) };
   }
 
-  private detail(personaName: string, runId: string, status: Status): string {
-    return `persona=${personaName} run=${runId} state=${status.state}`
+  private runFiles(
+    id: RunId,
+    status: Status,
+    message: string,
+    reply: string,
+  ): Entry[] {
+    return [
+      statusEntry(id, status),
+      requestEntry(id, message),
+      responseEntry(id, reply),
+    ];
   }
 
-  private runFiles(personaName: string, runId: string, status: Status, message: string,
-    reply: string): [string, string][] {
-    return [this.statusEntry(personaName, runId, status), this.requestEntry(personaName, runId, message),
-      this.responseEntry(personaName, runId, reply)]
+  private commitEntries(id: RunId, updates: Entry[], entryDetail: string) {
+    return this.enqueue(() => this.applyEntries(id, updates, entryDetail));
   }
 
-  private requestEntry(personaName: string, runId: string, message: string): [string, string] {
-    return [`${personaName}/runs/${runId}/request.md`, message]
+  private async applyEntries(id: RunId, updates: Entry[], entryDetail: string) {
+    const record = this.mounts.mounts().find((item) => item.id === id.mountId);
+    if (!record) {
+      return;
+    }
+    const entries = this.merged(record.snapshot.entries, updates);
+    await this.commit(this.withEntries(record, entries), entryDetail);
   }
 
-  private responseEntry(personaName: string, runId: string, reply: string): [string, string] {
-    return [`${personaName}/runs/${runId}/response.md`, reply]
+  private withEntries(
+    record: PreparedMountRecord,
+    entries: Entry[],
+  ): PreparedMountRecord {
+    return {
+      ...record,
+      fetchedAt: new Date().toISOString(),
+      snapshot: { ...record.snapshot, entries },
+    };
   }
 
-  private contextEntry(personaName: string, runId: string, context: string): [string, string] {
-    return [`${personaName}/runs/${runId}/context.md`, context]
+  private async commit(updated: PreparedMountRecord, entryDetail: string) {
+    await this.journal.commit([
+      { type: "refresh", record: updated, at: new Date().toISOString() },
+    ]);
+    this.mounts.refresh(updated, "system", entryDetail);
   }
 
-  private statusEntry(personaName: string, runId: string, status: Status): [string, string] {
-    return [`${personaName}/runs/${runId}/status.json`, JSON.stringify(status)]
-  }
-
-  private commitEntries(mountId: string, updates: [string, string][], detail: string) {
-    return this.enqueue(() => this.applyEntries(mountId, updates, detail))
-  }
-
-  private async applyEntries(mountId: string, updates: [string, string][], detail: string) {
-    const record = this.mounts.mounts().find(item => item.id === mountId); if (!record) return
-    const entries = this.merged(record.snapshot.entries, updates)
-    await this.commit(this.withEntries(record, entries), detail)
-  }
-
-  private withEntries(record: PreparedMountRecord, entries: [string, string][]): PreparedMountRecord {
-    return { ...record, fetchedAt: new Date().toISOString(), snapshot: { ...record.snapshot, entries } }
-  }
-
-  private async commit(updated: PreparedMountRecord, detail: string) {
-    await this.journal.commit([{ type: 'refresh', record: updated, at: new Date().toISOString() }])
-    this.mounts.refresh(updated, 'system', detail)
-  }
-
-  private merged(entries: [string, string][], updates: [string, string][]): [string, string][] {
-    const byPath = new Map(entries); updates.forEach(([path, content]) => byPath.set(path, content))
-    return [...byPath]
+  private merged(entries: Entry[], updates: Entry[]): Entry[] {
+    const byPath = new Map(entries);
+    updates.forEach(([path, content]) => byPath.set(path, content));
+    return [...byPath];
   }
 }

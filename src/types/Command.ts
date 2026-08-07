@@ -1,9 +1,8 @@
-import { Word } from '../lang/Word';
-
+import { Word } from "../lang/Word";
 
 export type Command = {
-  kind: 'command';
+  kind: "command";
   name: string;
   args: Word[];
-  redirect?: { kind: 'output'; target: string; };
+  redirect?: { kind: "output"; target: string };
 };

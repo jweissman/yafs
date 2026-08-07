@@ -1,108 +1,160 @@
-import { AbsolutePath } from '../core/AbsolutePath'
-import { CtlHandler } from '../protocol/CtlDispatch'
-import { Journal } from '../protocol/Journal'
-import { MountManager } from '../mounts/MountManager'
-import { AgentConfig, PersonaConfig, PreparedMountRecord } from '../mounts/types'
-import { ModelClient } from './ChatCompletionClient'
-import { AgentRunStore } from './AgentRunStore'
-import { recoverAgentRuns } from './AgentRunRecovery'
-import { AgentRunCancellation, cancelId } from './AgentRunCancellation'
-import { AgentRegistration, validAgentConfig } from './AgentRegistration'
-import { agentError } from './AgentError'
-import { AgentRequest, completeAgent, parseAgentRequest } from './AgentRequest'
+import { AbsolutePath } from "../core/AbsolutePath";
+import { CtlHandler } from "../protocol/CtlDispatch";
+import { Journal } from "../protocol/Journal";
+import { MountManager } from "../mounts/MountManager";
+import { AgentConfig, PersonaConfig } from "../mounts/types";
+import { ModelClient } from "./ChatCompletionClient";
+import { AgentRunStore, Status } from "./AgentRunStore";
+import { recoverAgentRuns } from "./AgentRunRecovery";
+import { AgentRunCancellation, cancelId } from "./AgentRunCancellation";
+import { AgentRegistration } from "./AgentRegistration";
+import { AgentTarget, agentTarget, RunContext } from "./AgentTarget";
+import { failedStatus, queuedStatus, runningStatus } from "./AgentStatus";
+import { AgentRequest, completeAgent, parseAgentRequest } from "./AgentRequest";
 
-type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void
-type UnregisterCtl = (path: AbsolutePath) => void
-type ModelFor = (persona: PersonaConfig, mount: AgentConfig) => ModelClient
-type Enqueue = (work: () => Promise<void>) => Promise<void>
-type AgentTarget = { config: AgentConfig, persona: PersonaConfig }
+type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
+type UnregisterCtl = (path: AbsolutePath) => void;
+type Ctl = { registerCtl: RegisterCtl; unregisterCtl: UnregisterCtl };
+type ModelFor = (persona: PersonaConfig, mount: AgentConfig) => ModelClient;
+type Enqueue = (work: () => Promise<void>) => Promise<void>;
 
 export class AgentDirectoryDriver {
-  private readonly runs: AgentRunStore; private readonly cancels: AgentRunCancellation
-  private readonly registration: AgentRegistration
+  private readonly runs: AgentRunStore;
+  private readonly cancels: AgentRunCancellation;
+  private readonly registration: AgentRegistration;
 
-  constructor(private readonly mounts: MountManager, journal: Journal, enqueue: Enqueue,
-    registerCtl: RegisterCtl, unregisterCtl: UnregisterCtl, private readonly modelFor: ModelFor) {
-    this.runs = new AgentRunStore(mounts, journal, enqueue); this.cancels = new AgentRunCancellation(mounts, this.runs)
-    this.registration = this.buildRegistration(registerCtl, unregisterCtl)
+  constructor(
+    private readonly mounts: MountManager,
+    journal: Journal,
+    enqueue: Enqueue,
+    ctl: Ctl,
+    private readonly modelFor: ModelFor,
+  ) {
+    this.runs = new AgentRunStore(mounts, journal, enqueue);
+    this.cancels = new AgentRunCancellation(mounts, this.runs);
+    this.registration = this.buildRegistration(ctl);
   }
 
-  private buildRegistration(registerCtl: RegisterCtl, unregisterCtl: UnregisterCtl) {
-    return new AgentRegistration(this.mounts, registerCtl, unregisterCtl,
-      (mountId, name, payload) => this.invoke(mountId, name, payload))
+  private buildRegistration({ registerCtl, unregisterCtl }: Ctl) {
+    const invoke = (mountId: string, name: string, payload: string) =>
+      this.invoke(mountId, name, payload);
+    return new AgentRegistration(
+      this.mounts,
+      registerCtl,
+      unregisterCtl,
+      invoke,
+    );
   }
-  close() { this.registration.close() }
-  async recover() { return recoverAgentRuns(this.mounts, this.runs) }
-  sync() { this.registration.sync() }
+
+  close() {
+    this.registration.close();
+  }
+  async recover() {
+    return recoverAgentRuns(this.mounts, this.runs);
+  }
+  sync() {
+    this.registration.sync();
+  }
 
   private async invoke(mountId: string, personaName: string, payload: string) {
-    const cancellation = cancelId(payload)
-    if (cancellation) return this.cancels.cancel(mountId, personaName, cancellation)
-    return this.invokeMessage(mountId, personaName, payload)
+    const cancellation = cancelId(payload);
+    if (cancellation) {
+      return this.cancels.cancel(mountId, personaName, cancellation);
+    }
+    return this.invokeMessage(mountId, personaName, payload);
   }
 
-  private async invokeMessage(mountId: string, personaName: string, payload: string) {
-    const request = parseAgentRequest(payload); const target = this.persona(mountId, personaName)
-    const { runId, startedAt } = await this.accept(mountId, personaName, request)
-    void this.settle(target, mountId, personaName, runId, startedAt, request)
+  private async invokeMessage(
+    mountId: string,
+    personaName: string,
+    payload: string,
+  ) {
+    const request = parseAgentRequest(payload);
+    const target = this.persona(mountId, personaName);
+    const context = await this.accept(mountId, personaName, request);
+    void this.settle(target, context, request);
   }
 
-  private async accept(mountId: string, personaName: string, request: AgentRequest) {
-    const startedAt = new Date().toISOString(); const runId = request.runId || startedAt.replace(/[:.]/g, '-')
-    await this.runs.accept(mountId, personaName, runId, request.message, { state: 'queued', startedAt}, request.context)
-    return { runId, startedAt }
+  private async accept(
+    mountId: string,
+    personaName: string,
+    request: AgentRequest,
+  ): Promise<RunContext> {
+    const startedAt = new Date().toISOString();
+    const runId = request.runId || startedAt.replace(/[:.]/g, "-");
+    const context = { mountId, personaName, runId, startedAt };
+    await this.acceptRun(context, request);
+    return context;
   }
 
-  private settle(target: AgentTarget, mountId: string, personaName: string, runId: string, startedAt: string,
-    request: AgentRequest) { return this.startRun(mountId, personaName, runId, startedAt)
-      .then(() => this.run(target, mountId, personaName, runId, startedAt, request)) }
-
-  private async run(target: AgentTarget, mountId: string, personaName: string, runId: string, startedAt: string,
-    request: AgentRequest) {
-    try { await this.succeed(target, mountId, personaName, runId, startedAt, request) }
-    catch (error) { await this.fail(mountId, personaName, runId, startedAt, error) }
+  private acceptRun(context: RunContext, request: AgentRequest) {
+    const status = queuedStatus(context.startedAt);
+    return this.runs.accept(context, request.message, status, request.context);
   }
 
-  private startRun(mountId: string, personaName: string, runId: string, startedAt: string) {
-    return this.runs.writeStatus(mountId, personaName, runId, { state: 'running', startedAt })
+  private settle(
+    target: AgentTarget,
+    context: RunContext,
+    request: AgentRequest,
+  ) {
+    return this.startRun(context).then(() =>
+      this.run(target, context, request),
+    );
   }
 
-  private async succeed(target: AgentTarget, mountId: string,
-    personaName: string, runId: string, startedAt: string, request: AgentRequest) {
-    const reply = await completeAgent(this.modelFor(target.persona, target.config), target.persona, request)
-    await this.finishUnlessCancelled(mountId, personaName, runId, startedAt, request.message, reply)
+  private async run(
+    target: AgentTarget,
+    context: RunContext,
+    request: AgentRequest,
+  ) {
+    try {
+      await this.succeed(target, context, request);
+    } catch (error) {
+      await this.fail(context, error);
+    }
   }
 
-  private finishUnlessCancelled(mountId: string, persona: string, runId: string, startedAt: string,
-    message: string, reply: string) {
-    if (!this.cancels.cancelledRun(mountId, runId)) return this.runs.finish(mountId, persona, runId, startedAt,
-      message, reply)
+  private startRun(context: RunContext) {
+    return this.writeStatus(context, runningStatus(context.startedAt));
   }
 
-  private fail(mountId: string, personaName: string, runId: string, startedAt: string, error: unknown) {
-    const completedAt = new Date().toISOString(); const detail = agentError(error)
-    return this.runs.writeStatus(mountId, personaName, runId, { state: 'failed', startedAt, completedAt, error: detail })
+  private async succeed(
+    target: AgentTarget,
+    context: RunContext,
+    request: AgentRequest,
+  ) {
+    const reply = await completeAgent(
+      this.modelFor(target.persona, target.config),
+      target.persona,
+      request,
+    );
+    await this.finishUnlessCancelled(context, request.message, reply);
   }
 
-  private persona(mountId: string, personaName: string) {
-    const record = this.record(mountId); this.assertGranted(record)
-    const config = this.configuredAgent(record); const persona = config.personas[personaName]
-    if (!persona) throw new Error(`No such persona: ${personaName}`); return { config, persona }
+  private finishUnlessCancelled(
+    context: RunContext,
+    message: string,
+    reply: string,
+  ) {
+    if (this.cancels.cancelledRun(context.mountId, context.runId)) {
+      return;
+    }
+    return this.finish(context, message, reply);
   }
 
-  private configuredAgent(record: PreparedMountRecord) {
-    const config = validAgentConfig(record.config)
-    if (!config) throw new Error(`Invalid persisted agent configuration: ${record.id}`)
-    return config
+  private finish(context: RunContext, message: string, reply: string) {
+    return this.runs.finish({ ...context, message, reply });
   }
 
-  private record(mountId: string): PreparedMountRecord {
-    const record = this.mounts.mounts().find(item => item.id === mountId)
-    if (!record) throw new Error(`No such mount: ${mountId}`); return record
+  private fail(context: RunContext, error: unknown) {
+    return this.writeStatus(context, failedStatus(context.startedAt, error));
   }
 
-  private assertGranted(record: PreparedMountRecord) {
-    if (!record.capabilities.includes('chat.completion')) throw new Error(`chat.completion is not granted: ${record.id}`)
+  private writeStatus(context: RunContext, status: Status) {
+    return this.runs.writeStatus(context, status);
   }
 
+  private persona(mountId: string, personaName: string): AgentTarget {
+    return agentTarget(this.mounts, mountId, personaName);
+  }
 }

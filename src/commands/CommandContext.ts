@@ -1,8 +1,8 @@
-import { Clock } from '../core/Clock';
-import { TraceService } from '../traces/TraceService';
-import { AbsolutePath } from '../core/AbsolutePath';
-import { MountRecord, PreparedMountRecord, Provenance } from '../mounts/types';
-import { CacheService } from '../cache/CacheService';
+import { Clock } from "../core/Clock";
+import { TraceService } from "../traces/TraceService";
+import { AbsolutePath } from "../core/AbsolutePath";
+import { MountRecord, PreparedMountRecord, Provenance } from "../mounts/types";
+import { CacheService } from "../cache/CacheService";
 
 export type CommandContext = {
   clock: Clock;
@@ -16,7 +16,10 @@ export type CommandContext = {
   read(path: AbsolutePath): string;
   readlink(path: AbsolutePath): string;
   list(path: AbsolutePath): string[];
-  type(path: AbsolutePath, followFinal?: boolean): 'file' | 'directory' | 'symlink';
+  type(
+    path: AbsolutePath,
+    followFinal?: boolean,
+  ): "file" | "directory" | "symlink";
   origins(path: AbsolutePath): string[];
   provenance(path: AbsolutePath): Provenance[];
   resourceReference(path: AbsolutePath): object | undefined;
@@ -29,8 +32,13 @@ export type CommandContext = {
   applyDesired(prune?: boolean): Promise<object[]>;
   refreshDesired(id: string): Promise<object>;
   planMount(path: AbsolutePath, id?: string): MountRecord;
-  prepareMount(record: MountRecord): PreparedMountRecord | Promise<PreparedMountRecord>;
-  planRefresh(path: AbsolutePath, id?: string): PreparedMountRecord | Promise<PreparedMountRecord>;
+  prepareMount(
+    record: MountRecord,
+  ): PreparedMountRecord | Promise<PreparedMountRecord>;
+  planRefresh(
+    path: AbsolutePath,
+    id?: string,
+  ): PreparedMountRecord | Promise<PreparedMountRecord>;
   planUnmount(id: string): MountRecord;
   mkdir(path: AbsolutePath): void;
   touch(path: AbsolutePath): void;
@@ -45,4 +53,4 @@ export type CommandContext = {
   afterCommit(effect: () => void): void;
   cache: CacheService;
   traces: TraceService;
-}
+};

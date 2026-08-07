@@ -1,4 +1,6 @@
-import { BuiltinCommand } from './BuiltinCommand'
-import { commands } from './builtins'
+import { BuiltinCommand } from "./BuiltinCommand";
+import { commands } from "./builtins";
 
-export function builtinCommands(): BuiltinCommand[] { return commands() }
+export function builtinCommands(): BuiltinCommand[] {
+  return commands();
+}
