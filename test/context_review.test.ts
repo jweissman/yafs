@@ -15,8 +15,8 @@ test("a review run consumes a reified trace and preserves the exact diff context
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest()}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta source");
-  await client.exec("mount activate .yafsmeta agents");
+  await client.exec("plugin activate .yafsmeta source");
+  await client.exec("plugin activate .yafsmeta agents");
   await client.exec("mkdir artifacts");
   await client.exec("trace source artifacts/review-42");
   await client.exec("reify artifacts/review-42 restored-42");

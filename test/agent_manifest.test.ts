@@ -23,7 +23,7 @@ test("an agent manifest rejects empty personas, invalid names, and invalid promp
 
 function assertRejected(yafs: Yafs, manifest: string, message: string) {
   yafs.store.write("/home/root/.yafsmeta", manifest);
-  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe(message);
+  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(message);
 }
 
 function personas(entries: string) {

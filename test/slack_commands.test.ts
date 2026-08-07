@@ -14,7 +14,7 @@ test("slack send posts a message and the channel snapshot refreshes to include i
   const server = await startServer(state);
   const yash = await YashClient.connect(server.address());
   await yash.exec(`printf '${manifest()}' > .yafsmeta`);
-  await yash.exec("mount activate .yafsmeta");
+  await yash.exec("plugin activate .yafsmeta");
   expect(await yash.exec("slack send updates second")).toBe(
     "accepted: updates",
   );
@@ -32,7 +32,7 @@ test("a failed post is durably visible instead of silently vanishing", async () 
   const server = await startServer(state);
   const yash = await YashClient.connect(server.address());
   await yash.exec(`printf '${manifest()}' > .yafsmeta`);
-  await yash.exec("mount activate .yafsmeta");
+  await yash.exec("plugin activate .yafsmeta");
   await yash.exec("slack send updates hello");
   await waitForContent(yash, "updates/last-error.json", (content) =>
     content.includes("hello"),

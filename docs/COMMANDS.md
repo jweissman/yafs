@@ -99,11 +99,13 @@ rejected before it runs.
 
 A daemon configuration is external infrastructure-as-code, selected by
 `yafsd --config FILE` or `YAFS_CONFIG`; it has no implicit data-directory
-default. Its canonical YAML uses `plugins:` and each declaration uses `plugin:`. The older `mounts:`/
-`provider:` spelling and `mount` command remain temporary compatibility
-aliases; they are not the vocabulary for new integrations, and are removed
-no later than M7 entry (see the ADR's "Capabilities, distribution, and
-adapters" removal policy) — don't build new tooling against them.
+default. Its canonical YAML uses `plugins:` and each declaration uses
+`plugin:`. The `mount` (singular) command has been removed; `plugin
+validate|activate|refresh|deactivate` above is its sole replacement. The
+older `mounts:`/`provider:` manifest YAML key spelling is a separate,
+still-unscheduled compatibility alias (see the ADR's "Capabilities,
+distribution, and adapters" removal policy) — don't build new tooling against
+it, but existing `.yafsmeta` files using it keep working.
 
 ```yaml
 version: 1
@@ -134,6 +136,7 @@ configuration — see [M5 validation](M5-VALIDATION.md).
 | `fixture` | `{ files: {PATH: CONTENT}, streams?: {PATH: {chunks, intervalMs}} } ` | none required | Static, config-sourced content. `streams` delivers `chunks` into `PATH` on a timer, for exercising background/`ctl` mechanics with no external dependency — not a production feature. |
 | `github` | `{ repository, query, max }` | `network.github-api`, `secret.github-token` for authenticated access | Bounded PR query collection; see [M5 validation](M5-VALIDATION.md). |
 | `agent` | `{ personas: { NAME: { prompt, endpoint?, model? } }, endpoint?, model? }` | `chat.completion` | Publishes `NAME/prompt.md` per persona from `config.personas.NAME.prompt`. One mount can host several personas. `endpoint`/`model` resolve persona → mount → the `YAFS_LLM_BASE_URL`/`YAFS_LLM_MODEL` env vars, so a single manifest can mix personas backed by different local, OpenAI-compatible model servers. |
+| `slack` | `{ channel, max? }` | `network.slack-api`, `secret.slack-token` | Publishes the channel's recent messages as an ordered `NAME/messages.ndjson` snapshot; `channel` is a Slack channel ID (e.g. `C0123456789`), not a name. `secret.slack-token` reads the `YAFS_SLACK_TOKEN` env var daemon-side — there is no per-manifest token field and no `SLACK_CHANNEL_ID` env var; the channel is config, the token is the only secret. See [Slack validation](SLACK-VALIDATION.md). |
 
 ### Plugin actions (`ctl`) and exposure boundary
 
@@ -164,6 +167,17 @@ agent send agents/reviewer --context source/pulls/482/diff.patch "Review this PR
 agent status agents/reviewer/runs/RUN_ID
 agent cancel agents/reviewer RUN_ID
 ```
+
+`slack send PLUGIN_ID MESSAGE` is the same `ctl`-write mechanism under a
+different adapter: it writes `{"message": MESSAGE}` to the named Slack
+mount's `ctl` and returns `accepted: PLUGIN_ID` once the write is parsed —
+before the Slack API call happens, not after it succeeds. A successful post
+refreshes `messages.ndjson` to include it; a failed post (bad channel,
+network error, revoked token) writes `last-error.json` with the message text,
+error detail, and timestamp instead of raising a Yash error, since the
+write already returned by the time the post is attempted. There is currently
+no durable record of an in-flight send between the `ctl` write and either
+outcome — see the M6.4 roadmap entry in `FEATURE-ROADMAP.md`.
 
 `plugins describe agent` also reports a planned `conversation` HTTP exposure.
 That is metadata, not a listening endpoint: no plugin can open a port by being

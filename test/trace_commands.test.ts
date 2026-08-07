@@ -13,7 +13,7 @@ test("trace captures a provider subtree and reify preserves it after refresh", a
   const pulls: GitHubPull[] = [pull()];
   const yafs = configuredYafs(pulls);
   yafs.store.write("/home/root/.yafsmeta", manifest());
-  await yafs.executeAsync("mount activate .yafsmeta");
+  await yafs.executeAsync("plugin activate .yafsmeta");
   yafs.exec("mkdir notes");
   await yafs.executeAsync("trace reviews/pulls/42 notes/42");
   const trace = JSON.parse(yafs.exec("cat notes/42/trace.json"));
@@ -28,7 +28,7 @@ test("trace captures a provider subtree and reify preserves it after refresh", a
     },
   });
   pulls.length = 0;
-  await yafs.executeAsync("mount refresh .yafsmeta");
+  await yafs.executeAsync("plugin refresh .yafsmeta");
   await yafs.executeAsync("reify notes/42 restored");
   expect(yafs.exec("cat restored/diff.patch")).toBe("diff --git");
 });

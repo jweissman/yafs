@@ -18,7 +18,7 @@ test("a Slack channel becomes an ordered, immutable message snapshot", async () 
     ),
   );
   yafs.store.write("/home/root/.yafsmeta", slackManifest());
-  expect((await yafs.executeAsync("mount activate .yafsmeta")).stdout).toBe(
+  expect((await yafs.executeAsync("plugin activate .yafsmeta")).stdout).toBe(
     "updates active",
   );
   assertMessagesPublished(yafs);
@@ -70,7 +70,7 @@ test("a Slack manifest requires both capabilities and rejects unknown configurat
     "/home/root/.yafsmeta",
     slackManifest().replace("secret.slack-token", "secret.other"),
   );
-  expect(yafs.execute("mount activate .yafsmeta").stderr).toBe(
+  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(
     "Capabilities are not granted: secret.other",
   );
   assertRejectsInvalidConfig(yafs);
@@ -81,21 +81,21 @@ function assertRejectsInvalidConfig(yafs: Yafs) {
     "/home/root/.yafsmeta",
     slackManifest().replace("max: 10", "unknown: 10"),
   );
-  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe(
+  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
     "Unknown slack config field: unknown (expected one of: channel, max)",
   );
   yafs.store.write(
     "/home/root/.yafsmeta",
     slackManifest().replace("C123", "a/b"),
   );
-  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe(
+  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
     "Invalid slack channel",
   );
   yafs.store.write(
     "/home/root/.yafsmeta",
     slackManifest().replace("max: 10", "max: 0"),
   );
-  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe(
+  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
     "Invalid slack max",
   );
 }
@@ -104,7 +104,7 @@ test("an unconfigured Slack provider fails clearly instead of silently publishin
   const yafs = configuredYafs(new ProviderRegistry());
   yafs.store.write("/home/root/.yafsmeta", slackManifest());
   await expect(
-    yafs.executeAsync("mount activate .yafsmeta"),
+    yafs.executeAsync("plugin activate .yafsmeta"),
   ).resolves.toMatchObject({
     stderr: "Slack provider is not configured",
   });

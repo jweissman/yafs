@@ -118,7 +118,7 @@ function mount(client: YashClient) {
     .exec(
       "printf '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, query: \"is:open\", max: 1}, capabilities: [network.github-api]}]}' > .yafsmeta",
     )
-    .then(() => client.exec("mount activate .yafsmeta"));
+    .then(() => client.exec("plugin activate .yafsmeta"));
 }
 function blobPath(directory: string, digest: string) {
   return join(directory, "blobs", digest.slice(0, 2), digest);

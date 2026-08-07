@@ -28,7 +28,7 @@ export function invalidManifests() {
 
 export function expectInvalidManifest(yafs: Yafs, manifest: string) {
   yafs.store.write("/home/root/.yafsmeta", manifest);
-  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe(
+  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
     "Invalid .yafsmeta YAML",
   );
 }

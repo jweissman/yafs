@@ -34,13 +34,13 @@ async function assertStaysResponsiveDuringDelivery(other: YashClient) {
   expect(Date.now() - start).toBeLessThan(50);
 }
 
-test("an operator mount refresh preserves stream progress instead of resetting it", async () => {
+test("an operator plugin refresh preserves stream progress instead of resetting it", async () => {
   const { server, client } = await startedFixtureClient(
     "yafs-fixture-stream-refresh-",
     manifest(),
   );
   await waitForExact(client, "demo/output.txt", "one-two-three");
-  await client.exec("mount refresh .yafsmeta demo");
+  await client.exec("plugin refresh .yafsmeta demo");
   expect(await client.exec("cat demo/output.txt")).toBe("one-two-three");
   await client.close();
   await server.close();
@@ -52,9 +52,9 @@ test("reactivating a mount with a different stream config starts from its own be
     manifest(),
   );
   await waitForExact(client, "demo/output.txt", "one-two-three");
-  await client.exec("mount unmount demo");
+  await client.exec("plugin deactivate demo");
   await client.exec(`printf '${otherManifest()}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   expect(await client.exec("cat demo/output.txt")).toBe("");
   await waitForExact(client, "demo/output.txt", "uno-");
   await client.close();
@@ -94,7 +94,7 @@ async function startedFixtureClient(prefix: string, manifestSource: string) {
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifestSource}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   return { server, client };
 }
 

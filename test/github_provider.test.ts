@@ -10,9 +10,9 @@ test("a GitHub collection becomes an immutable, attributable review snapshot", a
   const source = new GitHubCollectionSource(fakeClient());
   const yafs = configuredYafs(new ProviderRegistry(source));
   yafs.store.write("/home/root/.yafsmeta", githubManifest());
-  const result = await yafs.executeAsync("mount activate .yafsmeta");
+  const result = await yafs.executeAsync("plugin activate .yafsmeta");
   expect(result.stdout).toBe("review active");
-  expect((await yafs.executeAsync("mount refresh .yafsmeta")).stdout).toBe(
+  expect((await yafs.executeAsync("plugin refresh .yafsmeta")).stdout).toBe(
     "review refreshed",
   );
   expect(yafs.exec("cat reviews/pulls/42/diff.patch")).toBe(
@@ -36,14 +36,14 @@ test("a GitHub manifest declares its network capability and rejects unknown conf
     "/home/root/.yafsmeta",
     githubManifest().replace("network.github-api", "network.other"),
   );
-  expect(yafs.execute("mount activate .yafsmeta").stderr).toBe(
+  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(
     "Capabilities are not granted: network.other",
   );
   yafs.store.write(
     "/home/root/.yafsmeta",
     githubManifest().replace("max: 2", "unknown: 2"),
   );
-  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe(
+  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
     "Unknown github config field: unknown (expected one of: repository, query, max)",
   );
 });
@@ -65,7 +65,7 @@ test("a declared secret grant selects an authenticated provider source", async (
       "[network.github-api, secret.github-token]",
     ),
   );
-  await yafs.executeAsync("mount activate .yafsmeta");
+  await yafs.executeAsync("plugin activate .yafsmeta");
   expect(yafs.exec("cat reviews/pulls/42/diff.patch")).toBe("private");
 });
 

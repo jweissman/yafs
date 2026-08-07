@@ -1182,30 +1182,42 @@ remote write: durable intent → idempotent provider call → durable outcome �
 instance is one external, declarative configuration that publishes a VFS
 projection and may accept typed actions. A mount remains the kernel's internal
 snapshot attachment mechanism, while a union remains the user-visible pure VFS
-composition operation. New operator vocabulary is therefore `plugins
-status|plan|apply` for the daemon-selected desired configuration and `plugin
-activate|refresh|deactivate` only for compatibility/development activation.
-The legacy `mount` terms remain accepted temporarily but are not the product
-model for new integrations.
+composition operation. Operator vocabulary is `plugins status|plan|apply` for
+the daemon-selected desired configuration and `plugin
+validate|activate|refresh|deactivate` for direct lifecycle control. The
+`mount`/`mounts` (singular) command has been removed; `mounts` (plural,
+read-only VFS composition introspection) and `union` are unaffected — they
+were never lifecycle verbs.
 
-**Removal policy, decided now rather than left to drift:** `mount`/`mounts`/
-`provider:` (manifest field) are removed no later than M7 entry — the same
-gate that already requires `bun check` to pass with the M6.3 evidence above.
-Until then they are undocumented in `COMMANDS.md` (the `plugin`/`plugins`
-forms are the only ones taught) but remain functional and covered by tests,
-so existing `.yafsmeta` files and scripts keep working through the
-transition. If M7 work surfaces a concrete reason to keep one alias longer
-(e.g. an external integration depending on it), that's a decision to make
-explicitly against this policy, not a reason for the policy to silently not
-apply.
+**Removal policy — the `mount` command, done; the YAML alias, still open:**
+the `mount` (singular) lifecycle command has been removed, with `plugin`
+`validate|activate|refresh|deactivate` as its sole replacement — no
+compatibility alias was kept, and `COMMANDS.md` no longer documents it. This
+is narrower than full removal: the legacy `mounts:`/`provider:` manifest YAML
+keys (as opposed to the `mount` command verb) are a **separate, still
+unscheduled** follow-up — `ManifestPlugins.ts` continues to accept both the
+legacy and `plugins:`/`plugin:` forms, and existing `.yafsmeta` files keep
+working unchanged. Don't read the command removal as implying the YAML alias
+is also gone.
 
 The canonical external YAML uses `plugins:` with `plugin:` per instance. It is
 deployment input, selected by `yafsd --config`, and can be version-controlled;
 the WAL/VFS holds observed snapshots, audit, run state, and user data. A
-definition is composed from focused ports—configuration validation, snapshot
-preparation, optional action declarations, and optional exposure declarations
-—not a common executable base class. The kernel owns grants, durable action
-acceptance, routing, lifecycle, and audit.
+definition is implemented as a subclass of a shared `Plugin` base class
+(`src/mounts/Plugin.ts`), which supplies default (empty) action/exposure/
+command declarations so a provider only overrides what it actually has —
+config validation and snapshot preparation are abstract and provider-owned.
+This reverses an earlier version of this ADR, which called for definitions
+"composed from focused ports... not a common executable base class"; in
+practice the ports-only shape pushed identical boilerplate into every
+provider (empty `actions()`/`exposures()`/`commands()` implementations) with
+no compensating benefit, so a classical base class was adopted instead. This
+is a code-organization choice, not a capability-boundary one: the base class
+collapses per-provider boilerplate, it does not move where enforcement
+happens. The kernel still owns grants, durable action acceptance, routing,
+lifecycle, and audit — a plugin subclass cannot self-grant capabilities or
+bypass kernel-side durable-acceptance checks by virtue of extending the base
+class.
 
 An exposure declaration is deliberately not permission to listen. The current
 agent definition can describe a future HTTP conversation exposure, but Yafs

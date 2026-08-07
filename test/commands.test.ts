@@ -59,7 +59,7 @@ test("rmdir removes an empty directory but refuses a non-empty one, a file, or a
   expect(yafs.execute("rmdir full/inside").error?.code).toBe("not_directory");
   expect(yafs.execute("rmdir missing").error?.code).toBe("not_found");
   yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
-  yafs.exec("mount activate .yafsmeta");
+  yafs.exec("plugin activate .yafsmeta");
   expect(yafs.execute("rmdir fixture").error?.code).toBe("read_only_mount");
 });
 

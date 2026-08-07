@@ -54,7 +54,7 @@ test("a structured write RPC honors read-only mount rejection", async () => {
   await client.exec(
     "printf '{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hi}}, capabilities: []}]}' > .yafsmeta",
   );
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   expect(
     (await client.writeFile("fixture/hello.txt", "nope")).error?.code,
   ).toBe("read_only_mount");

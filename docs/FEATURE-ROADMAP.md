@@ -476,16 +476,31 @@ rest.
   exactly the shape `yafs-mcp` already is, just a different wire format. Once
   that bridge exists, a static htmx/tailwind frontend over it is a reasonable,
   cheap choice.
-- **Local multi-agent group chat.** Deliberately *not* relayed through Slack:
-  a shared local append-only log (`chat/room/messages.ndjson`) that several
-  agent directories and a human read and append to needs no external-provider
-  write authority at all — it sidesteps the durable-intent/idempotency-key
-  machinery real remote writes need, because nothing here leaves the local
-  store. Buildable as repeated one-shot `model.invoke` calls (see the M7
-  section above) — each agent's "turn" reads recent history and optionally
-  appends — without needing the recursive tool-use orchestrator that real M7
-  requires. This is close to assembly of pieces already decided, not new
-  design, and is worth treating as the actual near-term target it looks like.
+- **Single-agent synchronous chat (`agent chat`).** Ahead of any multi-agent
+  work: a live, multi-turn conversation with one named persona (defaulting to
+  the sole configured persona if only one exists), structured as a real
+  `[{role, content}, ...]` message array — not the current single flattened
+  `message + context` string `agent send` builds today. Needs three things,
+  none of them new design: `ChatCompletionClient` gains a messages-array
+  method; a durable `NAME/chats/<chat-id>/messages.ndjson` resource holds the
+  growing history (each turn still produces a `runs/<run-id>/` entry for
+  provenance, same durable-run invariant as today); and a synchronous variant
+  of the invoke path (`agent send --no-background`-shaped) that blocks until
+  the model responds instead of the current accept-then-poll flow, so
+  interactive use doesn't need to poll `status.json`. True token-by-token
+  streaming back to the client is a distinct, larger change — the RPC
+  protocol is currently one request → one full result, not incremental — and
+  is deliberately not bundled into this.
+- **Local multi-agent group chat — deferred behind the above.** A shared
+  local append-only log (`chat/room/messages.ndjson`) that several agent
+  directories and a human read and append to still needs no
+  external-provider write authority and sidesteps the durable-intent/
+  idempotency-key machinery real remote writes need. But it surfaces a real,
+  unresolved question the single-agent case doesn't have: other agents in the
+  room aren't naturally `system`/`user`/`assistant` in the chat-completion
+  role model, and a persona must not confuse another agent's turn for its
+  own. Get single-agent `agent chat` solid first; the role-representation
+  question gets a real design pass once that foundation exists, not before.
 
 **Ready, but a distinct engineering task, not a rider on the above:**
 
@@ -493,6 +508,19 @@ rest.
   commands are different projects with different value — see "Capabilities,
   distribution, and adapters" in the ADR for the distinction and why it
   matters. Bounded and buildable, sequenced after M6, not folded into it.
+- **`yafs-mcp` as an HTTP service, with write tools.** `yafs-mcp` is
+  currently a local stdio client exposing only `yafs.list`/`yafs.read`/
+  `yafs.inspect` — read-only, and not reachable by anything that expects an
+  HTTP MCP server (LM Studio's `integrations` envelope, for one). Recorded
+  here as a known, real gap, not sequenced yet: it needs the same
+  HTTP-adapter-over-loopback-RPC bridge the local webui candidate above
+  needs, plus a write-capable tool boundary that doesn't just hand an MCP
+  client the same authority as a `yash` session (today `yafs.query` explicitly
+  refuses every mutating command, including `ctl`, for exactly this reason).
+  This is also where token-streaming responses would matter most if the
+  single-agent chat streaming question above is ever picked back up — an
+  agent recursively calling back into Yafs over MCP is the concrete "real
+  demo" this unlocks, but it's gated behind both pieces existing.
 
 **Deliberately not sequenced — new capability class, only build when a
 concrete need forces the question:**
@@ -594,9 +622,35 @@ remains the VFS composition command. A public HTTP/RESP/S3 listener, package
 installation, and a stable third-party ABI are explicitly out of scope.
 
 **Current wave:** canonical configuration and lifecycle vocabulary are being
-implemented with compatibility aliases for `mounts`/`provider` and `mount`.
-This is the final terminology and action-boundary cleanup before M7, not a
-claim that `yash add` or public plugin endpoints exist.
+implemented with a compatibility alias for `mounts`/`provider`. This is the
+final terminology and action-boundary cleanup before M7, not a claim that
+`yash add` or public plugin endpoints exist.
+
+### M6.4 — Durable outbound actions *(gate before M7's Slack outbox)*
+
+Checkpoint: an outbound write to an external system (starting with `slack
+send`) records durable intent — an idempotency key and a queued state — before
+any network call, not after. A crash between the API call and the durable
+record can no longer lose the record of the attempt or double-post on retry.
+Status is visible as ordinary queued→running→succeeded/failed/unknown state,
+the same shape `agent send` already proved for run acceptance; a generic
+action-dispatch path shared between `agent send` and `slack send` is the
+target, not two parallel bespoke mechanisms.
+
+**Why this gates M7, not just Slack:** M7's local channel is expected to add
+a human-approved Slack "outbox" action on top of `slack send`. Building that
+before this milestone would mean the approval UI sits in front of a write
+path that can still silently double-post or lose the record of what it sent —
+the durability has to exist under the mechanism before a human is asked to
+trust an approval built on top of it.
+
+**Not yet started.** `SlackDirectoryDriver` currently posts to the real Slack
+API via fire-and-forget before any durable record exists — a known, real gap
+identified during the M6.3 plugin-restructure review, deliberately deferred
+rather than fixed inline. `PluginDriver`'s optional `recover()` hook (see
+`BackgroundDrivers.ts`) is the seam left for this work: once
+`SlackDirectoryDriver` implements `recover()`, the generic `recoverAll` loop
+picks it up with no further kernel changes required.
 
 ### M7 — Local conversation channel *(decision gate)*
 

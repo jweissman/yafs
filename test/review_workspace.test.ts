@@ -18,7 +18,7 @@ test("two review sessions share one GitHub revision and leave separate durable t
   const alice = await YashClient.connect(server.address());
   const bob = await YashClient.connect(server.address());
   await alice.exec(`printf '${manifest()}' > .yafsmeta`);
-  await alice.exec("mount activate .yafsmeta");
+  await alice.exec("plugin activate .yafsmeta");
   await alice.exec("mkdir notes");
   await alice.exec("mkdir notes/42");
   await alice.exec("trace reviews/pulls/42 notes/42/alice");
@@ -47,7 +47,7 @@ test("a due daemon refresh publishes the next complete GitHub snapshot", async (
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${scheduledManifest()}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   pulls[0] = { ...pull(), diff: "new diff" };
   await server.refreshDue();
   expect(await client.exec("cat reviews/pulls/42/diff.patch")).toBe("new diff");

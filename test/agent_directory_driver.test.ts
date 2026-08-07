@@ -27,7 +27,7 @@ test("a ctl message runs through pending -> complete status and durably records 
   await client.exec(
     `printf '${manifest({ reviewer: "You are a terse code reviewer." })}' > .yafsmeta`,
   );
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await client.exec(
     'printf \'{"message":"Summarize this diff."}\' > agents/reviewer/ctl',
   );
@@ -71,7 +71,7 @@ test("a failed call leaves a visible failed status instead of vanishing silently
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForStatus(
     client,
@@ -102,7 +102,7 @@ test("one mount can host multiple personas, each with its own endpoint", async (
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${multiPersonaManifest()}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await client.exec('printf \'{"message":"hi"}\' > agents/alpha/ctl');
   await client.exec('printf \'{"message":"hi"}\' > agents/beta/ctl');
   await waitForRun(client, "agents/alpha/runs");
@@ -121,8 +121,8 @@ test("unmounting an agent removes its control endpoint immediately", async () =>
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
-  await client.exec("mount unmount reviewer");
+  await client.exec("plugin activate .yafsmeta");
+  await client.exec("plugin deactivate reviewer");
   await client.exec("mkdir agents");
   await client.exec("mkdir agents/reviewer");
   await client.exec("printf ordinary > agents/reviewer/ctl");

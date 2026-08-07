@@ -42,21 +42,14 @@ class PluginsCommand {
 }
 
 class PluginLifecycleCommand {
+  readonly name = "plugin";
   readonly access = "control";
-  readonly synopsis: string;
+  readonly synopsis = "plugin validate|activate|refresh MANIFEST [ID] | deactivate ID";
 
-  constructor(
-    readonly name: "plugin" | "mount",
-    private readonly deactivate: "deactivate" | "unmount",
-  ) {
-    this.synopsis = `${name} validate|activate|refresh MANIFEST [ID] | ${deactivate} ID`;
-  }
+  constructor() {}
 
   execute(context: CommandContext, args: string[]): string | Promise<string> {
-    return lifecycle(context, args, {
-      name: this.name,
-      deactivate: this.deactivate,
-    });
+    return lifecycle(context, args);
   }
 }
 
@@ -90,10 +83,5 @@ function desiredRead(context: CommandContext, action: string) {
 }
 
 export function pluginCommands(): BuiltinCommand[] {
-  return [
-    new MountsCommand(),
-    new PluginsCommand(),
-    new PluginLifecycleCommand("plugin", "deactivate"),
-    new PluginLifecycleCommand("mount", "unmount"),
-  ];
+  return [new MountsCommand(), new PluginsCommand(), new PluginLifecycleCommand()];
 }

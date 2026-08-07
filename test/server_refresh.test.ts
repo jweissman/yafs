@@ -19,7 +19,7 @@ test("a failed scheduled refresh does not sever an unrelated client connection",
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${scheduledManifest()}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await server.refreshDue();
   expect(await client.exec("echo still alive")).toBe("still alive");
   expect(error).toHaveBeenCalled();
@@ -39,7 +39,7 @@ test("the background refresh timer itself, not just a manually-triggered refresh
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${scheduledManifest()}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   const initial = await client.exec("cat reviews/pulls/42/metadata.json");
   await waitForChange(client, initial);
   await client.close();

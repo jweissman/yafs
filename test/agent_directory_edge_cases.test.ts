@@ -25,7 +25,7 @@ test("a ctl message without chat.completion granted is rejected before it starts
     "[]",
   );
   await client.exec(`printf '${ungranted}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await expect(
     client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl'),
   ).rejects.toThrow("not granted");
@@ -42,7 +42,7 @@ test("a malformed ctl message is rejected without breaking the connection", asyn
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await expect(
     client.exec("printf notjson > agents/reviewer/ctl"),
   ).rejects.toThrow("JSON Parse");
@@ -58,7 +58,7 @@ test("an agent ctl message with a non-string message or context is rejected clea
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await expect(
     client.exec("printf '{\"message\":5}' > agents/reviewer/ctl"),
   ).rejects.toThrow("Invalid agent action");
@@ -78,7 +78,7 @@ test("waitForRun polls across a slow-completing run, and waitForStatus times out
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForRun(client, "agents/reviewer/runs");
   expect(runId).toBeDefined();

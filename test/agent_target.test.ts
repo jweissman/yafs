@@ -20,7 +20,7 @@ test("agentTarget rejects an unknown persona and a malformed persisted config", 
 test("a path-form persona reference that resolves to no mount is rejected", () => {
   const yafs = new Yafs();
   yafs.store.write("/home/root/.yafsmeta", manifest({ reviewer: "prompt" }));
-  yafs.exec("mount activate .yafsmeta");
+  yafs.exec("plugin activate .yafsmeta");
   expect(() => agentPersonaPath(yafs.mounts, "agents/nope")).toThrow(
     "No such persona: agents/nope",
   );

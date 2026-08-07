@@ -16,7 +16,7 @@ test("provider audit links a persisted fetch attempt to its published snapshot",
     new GitHubCollectionSource({ pulls: async () => [pull()] }),
   );
   yafs.store.write("/home/root/.yafsmeta", manifest());
-  await yafs.executeAsync("mount activate .yafsmeta");
+  await yafs.executeAsync("plugin activate .yafsmeta");
   const events = await audit(directory);
   expect(events.map((event) => event.action)).toEqual(["fetch", "activation"]);
   expect(events.map((event) => event.correlationId)).toEqual([
@@ -38,7 +38,7 @@ test("a failed provider fetch is durable audit state without publishing a mount"
   });
   const yafs = configuredYafs(directory, source);
   yafs.store.write("/home/root/.yafsmeta", manifest());
-  expect((await yafs.executeAsync("mount activate .yafsmeta")).stderr).toBe(
+  expect((await yafs.executeAsync("plugin activate .yafsmeta")).stderr).toBe(
     "unavailable",
   );
   const events = await audit(directory);

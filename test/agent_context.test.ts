@@ -17,7 +17,7 @@ test("agent send records and supplies an explicit virtual-file context", async (
   await client.exec(
     `printf '${manifest({ reviewer: "review carefully" })}' > .yafsmeta`,
   );
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await client.exec("printf diff-body > diff.patch");
   await client.exec(
     'agent send agents/reviewer --context diff.patch "Review this"',

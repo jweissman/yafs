@@ -21,7 +21,7 @@ test("agent pseudobinaries send, inspect, and cancel a run without ctl JSON", as
   const { client, server } = await startedAgentServer(model);
   await expect(client.exec("agent nope")).rejects.toThrow("agent expects");
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   const accepted = await client.exec('agent send agents/reviewer "check this"');
   expect(accepted).toMatch(
     /^accepted: agents\/reviewer -> \/home\/root\/agents\/reviewer\/runs\/[\w-]+$/,
@@ -62,7 +62,7 @@ test("agent send resolves a bare persona name from anywhere, not just its own di
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await client.exec("mkdir elsewhere");
   await client.exec("cd elsewhere");
   const accepted = await client.exec('agent send reviewer "hi"');
@@ -83,12 +83,12 @@ test("agent send rejects an ambiguous bare persona name shared by two plugins", 
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   const second = manifest({ reviewer: "prompt" })
     .replace("id: reviewer", "id: second")
     .replace("path: agents", "path: agents2");
   await client.exec(`printf '${second}' > .yafsmeta2`);
-  await client.exec("mount activate .yafsmeta2 second");
+  await client.exec("plugin activate .yafsmeta2 second");
   await expect(client.exec('agent send reviewer "hi"')).rejects.toThrow(
     "Ambiguous persona reviewer",
   );

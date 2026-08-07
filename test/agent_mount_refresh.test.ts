@@ -12,7 +12,7 @@ import {
   sleep,
 } from "./agent_test_helpers";
 
-test("an operator mount refresh keeps run history durable and still picks up a changed prompt", async () => {
+test("an operator plugin refresh keeps run history durable and still picks up a changed prompt", async () => {
   const server = await YafsServer.start({
     dataDir: await mkdtemp(join(tmpdir(), "yafs-agents-refresh-")),
     modelFor: () => fakeExchangeModel("ok", []),
@@ -21,14 +21,14 @@ test("an operator mount refresh keeps run history durable and still picks up a c
   await client.exec(
     `printf '${manifest({ reviewer: "v1 prompt" })}' > .yafsmeta`,
   );
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await sleep(400);
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForRun(client, "agents/reviewer/runs");
   await client.exec(
     `printf '${manifest({ reviewer: "v2 prompt" })}' > .yafsmeta`,
   );
-  await client.exec("mount refresh .yafsmeta reviewer");
+  await client.exec("plugin refresh .yafsmeta reviewer");
   expect(await client.exec("cat agents/reviewer/prompt.md")).toBe("v2 prompt");
   expect(
     await client.exec(`cat agents/reviewer/runs/${runId}/status.json`),
@@ -45,7 +45,7 @@ test("a ctl-triggered run leaves an audit entry naming the persona and run, not 
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await sleep(400);
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForRun(client, "agents/reviewer/runs");

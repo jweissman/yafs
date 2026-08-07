@@ -19,7 +19,7 @@ test("restart marks an accepted in-flight run interrupted", async () => {
   });
   const client = await YashClient.connect(server.address());
   await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("mount activate .yafsmeta");
+  await client.exec("plugin activate .yafsmeta");
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForStatus(
     client,
