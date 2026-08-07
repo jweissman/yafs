@@ -42,7 +42,7 @@ async function assertAgentPluginDescribed(client: YashClient) {
       actions: [
         {
           name: "send",
-          pseudobinary: "agent send PERSONA [--context PATH] MESSAGE",
+          pseudobinary: "agent send PERSONA [--context PATH] [--chat CHATID] MESSAGE",
         },
       ],
       exposures: [

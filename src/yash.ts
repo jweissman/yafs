@@ -1,6 +1,7 @@
 import { renderPrompt } from "./yash/prompt";
 import { connect } from "./yash/connect";
 import { runEdit } from "./yash/edit";
+import { runChat } from "./yash/chat";
 import { withTerminalHandoff } from "./yash/terminalHandoff";
 import { question } from "./yash/question";
 import { print, printHistory } from "./yash/output";
@@ -94,11 +95,22 @@ async function handleLine(repl: Repl, line: string, session: Session) {
     printHistory(repl.history);
     return session;
   }
-  if (line === "edit" || line.startsWith("edit ")) {
-    await editLine(repl, line);
+  const special = specialLine(repl, line);
+  if (special) {
+    await special;
     return session;
   }
   return executeLine(repl, line, session);
+}
+
+function specialLine(repl: Repl, line: string): Promise<void> | undefined {
+  if (line === "edit" || line.startsWith("edit ")) {
+    return editLine(repl, line);
+  }
+  if (line === "agent chat" || line.startsWith("agent chat ")) {
+    return chatLine(repl, line);
+  }
+  return undefined;
 }
 
 async function editLine(repl: Repl, line: string) {
@@ -106,6 +118,12 @@ async function editLine(repl: Repl, line: string) {
   await withTerminalHandoff(repl.readline, () =>
     runEdit(repl.client, line.slice(5).trim()),
   );
+}
+
+async function chatLine(repl: Repl, line: string) {
+  await repl.history.record(line);
+  const persona = line.slice("agent chat".length).trim();
+  await runChat(repl.client, repl.readline, persona);
 }
 
 async function executeLine(repl: Repl, line: string, session: Session) {

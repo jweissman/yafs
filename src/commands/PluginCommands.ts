@@ -44,7 +44,8 @@ class PluginsCommand {
 class PluginLifecycleCommand {
   readonly name = "plugin";
   readonly access = "control";
-  readonly synopsis = "plugin validate|activate|refresh MANIFEST [ID] | deactivate ID";
+  readonly synopsis =
+    "plugin validate|activate|refresh MANIFEST [ID] | deactivate ID";
 
   constructor() {}
 
@@ -83,5 +84,9 @@ function desiredRead(context: CommandContext, action: string) {
 }
 
 export function pluginCommands(): BuiltinCommand[] {
-  return [new MountsCommand(), new PluginsCommand(), new PluginLifecycleCommand()];
+  return [
+    new MountsCommand(),
+    new PluginsCommand(),
+    new PluginLifecycleCommand(),
+  ];
 }

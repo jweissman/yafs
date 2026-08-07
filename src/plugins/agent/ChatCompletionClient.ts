@@ -3,15 +3,19 @@ import {
   chatCompletionSettings,
   ChatCompletionSettings,
 } from "./ChatCompletionSettings";
+import { readStream } from "./ChatCompletionStream";
 
 type Fetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Response>;
-type ChatResponse = { choices?: Array<{ message?: { content?: string } }> };
+export type ChatMessage = { role: string; content: string };
 
 export type ModelClient = {
-  complete(system: string, message: string): Promise<string>;
+  completeChat(
+    messages: ChatMessage[],
+    onDelta?: (delta: string) => void,
+  ): Promise<string>;
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -23,40 +27,30 @@ export class ChatCompletionClient implements ModelClient {
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
   ) {}
 
-  async complete(system: string, message: string): Promise<string> {
-    const response = await this.fetch(this.body(system, message));
-    return this.content(await this.text(response), await this.json(response));
+  async completeChat(
+    messages: ChatMessage[],
+    onDelta?: (delta: string) => void,
+  ): Promise<string> {
+    const response = await this.fetch(this.body(messages));
+    const { raw, full } = await readStream(response.body!, onDelta);
+    return this.content(full, raw);
   }
 
-  private body(system: string, message: string) {
-    const messages = [
-      { role: "system", content: system },
-      { role: "user", content: message },
-    ];
+  private body(messages: ChatMessage[]) {
     return {
       ...(this.settings.model ? { model: this.settings.model } : {}),
       messages,
+      stream: true,
     };
   }
 
-  private content(raw: string, response: ChatResponse | undefined) {
-    const content = response?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
+  private content(full: string, raw: string) {
+    if (!full) {
       throw new Error(
         `Chat completion response had no message content: ${raw}`,
       );
     }
-    return content;
-  }
-
-  private async text(response: Response) {
-    return response.clone().text();
-  }
-
-  private async json(response: Response) {
-    return response.json().catch(() => undefined) as Promise<
-      ChatResponse | undefined
-    >;
+    return full;
   }
 
   private async fetch(body: unknown) {

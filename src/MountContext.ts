@@ -2,7 +2,10 @@ import { AbsolutePath } from "./core/AbsolutePath";
 import { MountManager } from "./mounts/MountManager";
 import { DesiredMounts } from "./mounts/DesiredMounts";
 import { YafsOperationQueue } from "./YafsOperationQueue";
-import { agentPersonaPath } from "./plugins/agent/AgentPersonaLookup";
+import {
+  agentPersonaPath,
+  listPersonas,
+} from "./plugins/agent/AgentPersonaLookup";
 import { slackPluginPath } from "./plugins/slack/SlackPluginLookup";
 
 export function mountContext(
@@ -22,6 +25,7 @@ function pluginLookups(manager: MountManager) {
   return {
     plugins: (name?: string) => manager.plugins(name),
     agentPersona: (reference: string) => agentPersonaPath(manager, reference),
+    agentPersonas: () => listPersonas(manager),
     slackPlugin: (id: string) => slackPluginPath(manager, id),
   };
 }

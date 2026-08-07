@@ -155,18 +155,53 @@ mount's `NAME/ctl` calls that persona's configured model with its `prompt`
 as the system prompt. An accepted action writes `status.json` as `queued` and
 `request.md` under `NAME/runs/<run-id>/` before the call starts, then moves
 through `running` to `complete`/`failed`; `response.md` joins it on success.
-A stuck or failed run is therefore visible without tailing the daemon log.
-Invoking a persona without `chat.completion`, or sending invalid JSON, rejects
-the write before any run is recorded; the connection stays open either way.
+The model is always called with `stream: true`, and `response.md` is
+republished incrementally (roughly every 100ms) as the reply arrives — a
+client can watch a long reply grow by re-reading `response.md`, not just
+wait for the final `complete` status. A stuck or failed run is therefore
+visible without tailing the daemon log. Invoking a persona without
+`chat.completion`, or sending invalid JSON, rejects the write before any run
+is recorded; the connection stays open either way.
+
+An optional `chatId` field on the `ctl` payload (or `agent send`'s `--chat
+CHATID` flag) turns a one-shot request into one turn of a durable, multi-turn
+conversation: the persona's `prompt` becomes the system message, and every
+prior turn tagged with that `chatId` is included as real `{role, content}`
+history (not a flattened text blob) sent to the model. Turns accumulate at
+`NAME/chats/CHATID/messages.ndjson` — one JSON object per line, appended as
+soon as each turn is accepted (so a crash mid-run still preserves what was
+asked) and again once the reply completes. `--context PATH` and `--chat
+CHATID` compose: context still folds into only the *current* turn's message,
+exactly as it does without `--chat`.
 
 Yash supplies a friendlier adapter over that same action definition:
 
 ```sh
 agent send agents/reviewer "Review this change"
 agent send agents/reviewer --context source/pulls/482/diff.patch "Review this PR"
+agent send agents/reviewer --chat mychat "First turn of a conversation"
+agent send agents/reviewer --chat mychat "Second turn, sees the first as history"
 agent status agents/reviewer/runs/RUN_ID
 agent cancel agents/reviewer RUN_ID
+agent personas
+agent target agents/reviewer
 ```
+
+`agent personas` lists every configured persona across active agent mounts
+as `{mountPath, persona}` JSON pairs — the read-only introspection surface
+`agent chat` uses to pick a default when no persona is named. `agent target
+PERSONA` resolves a persona reference (bare name or path, same rules as
+`agent send`) to its absolute mount-relative directory, as plain text.
+
+`agent chat [PERSONA]` is a synchronous, interactive, multi-turn
+conversation with one persona — defaulting to the sole configured persona if
+exactly one exists, otherwise requiring an explicit choice. It's a
+client-side yash feature (like `edit`), not a server command: it mints one
+`chatId` per chat session, writes each turn directly to the persona's `ctl`
+(bypassing yash's command-line quoting entirely, so arbitrary message text —
+quotes, `$`, anything — is safe), and polls `response.md` to print the reply
+as it streams in. Requires an interactive terminal; see
+[agent chat validation](AGENT-CHAT-VALIDATION.md) for a full walkthrough.
 
 `slack send PLUGIN_ID MESSAGE` is the same `ctl`-write mechanism under a
 different adapter: it writes `{"message": MESSAGE}` to the named Slack

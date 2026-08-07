@@ -56,3 +56,16 @@ function personas(record: PreparedMountRecord): string[] {
   const config = validAgentConfig(record.config);
   return config ? Object.keys(config.personas) : [];
 }
+
+export type PersonaListing = { mountPath: string; persona: string };
+
+export function listPersonas(mounts: MountManager): PersonaListing[] {
+  return mounts.mounts().flatMap((record) => personaEntries(record));
+}
+
+function personaEntries(record: PreparedMountRecord): PersonaListing[] {
+  return personas(record).map((persona) => ({
+    mountPath: record.path,
+    persona,
+  }));
+}

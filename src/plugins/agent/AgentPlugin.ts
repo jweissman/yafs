@@ -44,7 +44,7 @@ export class AgentPlugin extends Plugin {
         name: "send",
         capability: "chat.completion",
         transport: "ctl",
-        pseudobinary: "agent send PERSONA [--context PATH] MESSAGE",
+        pseudobinary: "agent send PERSONA [--context PATH] [--chat CHATID] MESSAGE",
       },
     ];
   }

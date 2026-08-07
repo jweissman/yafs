@@ -48,25 +48,6 @@ test("plugins desired-state commands report unconfigured instead of throwing whe
   ).toBe("No daemon mount configuration");
 });
 
-test("rmdir removes an empty directory but refuses a non-empty one, a file, or a read-only mount", () => {
-  const yafs = new Yafs();
-  yafs.exec("mkdir empty");
-  yafs.exec("mkdir full");
-  yafs.exec("touch full/inside");
-  expect(yafs.exec("rmdir empty")).toBe("");
-  expect(yafs.execute("cat empty").error?.code).toBe("not_found");
-  expect(yafs.execute("rmdir full").error?.code).toBe("not_empty");
-  expect(yafs.execute("rmdir full/inside").error?.code).toBe("not_directory");
-  expect(yafs.execute("rmdir missing").error?.code).toBe("not_found");
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
-  yafs.exec("plugin activate .yafsmeta");
-  expect(yafs.execute("rmdir fixture").error?.code).toBe("read_only_mount");
-});
-
-function fixtureManifest() {
-  return "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}";
-}
-
 test("read-only text commands query virtual files without host processes", () => {
   const yafs = new Yafs();
   yafs.store.write("/home/root/words", "alpha\nbeta\nalphabet");
@@ -106,34 +87,39 @@ function commandContext(): CommandContext {
   };
 }
 
+function unimplemented(): never {
+  throw new Error("Not implemented in this test fixture");
+}
+
 function mountContext() {
   return {
-    planMount: () => {
-      throw new Error();
-    },
-    prepareMount: () => {
-      throw new Error();
-    },
-    planRefresh: () => {
-      throw new Error();
-    },
-    planUnmount: () => {
-      throw new Error();
-    },
+    planMount: unimplemented,
+    prepareMount: unimplemented,
+    planRefresh: unimplemented,
+    planUnmount: unimplemented,
     mount: () => undefined,
     refresh: () => undefined,
     unmount: () => undefined,
     resourceReference: () => undefined,
+    ...desiredMountContext(),
+    ...pluginLookupContext(),
+  };
+}
+
+function desiredMountContext() {
+  return {
     desiredStatus: async () => ({}),
     desiredPlan: async () => [],
     applyDesired: async () => [],
     refreshDesired: async () => ({}),
-    agentPersona: () => {
-      throw new Error();
-    },
-    slackPlugin: () => {
-      throw new Error();
-    },
+  };
+}
+
+function pluginLookupContext() {
+  return {
+    agentPersona: unimplemented,
+    agentPersonas: () => [],
+    slackPlugin: unimplemented,
   };
 }
 

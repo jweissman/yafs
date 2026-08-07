@@ -5,12 +5,15 @@ import { MountManager } from "../../mounts/MountManager";
 import { AgentConfig, PersonaConfig } from "../../mounts/types";
 import { ModelClient } from "./ChatCompletionClient";
 import { AgentRunStore, Status } from "./AgentRunStore";
+import { AgentChatStore } from "./AgentChatStore";
 import { recoverAgentRuns } from "./AgentRunRecovery";
 import { AgentRunCancellation, cancelId } from "./AgentRunCancellation";
 import { AgentRegistration } from "./AgentRegistration";
 import { AgentTarget, agentTarget, RunContext } from "./AgentTarget";
 import { failedStatus, queuedStatus, runningStatus } from "./AgentStatus";
 import { AgentRequest, completeAgent, parseAgentRequest } from "./AgentRequest";
+import { deltaWriter } from "./AgentDeltaWriter";
+import { acceptChatTurn, chatHistoryFor, finishChatTurn } from "./AgentChatTurn";
 
 type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
 type UnregisterCtl = (path: AbsolutePath) => void;
@@ -20,6 +23,7 @@ type Enqueue = (work: () => Promise<void>) => Promise<void>;
 
 export class AgentDirectoryDriver {
   private readonly runs: AgentRunStore;
+  private readonly chats: AgentChatStore;
   private readonly cancels: AgentRunCancellation;
   private readonly registration: AgentRegistration;
 
@@ -31,6 +35,7 @@ export class AgentDirectoryDriver {
     private readonly modelFor: ModelFor,
   ) {
     this.runs = new AgentRunStore(mounts, journal, enqueue);
+    this.chats = new AgentChatStore(mounts, journal, enqueue);
     this.cancels = new AgentRunCancellation(mounts, this.runs);
     this.registration = this.buildRegistration(ctl);
   }
@@ -87,9 +92,10 @@ export class AgentDirectoryDriver {
     return context;
   }
 
-  private acceptRun(context: RunContext, request: AgentRequest) {
+  private async acceptRun(context: RunContext, request: AgentRequest) {
     const status = queuedStatus(context.startedAt);
-    return this.runs.accept(context, request.message, status, request.context);
+    await this.runs.accept(context, request.message, status, request.context);
+    await acceptChatTurn(this.chats, context, request);
   }
 
   private settle(
@@ -123,27 +129,30 @@ export class AgentDirectoryDriver {
     context: RunContext,
     request: AgentRequest,
   ) {
-    const reply = await completeAgent(
-      this.modelFor(target.persona, target.config),
-      target.persona,
-      request,
-    );
-    await this.finishUnlessCancelled(context, request.message, reply);
+    const model = this.modelFor(target.persona, target.config);
+    const onDelta = deltaWriter(this.runs, context);
+    const history = chatHistoryFor(this.chats, context, request);
+    const reply = await completeAgent(model, target.persona, request, onDelta, history);
+    await this.finishUnlessCancelled(context, request, reply);
   }
 
   private finishUnlessCancelled(
     context: RunContext,
-    message: string,
+    request: AgentRequest,
     reply: string,
   ) {
     if (this.cancels.cancelledRun(context.mountId, context.runId)) {
       return;
     }
-    return this.finish(context, message, reply);
+    return this.finish(context, request, reply);
   }
 
-  private finish(context: RunContext, message: string, reply: string) {
-    return this.runs.finish({ ...context, message, reply });
+  private async finish(context: RunContext, request: AgentRequest, reply: string) {
+    // Append chat history before the "complete" status, not after — a
+    // poller waiting on status.json reaching "complete" must be able to
+    // trust the chat history is already durable by then.
+    await finishChatTurn(this.chats, context, request.chatId, reply);
+    await this.runs.finish({ ...context, message: request.message, reply });
   }
 
   private fail(context: RunContext, error: unknown) {

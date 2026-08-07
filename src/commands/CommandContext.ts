@@ -26,6 +26,7 @@ export type CommandContext = {
   mounts(): string[];
   plugins(name?: string): object[];
   agentPersona(reference: string): AbsolutePath;
+  agentPersonas(): { mountPath: string; persona: string }[];
   slackPlugin(id: string): AbsolutePath;
   desiredStatus(): Promise<object>;
   desiredPlan(): Promise<object[]>;

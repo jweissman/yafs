@@ -1,6 +1,6 @@
 import { Journal } from "../../protocol/Journal";
 import { MountManager } from "../../mounts/MountManager";
-import { PreparedMountRecord } from "../../mounts/types";
+import { publishEntries } from "../../mounts/MountEntryPublish";
 import {
   contextEntry,
   detail,
@@ -40,6 +40,10 @@ export class AgentRunStore {
       [statusEntry(id, status)],
       detail(id, status),
     );
+  }
+
+  writeIncrementalResponse(id: RunId, partial: string) {
+    return this.commitEntries(id, [responseEntry(id, partial)], "");
   }
 
   accept(id: RunId, message: string, status: Status, context?: string) {
@@ -108,36 +112,14 @@ export class AgentRunStore {
     return this.enqueue(() => this.applyEntries(id, updates, entryDetail));
   }
 
-  private async applyEntries(id: RunId, updates: Entry[], entryDetail: string) {
-    const record = this.mounts.mounts().find((item) => item.id === id.mountId);
-    if (!record) {
-      return;
+  private async applyEntries(id: RunId, updates: Entry[], info: string) {
+    const record = this.record(id.mountId);
+    if (record) {
+      await publishEntries(this.mounts, this.journal, record, updates, info);
     }
-    const entries = this.merged(record.snapshot.entries, updates);
-    await this.commit(this.withEntries(record, entries), entryDetail);
   }
 
-  private withEntries(
-    record: PreparedMountRecord,
-    entries: Entry[],
-  ): PreparedMountRecord {
-    return {
-      ...record,
-      fetchedAt: new Date().toISOString(),
-      snapshot: { ...record.snapshot, entries },
-    };
-  }
-
-  private async commit(updated: PreparedMountRecord, entryDetail: string) {
-    await this.journal.commit([
-      { type: "refresh", record: updated, at: new Date().toISOString() },
-    ]);
-    this.mounts.refresh(updated, "system", entryDetail);
-  }
-
-  private merged(entries: Entry[], updates: Entry[]): Entry[] {
-    const byPath = new Map(entries);
-    updates.forEach(([path, content]) => byPath.set(path, content));
-    return [...byPath];
+  private record(mountId: string) {
+    return this.mounts.mounts().find((item) => item.id === mountId);
   }
 }

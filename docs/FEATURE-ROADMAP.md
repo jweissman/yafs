@@ -476,21 +476,22 @@ rest.
   exactly the shape `yafs-mcp` already is, just a different wire format. Once
   that bridge exists, a static htmx/tailwind frontend over it is a reasonable,
   cheap choice.
-- **Single-agent synchronous chat (`agent chat`).** Ahead of any multi-agent
-  work: a live, multi-turn conversation with one named persona (defaulting to
-  the sole configured persona if only one exists), structured as a real
-  `[{role, content}, ...]` message array — not the current single flattened
-  `message + context` string `agent send` builds today. Needs three things,
-  none of them new design: `ChatCompletionClient` gains a messages-array
-  method; a durable `NAME/chats/<chat-id>/messages.ndjson` resource holds the
-  growing history (each turn still produces a `runs/<run-id>/` entry for
-  provenance, same durable-run invariant as today); and a synchronous variant
-  of the invoke path (`agent send --no-background`-shaped) that blocks until
-  the model responds instead of the current accept-then-poll flow, so
-  interactive use doesn't need to poll `status.json`. True token-by-token
-  streaming back to the client is a distinct, larger change — the RPC
-  protocol is currently one request → one full result, not incremental — and
-  is deliberately not bundled into this.
+- **Single-agent synchronous chat (`agent chat`) — implemented.** A live,
+  multi-turn conversation with one named persona (defaulting to the sole
+  configured persona if only one exists), structured as a real
+  `[{role, content}, ...]` message array via `ChatCompletionClient.
+  completeChat`, not the flattened `message + context` string `agent send`
+  builds without `--chat`. Turns accumulate at
+  `NAME/chats/<chat-id>/messages.ndjson`; each still produces a
+  `runs/<run-id>/` entry for provenance, same durable-run invariant as every
+  other agent action. Streaming turned out not to need the RPC protocol
+  change this entry originally assumed: the model is always called with
+  `stream: true`, and `response.md` is republished incrementally (~100ms
+  cadence) via the same durable-write mechanism fixture streams already
+  proved — a client observes growth by re-reading the file, no
+  request/response-per-chunk primitive required. `agent chat` is a
+  client-side yash feature (`src/yash/chat.ts`), not a server command; see
+  [agent chat validation](AGENT-CHAT-VALIDATION.md).
 - **Local multi-agent group chat — deferred behind the above.** A shared
   local append-only log (`chat/room/messages.ndjson`) that several agent
   directories and a human read and append to still needs no
@@ -499,7 +500,7 @@ rest.
   unresolved question the single-agent case doesn't have: other agents in the
   room aren't naturally `system`/`user`/`assistant` in the chat-completion
   role model, and a persona must not confuse another agent's turn for its
-  own. Get single-agent `agent chat` solid first; the role-representation
+  own. Single-agent `agent chat` is solid now; the role-representation
   question gets a real design pass once that foundation exists, not before.
 
 **Ready, but a distinct engineering task, not a rider on the above:**
@@ -517,10 +518,12 @@ rest.
   needs, plus a write-capable tool boundary that doesn't just hand an MCP
   client the same authority as a `yash` session (today `yafs.query` explicitly
   refuses every mutating command, including `ctl`, for exactly this reason).
-  This is also where token-streaming responses would matter most if the
-  single-agent chat streaming question above is ever picked back up — an
-  agent recursively calling back into Yafs over MCP is the concrete "real
-  demo" this unlocks, but it's gated behind both pieces existing.
+  Real token streaming for MCP responses would need its own solution here —
+  the durable-file-plus-polling approach `agent chat` uses works because the
+  client already has a full command surface to poll with; an MCP tool
+  response doesn't have that same shape. An agent recursively calling back
+  into Yafs over MCP is the concrete "real demo" this unlocks, but it's
+  gated behind both pieces existing.
 
 **Deliberately not sequenced — new capability class, only build when a
 concrete need forces the question:**

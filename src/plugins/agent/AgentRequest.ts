@@ -1,42 +1,32 @@
 import { PersonaConfig } from "../../mounts/types";
 import { ModelClient } from "./ChatCompletionClient";
+import { ChatMessage } from "./AgentChatHistory";
 
 export type AgentRequest = {
   message: string;
   context?: string;
   runId?: string;
+  chatId?: string;
+};
+
+type RawRequest = {
+  message?: unknown;
+  context?: unknown;
+  runId?: unknown;
+  chatId?: unknown;
 };
 
 export function parseAgentRequest(payload: string): AgentRequest {
-  const value = JSON.parse(payload) as {
-    message?: unknown;
-    context?: unknown;
-    runId?: unknown;
-  };
-  return validRequest(value, payload);
+  const value = JSON.parse(payload) as RawRequest;
+  assertMessage(value.message, payload);
+  assertOptionalStrings(value, payload);
+  return value as AgentRequest;
 }
 
-function validRequest(
-  value: { message?: unknown; context?: unknown; runId?: unknown },
-  payload: string,
-): AgentRequest {
-  const { message, context, runId } = value;
-  assertMessage(message, payload);
-  assertOptionalString(context, payload);
-  assertOptionalString(runId, payload);
-  return requestOf(message, context, runId);
-}
-
-function requestOf(
-  message: string,
-  context: unknown,
-  runId: unknown,
-): AgentRequest {
-  return {
-    message,
-    context: context as string | undefined,
-    runId: runId as string | undefined,
-  };
+function assertOptionalStrings(value: RawRequest, payload: string) {
+  [value.context, value.runId, value.chatId].forEach((v) =>
+    assertOptionalString(v, payload),
+  );
 }
 
 function assertMessage(
@@ -58,8 +48,16 @@ export function completeAgent(
   model: ModelClient,
   persona: PersonaConfig,
   request: AgentRequest,
+  onDelta?: (delta: string) => void,
+  history?: ChatMessage[],
 ) {
-  return model.complete(persona.prompt, modelMessage(request));
+  const system = { role: "system", content: persona.prompt };
+  const messages = history ? [system, ...history] : [system, userTurn(request)];
+  return model.completeChat(messages, onDelta);
+}
+
+export function userTurn(request: AgentRequest): ChatMessage {
+  return { role: "user", content: modelMessage(request) };
 }
 
 function modelMessage(request: AgentRequest) {

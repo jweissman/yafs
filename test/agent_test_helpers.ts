@@ -14,17 +14,22 @@ export function fakeExchangeModel(
   calls: Array<{ system: string; message: string }>,
 ): ModelClient {
   return {
-    complete: async (system, message) => {
-      calls.push({ system, message });
+    completeChat: async (chat) => {
+      calls.push(exchange(chat));
       return reply;
     },
   };
 }
 
-export function fakeMessageModel(messages: string[]): ModelClient {
+function exchange(chat: { role: string; content: string }[]) {
+  return { system: chat[0].content, message: chat[chat.length - 1].content };
+}
+
+export function fakeMessageModel(collected: string[]): ModelClient {
   return {
-    complete: async (_system, message) => {
-      messages.push(message);
+    completeChat: async (chat) => {
+      const message = chat[chat.length - 1].content;
+      collected.push(message);
       return `reply-to-${message}`;
     },
   };
@@ -32,7 +37,7 @@ export function fakeMessageModel(messages: string[]): ModelClient {
 
 export function failingModel(message: string): ModelClient {
   return {
-    complete: async () => {
+    completeChat: async () => {
       throw new Error(message);
     },
   };
@@ -40,9 +45,34 @@ export function failingModel(message: string): ModelClient {
 
 export function slowModel(reply: string, delayMs: number): ModelClient {
   return {
-    complete: async () => {
+    completeChat: async () => {
       await sleep(delayMs);
       return reply;
+    },
+  };
+}
+
+export function chunkedModel(chunks: string[], delayMs: number): ModelClient {
+  return {
+    completeChat: async (_chat, onDelta) => {
+      for (const chunk of chunks) {
+        await sleep(delayMs);
+        onDelta?.(chunk);
+      }
+      return chunks.join("");
+    },
+  };
+}
+
+export function recordingModel(
+  replies: string[],
+  calls: Array<{ role: string; content: string }[]>,
+): ModelClient {
+  let index = 0;
+  return {
+    completeChat: async (chat) => {
+      calls.push(chat);
+      return replies[index++];
     },
   };
 }

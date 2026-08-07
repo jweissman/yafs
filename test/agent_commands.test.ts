@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import {
   fakeMessageModel,
   manifest,
+  multiPersonaManifest,
   waitForStatus,
 } from "./agent_test_helpers";
 import { agentCommands } from "../src/plugins/agent/AgentCommands";
@@ -99,10 +100,27 @@ test("agent send rejects an ambiguous bare persona name shared by two plugins", 
   await server.close();
 });
 
+test("agent personas lists every configured persona across active agent mounts", async () => {
+  const server = await YafsServer.start({
+    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-personas-")),
+    modelFor: () => fakeMessageModel([]),
+  });
+  const client = await YashClient.connect(server.address());
+  expect(JSON.parse(await client.exec("agent personas"))).toEqual([]);
+  await client.exec(`printf '${multiPersonaManifest()}' > .yafsmeta`);
+  await client.exec("plugin activate .yafsmeta");
+  expect(JSON.parse(await client.exec("agent personas"))).toEqual([
+    { mountPath: "/home/root/agents", persona: "alpha" },
+    { mountPath: "/home/root/agents", persona: "beta" },
+  ]);
+  await client.close();
+  await server.close();
+});
+
 function controlledModel() {
   let resolve = (_value: string) => undefined;
   const client = {
-    complete: () =>
+    completeChat: () =>
       new Promise<string>((done) => {
         resolve = done;
       }),

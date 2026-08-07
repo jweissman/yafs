@@ -95,7 +95,7 @@ function audit(directory: string) {
 }
 
 function pendingModel() {
-  return { complete: () => new Promise<string>(() => undefined) };
+  return { completeChat: () => new Promise<string>(() => undefined) };
 }
 
 function invalidAgent() {
