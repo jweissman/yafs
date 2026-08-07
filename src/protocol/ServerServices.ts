@@ -10,7 +10,7 @@ import { StartOptions } from "./server";
 import { openBlobStore } from "./BlobStore";
 import { TraceService } from "../traces/TraceService";
 import { retainTraces } from "../traces/TraceRetention";
-import { defaultTraceReifier } from "../mounts/GitHubTraceReifier";
+import { defaultTraceReifier } from "../plugins/github/GitHubTraceReifier";
 import { CacheService } from "../cache/CacheService";
 import { retainCaches } from "../cache/CacheRetention";
 
@@ -21,13 +21,13 @@ export function replay(mounts: MountManager) {
 }
 function replayOperation(mounts: MountManager, operation: VfsOperation) {
   if (operation.type === "mount") {
-    mounts.restoreOperation(operation.record);
+    mounts.replay.activation(operation.record);
   }
   if (operation.type === "refresh") {
-    mounts.restoreRefresh(operation.record);
+    mounts.replay.refresh(operation.record);
   }
   if (operation.type === "unmount") {
-    mounts.restoreUnmount(operation.id);
+    mounts.replay.unmount(operation.id);
   }
 }
 type Base = { store: NodeStore; mounts: MountManager };
@@ -64,17 +64,14 @@ async function finishServices(
 function openJournal(base: Base, options: StartOptions) {
   return Journal.open(journalPath(options), base.store, replay(base.mounts));
 }
-function mountManager(
-  store: NodeStore,
-  paths: ReturnType<typeof mountPaths>,
-  options: StartOptions,
-) {
+function mountManager(store: NodeStore, paths: Paths, options: StartOptions) {
+  const providers = options.providers || defaultProviders();
   return new MountManager(
     store,
     paths.state,
     paths.audit,
     undefined,
-    options.providers || defaultProviders(),
+    providers,
   );
 }
 export function listen(server: Server, options: StartOptions): Promise<void> {

@@ -5,8 +5,8 @@ import { join } from "node:path";
 
 import { YashClient } from "../src/protocol/client";
 import { YafsServer } from "../src/protocol/server";
-import { GitHubCollectionSource } from "../src/mounts/GitHubCollectionSource";
-import { GitHubTraceReifier } from "../src/mounts/GitHubTraceReifier";
+import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSource";
+import { GitHubTraceReifier } from "../src/plugins/github/GitHubTraceReifier";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 
 test("a durable trace survives restart, retains its blobs, and reifies without its source", async () => {

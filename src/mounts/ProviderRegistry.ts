@@ -1,16 +1,16 @@
-import { GitHubCollectionSource } from "./GitHubCollectionSource";
-import { SlackCollectionSource } from "./SlackCollectionSource";
+import { GitHubCollectionSource } from "../plugins/github/GitHubCollectionSource";
+import { SlackCollectionSource } from "../plugins/slack/SlackCollectionSource";
 import { SnapshotMaterializer } from "./SnapshotMaterializer";
 import { MountRecord, PreparedMountRecord } from "./types";
-import { ProviderDefinition } from "./ProviderDefinition";
+import { Plugin } from "./Plugin";
 import { describePlugins, PluginDescription } from "./PluginDescriptions";
-import { fixtureDefinition } from "./FixturePlugin";
-import { githubDefinition } from "./GitHubPlugin";
-import { slackDefinition } from "./SlackPlugin";
-import { agentDefinition } from "../agents/AgentPlugin";
+import { FixturePlugin } from "../plugins/fixture/FixturePlugin";
+import { GitHubPlugin } from "../plugins/github/GitHubPlugin";
+import { SlackPlugin } from "../plugins/slack/SlackPlugin";
+import { AgentPlugin } from "../plugins/agent/AgentPlugin";
 
 export class ProviderRegistry {
-  private readonly definitions: Map<string, ProviderDefinition>;
+  private readonly definitions: Map<string, Plugin>;
 
   constructor(
     github?: GitHubCollectionSource,
@@ -61,11 +61,11 @@ function providerDefinitions(
   github?: GitHubCollectionSource,
   authenticatedGithub?: GitHubCollectionSource,
   slack?: SlackCollectionSource,
-): ProviderDefinition[] {
+): Plugin[] {
   return [
-    fixtureDefinition(),
-    agentDefinition(),
-    githubDefinition({ github, authenticatedGithub }),
-    slackDefinition(slack),
+    new FixturePlugin(),
+    new AgentPlugin(),
+    new GitHubPlugin({ github, authenticatedGithub }),
+    new SlackPlugin(slack),
   ];
 }

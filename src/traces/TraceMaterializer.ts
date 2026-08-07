@@ -18,11 +18,9 @@ export async function writeEntry(
 ) {
   assertEntry(entry);
   const path = resolveDestination(destination, entry.path);
-  const content = new TextDecoder().decode(
-    await bytesFor(target, trace, entry.digest),
-  );
+  const bytes = await bytesFor(target, trace, entry.digest);
   ensureParents(target.files, destination, path);
-  target.files.write(path, content);
+  target.files.write(path, new TextDecoder().decode(bytes));
 }
 
 async function bytesFor(target: Materializer, trace: Trace, digest: string) {
@@ -74,14 +72,16 @@ function ensureParents(
   root: AbsolutePath,
   path: AbsolutePath,
 ) {
-  path
+  const reducer = (parent: AbsolutePath, name: string) =>
+    ensureParent(files, parent, name);
+  parentSegments(root, path).reduce(reducer, root);
+}
+
+function parentSegments(root: AbsolutePath, path: AbsolutePath) {
+  return path
     .slice(root.length + 1)
     .split("/")
-    .slice(0, -1)
-    .reduce<AbsolutePath>(
-      (parent, name) => ensureParent(files, parent, name),
-      root,
-    );
+    .slice(0, -1);
 }
 
 function ensureParent(

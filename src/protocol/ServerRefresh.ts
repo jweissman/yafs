@@ -14,8 +14,12 @@ export class ServerRefresh {
     now?: () => number,
     private readonly intervalMs = 60_000,
   ) {
-    this.scheduler = new MountRefreshScheduler(
-      () => mounts.mounts(),
+    this.scheduler = this.buildScheduler(now);
+  }
+
+  private buildScheduler(now?: () => number) {
+    return new MountRefreshScheduler(
+      () => this.mounts.mounts(),
       (record) => this.schedule(record),
       now,
     );

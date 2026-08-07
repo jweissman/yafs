@@ -1,8 +1,8 @@
-import { GitHubApiClient } from "./GitHubApiClient";
-import { GitHubCollectionSource } from "./GitHubCollectionSource";
-import { githubSettings } from "./GitHubSettings";
-import { defaultSlackClient } from "./SlackApiClient";
-import { SlackCollectionSource } from "./SlackCollectionSource";
+import { GitHubApiClient } from "../plugins/github/GitHubApiClient";
+import { GitHubCollectionSource } from "../plugins/github/GitHubCollectionSource";
+import { githubSettings } from "../plugins/github/GitHubSettings";
+import { defaultSlackClient } from "../plugins/slack/SlackApiClient";
+import { SlackCollectionSource } from "../plugins/slack/SlackCollectionSource";
 import { ProviderRegistry } from "./ProviderRegistry";
 
 export function defaultProviders() {
@@ -13,7 +13,9 @@ export function defaultProviders() {
   return new ProviderRegistry(github, authenticated(settings), slackSource());
 }
 
-function authenticated(settings: import("./GitHubSettings").GitHubSettings) {
+function authenticated(
+  settings: import("../plugins/github/GitHubSettings").GitHubSettings,
+) {
   return settings.token
     ? new GitHubCollectionSource(new GitHubApiClient(settings))
     : undefined;

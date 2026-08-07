@@ -105,4 +105,7 @@ test("filesystem errors distinguish missing paths and non-directories", () => {
   expect(() => yafs.exec("ls note")).toThrow(
     "Not a directory: /home/root/note",
   );
+  expect(() => yafs.exec("touch note/child")).toThrow(
+    "Not a directory: /home/root/note",
+  );
 });

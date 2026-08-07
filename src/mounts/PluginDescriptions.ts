@@ -1,8 +1,8 @@
 import {
+  Plugin,
   PluginActionDefinition,
   PluginExposureDefinition,
-  ProviderDefinition,
-} from "./ProviderDefinition";
+} from "./Plugin";
 
 export type PluginDescription = {
   name: string;
@@ -12,20 +12,20 @@ export type PluginDescription = {
 };
 
 export function describePlugins(
-  definitions: Map<string, ProviderDefinition>,
+  definitions: Map<string, Plugin>,
   name?: string,
 ): PluginDescription[] {
   return selected(definitions, name).map(description);
 }
 
-function selected(definitions: Map<string, ProviderDefinition>, name?: string) {
+function selected(definitions: Map<string, Plugin>, name?: string) {
   if (!name) {
     return [...definitions.values()];
   }
   return [named(definitions, name)];
 }
 
-function named(definitions: Map<string, ProviderDefinition>, name: string) {
+function named(definitions: Map<string, Plugin>, name: string) {
   const definition = definitions.get(name);
   if (!definition) {
     throw new Error(`Unknown provider: ${name}`);
@@ -33,11 +33,11 @@ function named(definitions: Map<string, ProviderDefinition>, name: string) {
   return definition;
 }
 
-function description(definition: ProviderDefinition): PluginDescription {
+function description(definition: Plugin): PluginDescription {
   return {
     name: definition.name,
     capabilities: definition.capabilities(),
-    actions: definition.actions?.() || [],
-    exposures: definition.exposures?.() || [],
+    actions: definition.actions(),
+    exposures: definition.exposures(),
   };
 }

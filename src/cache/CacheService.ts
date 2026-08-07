@@ -40,14 +40,20 @@ export class CacheService {
     stored: PutRequest & { digest: string; bytes: number },
   ): CacheEntry {
     const { key, ttlMs, now, digest, bytes } = stored;
-    const identity = {
+    return {
+      ...this.identity(key, digest, bytes),
+      ...this.lifespan(now, ttlMs),
+    };
+  }
+
+  private identity(key: string, digest: string, bytes: number) {
+    return {
       kind: "yafs-cache-entry" as const,
       version: 1 as const,
       key,
       digest,
       bytes,
     };
-    return { ...identity, ...this.lifespan(now, ttlMs) };
   }
 
   private lifespan(now: Date, ttlMs: number) {

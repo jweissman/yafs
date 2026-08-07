@@ -1,12 +1,9 @@
 import { createHash } from "node:crypto";
 import { Manifest, ManifestMount } from "./types";
-import { fixtureStreams } from "./FixtureStreamManifest";
-import { agentConfig } from "../agents/AgentManifest";
-import { slackConfig } from "./SlackManifest";
-import { githubConfig } from "./GitHubManifest";
 import { object, only, relative } from "./ManifestValidation";
 import { declarationsFor, pluginName } from "./ManifestPlugins";
 import { decoded } from "./ManifestYaml";
+import { pluginKinds } from "./PluginKinds";
 
 export function parseManifest(source: string): {
   manifest: Manifest;
@@ -61,13 +58,15 @@ function mountIdentity(
 }
 
 function config(provider: ManifestMount["provider"], value: unknown) {
-  if (provider === "fixture") {
-    return fixture(value);
+  return pluginByName(provider).parseConfig(value);
+}
+
+function pluginByName(name: string) {
+  const plugin = pluginKinds().find((candidate) => candidate.name === name);
+  if (!plugin) {
+    throw new Error(`Unknown provider: ${name}`);
   }
-  if (provider === "agent") {
-    return agentConfig(value);
-  }
-  return provider === "slack" ? slackConfig(value) : githubConfig(value);
+  return plugin;
 }
 
 function validateMountFields(mount: Record<string, unknown>) {
@@ -94,31 +93,8 @@ function assertCapabilities(mount: Record<string, unknown>) {
   }
 }
 
-function fixture(value: unknown) {
-  const config = object(value, "fixture config");
-  only(config, ["files", "streams"], "fixture config");
-  const files = validFixtureFiles(config.files);
-  return { files, streams: fixtureStreams(config.streams) };
-}
-
-function validFixtureFiles(value: unknown) {
-  const files = object(value, "fixture files");
-  const valid = Object.entries(files).every(
-    (entry) => relative(entry[0]) && typeof entry[1] === "string",
-  );
-  if (!valid) {
-    throw new Error("Invalid fixture files");
-  }
-  return files as Record<string, string>;
-}
-
 function provider(value: unknown): value is ManifestMount["provider"] {
-  return (
-    value === "fixture" ||
-    value === "github" ||
-    value === "agent" ||
-    value === "slack"
-  );
+  return pluginKinds().some((plugin) => plugin.name === value);
 }
 
 function interval(value: unknown) {

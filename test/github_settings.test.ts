@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { githubSettings } from "../src/mounts/GitHubSettings";
+import { githubSettings } from "../src/plugins/github/GitHubSettings";
 
 test("github settings default to api.github.com and carry the token", () => {
   expect(githubSettings({ YAFS_GITHUB_TOKEN: "secret" })).toEqual({

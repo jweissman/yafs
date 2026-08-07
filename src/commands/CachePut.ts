@@ -18,6 +18,10 @@ export function putRequest(
   if (args[1] !== "--ttl") {
     throw new Error("cache put requires --ttl DURATION");
   }
+  return putRequestFrom(context, args);
+}
+
+function putRequestFrom(context: CommandContext, args: string[]): CacheRequest {
   return {
     operation: "put",
     ttlMs: duration(context.required("cache put", args, 2)),

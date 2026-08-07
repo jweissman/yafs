@@ -2,8 +2,8 @@ import { AbsolutePath } from "./core/AbsolutePath";
 import { MountManager } from "./mounts/MountManager";
 import { DesiredMounts } from "./mounts/DesiredMounts";
 import { YafsOperationQueue } from "./YafsOperationQueue";
-import { agentPersonaPath } from "./agents/AgentPersonaLookup";
-import { slackPluginPath } from "./mounts/SlackPluginLookup";
+import { agentPersonaPath } from "./plugins/agent/AgentPersonaLookup";
+import { slackPluginPath } from "./plugins/slack/SlackPluginLookup";
 
 export function mountContext(
   manager: MountManager,

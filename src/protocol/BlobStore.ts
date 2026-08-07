@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   mkdir,
   open,
@@ -8,6 +7,14 @@ import {
   unlink,
 } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  sha256,
+  assertDigest,
+  validDigest,
+  validShard,
+  missing,
+  syncDirectory,
+} from "./BlobDigest";
 
 export type BlobStore = {
   put(bytes: Uint8Array): Promise<string>;
@@ -128,27 +135,4 @@ class LocalBlobStore implements BlobStore {
   private async shard(name: string) {
     return (await readdir(join(this.directory, name))).filter(validDigest);
   }
-}
-
-function sha256(bytes: Uint8Array) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-function assertDigest(digest: string) {
-  if (!validDigest(digest)) {
-    throw new Error("Invalid blob digest");
-  }
-}
-function validDigest(value: string) {
-  return /^[a-f0-9]{64}$/.test(value);
-}
-function validShard(value: string) {
-  return /^[a-f0-9]{2}$/.test(value);
-}
-function missing(error: unknown) {
-  return (error as NodeJS.ErrnoException).code === "ENOENT";
-}
-async function syncDirectory(path: string) {
-  const file = await open(join(path, ".."), "r");
-  await file.sync();
-  await file.close();
 }

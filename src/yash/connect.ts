@@ -6,44 +6,43 @@ import { join } from "node:path";
 import { LocalYashClient } from "../protocol/local";
 import { YashClient } from "../protocol/client";
 
-type Client = LocalYashClient | YashClient;
+export type Client = LocalYashClient | YashClient;
 type Connection = { client: Client; server: string };
+type Address = { host: string; port: number };
 
 export async function connect(
   local: boolean,
-  host: string,
-  port: number,
+  address: Address,
 ): Promise<Connection> {
-  if (local) {
-    return { client: new LocalYashClient(), server: "local" };
-  }
+  return local
+    ? { client: new LocalYashClient(), server: "local" }
+    : connectRemote(address);
+}
+
+async function connectRemote(address: Address): Promise<Connection> {
   try {
-    return await remote(host, port);
+    return await remote(address);
   } catch (error) {
-    return recover(error, host, port);
+    return recover(error, address);
   }
 }
 
-async function remote(host: string, port: number): Promise<Connection> {
+async function remote(address: Address): Promise<Connection> {
   return {
-    client: await YashClient.connect({ host, port }),
-    server: `${host}:${port}`,
+    client: await YashClient.connect(address),
+    server: `${address.host}:${address.port}`,
   };
 }
 
-async function recover(
-  error: unknown,
-  host: string,
-  port: number,
-): Promise<Connection> {
-  if (!stdin.isTTY || !(await shouldStart(host, port))) {
-    throw unavailable(error, host, port);
+async function recover(error: unknown, address: Address): Promise<Connection> {
+  if (!stdin.isTTY || !(await shouldStart(address))) {
+    throw unavailable(error, address);
   }
   await start();
-  return remote(host, port);
+  return remote(address);
 }
 
-async function shouldStart(host: string, port: number): Promise<boolean> {
+async function shouldStart({ host, port }: Address): Promise<boolean> {
   const readline = createInterface({ input: stdin, output: stdout });
   const answer = await readline.question(
     `yafsd is unavailable at ${host}:${port}. Start it? [Y/n] `,
@@ -69,7 +68,7 @@ function exitCode(child: ReturnType<typeof spawn>) {
   );
 }
 
-function unavailable(error: unknown, host: string, port: number): Error {
+function unavailable(error: unknown, { host, port }: Address): Error {
   const detail = error instanceof Error ? error.message : String(error);
   return new Error(
     `Cannot reach yafsd at ${host}:${port}: ${detail}. Run yafsd start or yash --local.`,

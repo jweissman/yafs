@@ -33,14 +33,15 @@ export class CommandHistory {
 
 async function historyLines(path: string, limit: number): Promise<string[]> {
   try {
-    return (await readFile(path, "utf8"))
-      .split("\n")
-      .filter(Boolean)
-      .slice(-limit);
+    return parsedLines(await readFile(path, "utf8"), limit);
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
     }
     throw error;
   }
+}
+
+function parsedLines(content: string, limit: number): string[] {
+  return content.split("\n").filter(Boolean).slice(-limit);
 }

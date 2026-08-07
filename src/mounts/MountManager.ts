@@ -5,13 +5,14 @@ import { MountPlanner } from "./MountPlanner";
 import { SnapshotLimits, SnapshotMaterializer } from "./SnapshotMaterializer";
 import { ManifestMount, MountRecord, PreparedMountRecord } from "./types";
 import { ProviderRegistry } from "./ProviderRegistry";
-import { prepareRecord } from "./MountPreparation";
 import {
-  assertDesiredAvailable,
-  restoredActivation,
-  restoredRefresh,
-  restoredUnmount,
-} from "./MountRestore";
+  prepareRecord,
+  servicesFor,
+  PrepareServices,
+} from "./MountPreparation";
+import { assertDesiredAvailable, restoredRefresh } from "./MountRestore";
+import { MountReplayer } from "./MountReplay";
+import { resourceReference } from "./MountResourceReference";
 import {
   auditActivation,
   auditQuarantine,
@@ -23,7 +24,9 @@ export class MountManager {
   private records: PreparedMountRecord[] = [];
   private readonly persistence: MountPersistence;
   private readonly planner: MountPlanner;
-  private readonly snapshots: SnapshotMaterializer;
+  private snapshots: SnapshotMaterializer;
+  private prepareServices: PrepareServices;
+  replay: MountReplayer;
 
   constructor(
     store: NodeStore,
@@ -33,16 +36,37 @@ export class MountManager {
     private readonly providers = new ProviderRegistry(),
   ) {
     this.persistence = this.persistenceFor(statePath, auditPath);
-    this.records = this.restore();
+    this.records = this.persistence.restore();
     this.planner = this.createPlanner(store);
+    this.initServices(store, limits);
+  }
+
+  private commitReplay(records: PreparedMountRecord[]) {
+    this.records = records;
+    this.save();
+  }
+
+  private initServices(store: NodeStore, limits?: SnapshotLimits) {
     this.snapshots = new SnapshotMaterializer(store, limits);
+    this.prepareServices = servicesFor(
+      this.providers,
+      this.persistence,
+      this.snapshots,
+    );
+    this.replay = this.buildReplayer();
+  }
+
+  private buildReplayer() {
+    const commit = this.commitReplay.bind(this);
+    return new MountReplayer(
+      () => this.snapshots,
+      () => this.records,
+      commit,
+    );
   }
 
   private persistenceFor(statePath?: string, auditPath?: string) {
     return new MountPersistence(statePath, auditPath);
-  }
-  private restore() {
-    return this.persistence.restore();
   }
 
   private createPlanner(store: NodeStore) {
@@ -87,12 +111,7 @@ export class MountManager {
     auditQuarantine(this.persistence, record, actor, action, detail);
   }
   resourceReference(path: AbsolutePath) {
-    const record = this.records.find((item) =>
-      path.startsWith(`${item.path}/`),
-    );
-    return record?.snapshot.resourceReferences?.[
-      path.slice(record.path.length + 1)
-    ];
+    return resourceReference(this.records, path);
   }
 
   activate(record: PreparedMountRecord, actor: string) {
@@ -124,38 +143,14 @@ export class MountManager {
     auditUnmount(this.persistence, record, actor);
   }
 
-  restoreOperation(record: PreparedMountRecord) {
-    const updated = restoredActivation(this.snapshots, this.records, record);
-    if (updated !== this.records) {
-      this.records = updated;
-      this.save();
-    }
-  }
-
-  restoreRefresh(record: PreparedMountRecord) {
-    this.records = restoredRefresh(this.snapshots, this.records, record);
-    this.save();
-  }
-
-  restoreUnmount(id: string) {
-    this.records = restoredUnmount(this.snapshots, this.records, id);
-    this.save();
-  }
-
   private save() {
     this.persistence.save(this.records);
   }
   private prepared(record: MountRecord, actor: string) {
     const current = this.records.find((item) => item.id === record.id);
-    return prepareRecord(
-      this.providers,
-      this.persistence,
-      this.snapshots,
-      record,
-      current,
-      actor,
-    );
+    return prepareRecord(this.prepareServices, record, current, actor);
   }
+
   private remove(record: MountRecord) {
     this.snapshots.remove(record);
     this.records = this.records.filter((item) => item !== record);

@@ -13,8 +13,8 @@ import {
   closeAll,
   recoverAll,
 } from "./BackgroundDrivers";
-import { chatCompletionClientFor } from "../agents/ChatCompletionClient";
-import { defaultSlackClient } from "../mounts/SlackApiClient";
+import { chatCompletionClientFor } from "../plugins/agent/ChatCompletionClient";
+import { defaultSlackClient } from "../plugins/slack/SlackApiClient";
 import { daemonDesiredMounts } from "../mounts/daemonDesiredMounts";
 import { reconcileDesired } from "./ReconcileDesired";
 import { ServerConnection } from "./ServerConnection";
@@ -30,26 +30,13 @@ export class YafsServer {
     this.connection = new ServerConnection(services, () => this.background);
     this.server = createServer((socket) => this.connection.attach(socket));
   }
-  private drivers(
-    now: (() => number) | undefined,
-    modelFor: ModelFor,
-    slackClientFor: SlackClientFor,
-    refreshIntervalMs?: number,
-  ) {
+  private driversFor(options: StartOptions) {
+    const [modelFor, slackClientFor] = defaultClients(options);
     return backgroundDrivers(
       this.wiring(),
       modelFor,
       slackClientFor,
-      now,
-      refreshIntervalMs,
-    );
-  }
-  private driversFor(options: StartOptions) {
-    const [modelFor, slackClientFor] = defaultClients(options);
-    return this.drivers(
       options.now,
-      modelFor,
-      slackClientFor,
       options.refreshIntervalMs,
     );
   }

@@ -10,10 +10,17 @@ export function lifecycle(
   if (args[0] === names.deactivate) {
     return deactivation(context, args[1], names);
   }
-  if (args[0] === "refresh") {
-    return refresh(context, args, names.name);
-  }
-  return activation(context, args, names.name);
+  return activationOrRefresh(context, args, names.name);
+}
+
+function activationOrRefresh(
+  context: CommandContext,
+  args: string[],
+  name: string,
+) {
+  return args[0] === "refresh"
+    ? refresh(context, args, name)
+    : activation(context, args, name);
 }
 
 function activation(context: CommandContext, args: string[], name: string) {

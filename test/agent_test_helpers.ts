@@ -1,5 +1,5 @@
 import { YashClient } from "../src/protocol/client";
-import { ModelClient } from "../src/agents/ChatCompletionClient";
+import { ModelClient } from "../src/plugins/agent/ChatCompletionClient";
 
 type StatusMatcher = (status: { state: string }) => boolean;
 type PollState = {
@@ -70,17 +70,21 @@ export async function waitForStatus(
 }
 
 async function poll(state: PollState): Promise<string> {
-  if (Date.now() >= state.deadline) {
-    throw new Error(
-      `Timed out waiting for a matching status under ${state.runsDir}`,
-    );
-  }
+  assertNotTimedOut(state);
   const runId = await pollRunId(state);
   if (runId) {
     return runId;
   }
   await sleep(20);
   return poll(state);
+}
+
+function assertNotTimedOut(state: PollState) {
+  if (Date.now() >= state.deadline) {
+    throw new Error(
+      `Timed out waiting for a matching status under ${state.runsDir}`,
+    );
+  }
 }
 
 async function pollRunId(state: PollState): Promise<string | undefined> {

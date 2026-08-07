@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { GitHubApiClient } from "../src/mounts/GitHubApiClient";
+import { GitHubApiClient } from "../src/plugins/github/GitHubApiClient";
 
 test("the GitHub API client queries a bounded collection and fetches each immutable diff", async () => {
   const requests: Request[] = [];

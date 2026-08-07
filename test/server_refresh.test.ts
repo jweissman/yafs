@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GitHubCollectionSource } from "../src/mounts/GitHubCollectionSource";
+import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSource";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { YashClient } from "../src/protocol/client";
 import { YafsServer } from "../src/protocol/server";

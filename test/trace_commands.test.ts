@@ -4,7 +4,7 @@ import Yafs from "../src";
 import {
   GitHubCollectionSource,
   GitHubPull,
-} from "../src/mounts/GitHubCollectionSource";
+} from "../src/plugins/github/GitHubCollectionSource";
 import { MountManager } from "../src/mounts/MountManager";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { NodeStore } from "../src/vfs/NodeStore";

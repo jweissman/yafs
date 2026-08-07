@@ -1,6 +1,7 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 import { FSNode } from "./FSNode";
 import { nodeStoreWriteGuard } from "./NodeStoreWriteGuard";
+import { assertAbsent, parentOf } from "./NodeStoreParent";
 import { NodeStoreResolver } from "./NodeStoreResolver";
 import { NodeStoreRmdir } from "./NodeStoreRmdir";
 import { NodeStoreState } from "./NodeStoreState";
@@ -87,7 +88,7 @@ export class NodeStoreMutation {
   }
   symlink(target: string, path: AbsolutePath, at = this.state.clock.now()) {
     const { parent, name } = this.parent(path);
-    this.assertAbsent(parent, name, path);
+    assertAbsent(parent, name, path);
     this.state.createNode(name, false, parent, at).symlinkTarget = target;
   }
   union(
@@ -97,7 +98,7 @@ export class NodeStoreMutation {
   ) {
     const resolved = canonicalUnionLayers(this.resolver, layers);
     const { parent, name } = this.parent(path);
-    this.assertAbsent(parent, name, path);
+    assertAbsent(parent, name, path);
     this.state.createNode(name, true, parent, at).unionLayers = resolved;
   }
   apply(operation: VfsOperation) {
@@ -106,7 +107,7 @@ export class NodeStoreMutation {
   private create(path: AbsolutePath, dir: boolean, at: Date) {
     this.assertWritable(path);
     const { parent, name } = this.parent(path);
-    this.assertAbsent(parent, name, path);
+    assertAbsent(parent, name, path);
     this.state.createNode(name, dir, parent, at);
   }
   private replace(node: FSNode, path: AbsolutePath, content: string, at: Date) {
@@ -117,34 +118,7 @@ export class NodeStoreMutation {
     node.modifiedAt = at;
   }
   private parent(path: AbsolutePath) {
-    const parts = path.slice(1).split("/");
-    const name = parts.pop();
-    const parentPath = `/${parts.join("/")}` as AbsolutePath;
-    return this.checkedParent(this.resolver.get(parentPath), name, parentPath);
-  }
-  private checkedParent(
-    parent: FSNode | undefined,
-    name: string | undefined,
-    path: AbsolutePath,
-  ) {
-    if (!name || !parent) {
-      throw new Error(`No such parent directory: ${path}`);
-    }
-    this.assertWritableDirectory(parent, path);
-    return { parent, name };
-  }
-  private assertWritableDirectory(parent: FSNode, path: AbsolutePath) {
-    if (!parent.dir) {
-      throw new Error(`Not a directory: ${path}`);
-    }
-    if (parent.unionLayers) {
-      throw new Error(`Read-only union mount: ${path}`);
-    }
-  }
-  private assertAbsent(parent: FSNode, name: string, path: AbsolutePath) {
-    if (parent.children?.some((child) => child.name === name)) {
-      throw new Error(`Path already exists: ${path}`);
-    }
+    return parentOf(this.resolver, path);
   }
   private assertWritable(path: AbsolutePath) {
     this.writability.assertWritable(path);

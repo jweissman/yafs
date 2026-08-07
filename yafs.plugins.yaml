@@ -27,3 +27,8 @@ plugins:
         reviewer:
           prompt: "You are a careful, concise code reviewer."
     capabilities: [chat.completion]
+  - id: updates
+    plugin: slack
+    path: updates
+    config: { channel: C0ANW5L6ENP, max: 20 }
+    capabilities: [network.slack-api, secret.slack-token]

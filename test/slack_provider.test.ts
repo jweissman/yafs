@@ -4,7 +4,7 @@ import Yafs from "../src";
 import {
   SlackCollectionSource,
   SlackClient,
-} from "../src/mounts/SlackCollectionSource";
+} from "../src/plugins/slack/SlackCollectionSource";
 import { MountManager } from "../src/mounts/MountManager";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { NodeStore } from "../src/vfs/NodeStore";

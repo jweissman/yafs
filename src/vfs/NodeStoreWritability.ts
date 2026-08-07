@@ -27,10 +27,9 @@ export class NodeStoreWritability {
   ) {
     this.guard.assertWritable(node, path);
     const child = node.children?.find((item) => item.name === parts[0]);
-    if (!child) {
-      return;
+    if (child) {
+      this.writableChild(child, parts, path, depth);
     }
-    this.writableChild(child, parts, path, depth);
   }
 
   private writableChild(
@@ -42,6 +41,15 @@ export class NodeStoreWritability {
     if (child.symlinkTarget) {
       return this.writableLink(child, parts.slice(1), depth);
     }
+    this.writableDescendant(child, parts, path, depth);
+  }
+
+  private writableDescendant(
+    child: FSNode,
+    parts: string[],
+    path: AbsolutePath,
+    depth: number,
+  ) {
     if (parts.length > 1) {
       return this.writable(child, parts.slice(1), path, depth);
     }

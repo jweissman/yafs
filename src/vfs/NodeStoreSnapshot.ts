@@ -58,14 +58,11 @@ export class NodeStoreSnapshot {
     );
   }
   private restored(data: SnapshotNode, parent: FSNode | undefined): FSNode {
+    return { ...data, children: undefined, parent, ...this.timestamps(data) };
+  }
+
+  private timestamps(data: SnapshotNode) {
     return {
-      name: data.name,
-      dir: data.dir,
-      content: data.content,
-      symlinkTarget: data.symlinkTarget,
-      providerOrigin: data.providerOrigin,
-      unionLayers: data.unionLayers,
-      parent,
       createdAt: new Date(data.createdAt),
       modifiedAt: new Date(data.modifiedAt),
     };

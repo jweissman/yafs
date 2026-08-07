@@ -6,6 +6,13 @@ import { join } from "node:path";
 import Yafs from "../src";
 import { YashClient } from "../src/protocol/client";
 import { YafsServer } from "../src/protocol/server";
+import {
+  auditSequences,
+  expectInvalidManifest,
+  fixtureManifest,
+  invalidManifests,
+  nestedFixtureManifest,
+} from "./mount_manifest_helpers";
 
 test("a validated manifest activates a read-only fixture mount with provenance", () => {
   const yafs = new Yafs();
@@ -20,18 +27,15 @@ test("a validated manifest activates a read-only fixture mount with provenance",
 });
 
 test("mount activation persists state, audit, and fixture content across restart", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-mount-"));
-  const server = await YafsServer.start({ dataDir: directory });
-  const client = await YashClient.connect(server.address());
+  const { directory, server, client } = await startedServer("yafs-mount-");
   await client.exec(`printf '${fixtureManifest()}' > .yafsmeta`);
   await client.exec("mount activate .yafsmeta");
   await client.close();
   await server.close();
   await access(join(directory, "mounts.json"));
   await access(join(directory, "audit.ndjson"));
-  expect(await readFile(join(directory, "audit.ndjson"), "utf8")).toContain(
-    '"afterRevision":"fixture:',
-  );
+  const auditText = await readFile(join(directory, "audit.ndjson"), "utf8");
+  expect(auditText).toContain('"afterRevision":"fixture:');
   const restarted = await YafsServer.start({ dataDir: directory });
   const restored = await YashClient.connect(restarted.address());
   expect(await restored.exec("cat /home/root/fixture/hello.txt")).toBe("hello");
@@ -100,18 +104,16 @@ test("a mount may not replace an existing local node", () => {
 });
 
 test("nested snapshot files survive replay and disappear after durable unmount", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-mount-replay-"));
-  const server = await YafsServer.start({ dataDir: directory });
-  const client = await YashClient.connect(server.address());
+  const { directory, server, client } =
+    await startedServer("yafs-mount-replay-");
   await client.exec(`printf '${nestedFixtureManifest()}' > .yafsmeta`);
   await client.exec("mount activate .yafsmeta");
   await client.close();
   await server.close();
   const restarted = await YafsServer.start({ dataDir: directory });
   const restored = await YashClient.connect(restarted.address());
-  expect(await restored.exec("cat /home/root/fixture/nested/hello.txt")).toBe(
-    "hello",
-  );
+  const nested = await restored.exec("cat /home/root/fixture/nested/hello.txt");
+  expect(nested).toBe("hello");
   await restored.exec("mount unmount demo");
   await restored.close();
   await restarted.close();
@@ -124,6 +126,13 @@ test("nested snapshot files survive replay and disappear after durable unmount",
   await verified.close();
   await afterUnmount.close();
 });
+
+async function startedServer(prefix: string) {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  const server = await YafsServer.start({ dataDir: directory });
+  const client = await YashClient.connect(server.address());
+  return { directory, server, client };
+}
 
 function verifyFixture(yafs: Yafs) {
   expect(yafs.exec("mount validate .yafsmeta")).toContain('"id":"demo"');
@@ -140,35 +149,4 @@ function verifyFixture(yafs: Yafs) {
     "read_only_mount",
   );
   expect(yafs.execute("touch fixture").error?.code).toBe("read_only_mount");
-}
-
-function fixtureManifest() {
-  return "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}";
-}
-
-function nestedFixtureManifest() {
-  return "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {nested/hello.txt: hello}}, capabilities: []}]}";
-}
-
-function auditSequences(source: string) {
-  return source
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line).sequence);
-}
-
-function invalidManifests() {
-  return [
-    "{version: 1, version: 1, mounts: []}",
-    "!custom {version: 1, mounts: []}",
-    "{version: 1, mounts: *declared}",
-    "{version: 1, mounts: &declared []}",
-  ];
-}
-
-function expectInvalidManifest(yafs: Yafs, manifest: string) {
-  yafs.store.write("/home/root/.yafsmeta", manifest);
-  expect(yafs.execute("mount validate .yafsmeta").stderr).toBe(
-    "Invalid .yafsmeta YAML",
-  );
 }

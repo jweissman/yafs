@@ -18,12 +18,16 @@ export function auditRefresh(
   before: string | undefined,
   detail?: string,
 ) {
-  persistence.audit(record, actor, "refresh", {
-    outcome: "success",
-    before,
-    after: record.revision,
-    detail,
-  });
+  const outcome = refreshOutcome(record, before, detail);
+  persistence.audit(record, actor, "refresh", outcome);
+}
+
+function refreshOutcome(
+  record: PreparedMountRecord,
+  before: string | undefined,
+  detail?: string,
+) {
+  return { outcome: "success", before, after: record.revision, detail };
 }
 
 export function auditActivation(

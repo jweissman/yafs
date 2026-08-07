@@ -7,18 +7,13 @@ import { AbsolutePath } from "../src/core/AbsolutePath";
 import { YashClient } from "../src/protocol/client";
 import { YafsServer } from "../src/protocol/server";
 
+type Delivery = { path: AbsolutePath; chunks: string[]; intervalMs: number };
+
 test("a slow background delivery does not block other clients while it is in flight", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-stream-")),
-  });
+  const server = await startedServer("yafs-stream-");
   const writer = await YashClient.connect(server.address());
   await writer.exec("mkdir stream");
-  const delivery = deliver(
-    server,
-    "/home/root/stream/output.txt",
-    ["one", "two", "three"],
-    200,
-  );
+  const delivery = deliver(server, outputPath(), ["one", "two", "three"], 200);
   const reader = await YashClient.connect(server.address());
   const start = Date.now();
   expect(await reader.exec("echo still responsive")).toBe("still responsive");
@@ -31,14 +26,12 @@ test("a slow background delivery does not block other clients while it is in fli
 });
 
 test("a client can read partial content mid-delivery, not just the final result", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-stream-partial-")),
-  });
+  const server = await startedServer("yafs-stream-partial-");
   const writer = await YashClient.connect(server.address());
   await writer.exec("mkdir stream");
   const delivery = deliver(
     server,
-    "/home/root/stream/output.txt",
+    outputPath(),
     ["first-", "second-", "third"],
     150,
   );
@@ -53,15 +46,12 @@ test("a client can read partial content mid-delivery, not just the final result"
 });
 
 test("a registered ctl handler intercepts real shell redirection, not just a raw write RPC", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-ctl-")),
-  });
+  const server = await startedServer("yafs-ctl-");
   const client = await YashClient.connect(server.address());
   await client.exec("mkdir stream");
-  const path = "/home/root/stream/output.txt" as AbsolutePath;
   server.registerCtl(
-    "/home/root/stream/ctl" as AbsolutePath,
-    restart(server, path, ["one-", "two-", "three"], 60),
+    ctlPath(),
+    restart(server, outputPath(), ["one-", "two-", "three"], 60),
   );
   const start = Date.now();
   await client.exec("printf restart > stream/ctl");
@@ -74,14 +64,11 @@ test("a registered ctl handler intercepts real shell redirection, not just a raw
 });
 
 test("unregistering a ctl handler restores ordinary write behavior for that path", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-ctl-unregister-")),
-  });
+  const server = await startedServer("yafs-ctl-unregister-");
   const client = await YashClient.connect(server.address());
   await client.exec("mkdir stream");
-  const ctlPath = "/home/root/stream/ctl" as AbsolutePath;
-  server.registerCtl(ctlPath, () => {});
-  server.unregisterCtl(ctlPath);
+  server.registerCtl(ctlPath(), () => {});
+  server.unregisterCtl(ctlPath());
   await client.exec("printf hello > stream/ctl");
   expect(await client.exec("cat stream/ctl")).toBe("hello");
   await client.close();
@@ -89,12 +76,10 @@ test("unregistering a ctl handler restores ordinary write behavior for that path
 });
 
 test("a synchronously throwing ctl handler rejects the write without breaking the connection", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-ctl-error-")),
-  });
+  const server = await startedServer("yafs-ctl-error-");
   const client = await YashClient.connect(server.address());
   await client.exec("mkdir stream");
-  server.registerCtl("/home/root/stream/ctl" as AbsolutePath, () => {
+  server.registerCtl(ctlPath(), () => {
     throw new Error("boom");
   });
   await expect(client.exec("printf go > stream/ctl")).rejects.toThrow("boom");
@@ -104,12 +89,10 @@ test("a synchronously throwing ctl handler rejects the write without breaking th
 });
 
 test("an asynchronously rejecting ctl handler rejects the write without breaking the connection", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-ctl-async-error-")),
-  });
+  const server = await startedServer("yafs-ctl-async-error-");
   const client = await YashClient.connect(server.address());
   await client.exec("mkdir stream");
-  server.registerCtl("/home/root/stream/ctl" as AbsolutePath, async () => {
+  server.registerCtl(ctlPath(), async () => {
     throw new Error("boom");
   });
   await expect(client.exec("printf go > stream/ctl")).rejects.toThrow("boom");
@@ -118,6 +101,18 @@ test("an asynchronously rejecting ctl handler rejects the write without breaking
   await server.close();
 });
 
+async function startedServer(prefix: string) {
+  return YafsServer.start({ dataDir: await mkdtemp(join(tmpdir(), prefix)) });
+}
+
+function outputPath(): AbsolutePath {
+  return "/home/root/stream/output.txt" as AbsolutePath;
+}
+
+function ctlPath(): AbsolutePath {
+  return "/home/root/stream/ctl" as AbsolutePath;
+}
+
 function restart(
   server: YafsServer,
   path: AbsolutePath,
@@ -125,20 +120,20 @@ function restart(
   intervalMs: number,
 ): () => Promise<void> {
   return async () => {
-    void stream(server, path, chunks, intervalMs);
+    void stream(server, { path, chunks, intervalMs });
   };
 }
 
-async function stream(
-  server: YafsServer,
-  path: AbsolutePath,
-  chunks: string[],
-  intervalMs: number,
-) {
+async function stream(server: YafsServer, delivery: Delivery) {
   await server.commitBackground([
-    { type: "write", path, content: "", at: new Date().toISOString() },
+    {
+      type: "write",
+      path: delivery.path,
+      content: "",
+      at: new Date().toISOString(),
+    },
   ]);
-  await deliver(server, path, chunks, intervalMs);
+  await deliver(server, delivery.path, delivery.chunks, delivery.intervalMs);
 }
 
 async function deliver(

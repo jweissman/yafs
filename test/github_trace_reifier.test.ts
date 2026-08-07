@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { GitHubTraceReifier } from "../src/mounts/GitHubTraceReifier";
+import { GitHubTraceReifier } from "../src/plugins/github/GitHubTraceReifier";
 import { digest, Trace } from "../src/traces/TraceService";
 
 test("a GitHub trace reifier refetches the pinned pull and returns the entry matching the requested digest", async () => {

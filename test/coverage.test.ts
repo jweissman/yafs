@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { FixtureProvider } from "../src/mounts/FixtureProvider";
+import { FixtureProvider } from "../src/plugins/fixture/FixtureProvider";
 import { LocalYashClient } from "../src/protocol/local";
 import { Shell } from "../src/Shell";
 import { PathResolver } from "../src/core/PathResolver";

@@ -67,12 +67,7 @@ export class SnapshotMaterializer {
   ): PublishedSnapshot {
     const byteCount = this.byteCount(entries);
     this.assertWithinLimits(entries.length, byteCount);
-    return {
-      entries: entries.map(([path, content]) => [path, content]),
-      fileCount: entries.length,
-      byteCount,
-      resourceReferences,
-    };
+    return snapshotOf(entries, byteCount, resourceReferences);
   }
   private byteCount(entries: [string, string][]) {
     return entries.reduce(this.countBytes, 0);
@@ -126,4 +121,17 @@ export class SnapshotMaterializer {
       readOnly: true,
     };
   }
+}
+
+function snapshotOf(
+  entries: [string, string][],
+  byteCount: number,
+  resourceReferences?: Record<string, object>,
+): PublishedSnapshot {
+  return {
+    entries: entries.map(([path, content]) => [path, content]),
+    fileCount: entries.length,
+    byteCount,
+    resourceReferences,
+  };
 }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
-import { SlackApiClient } from "../src/mounts/SlackApiClient";
-import { slackSettings } from "../src/mounts/SlackSettings";
+import { SlackApiClient } from "../src/plugins/slack/SlackApiClient";
+import { slackSettings } from "../src/plugins/slack/SlackSettings";
 
 test("history requests the channel and limit, and returns the messages array", async () => {
   const requests: Request[] = [];

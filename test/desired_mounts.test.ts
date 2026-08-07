@@ -20,17 +20,13 @@ test("the daemon reconciles its selected configuration without exposing a host p
 
 async function assertInitialReconciliation(client: YashClient) {
   await assertAgentPluginDescribed(client);
+  const active = [
+    { id: "demo", plugin: "fixture", path: "/home/root/demo", state: "active" },
+  ];
   expect(JSON.parse(await client.exec("plugins status"))).toEqual({
     configured: true,
     changes: [],
-    active: [
-      {
-        id: "demo",
-        plugin: "fixture",
-        path: "/home/root/demo",
-        state: "active",
-      },
-    ],
+    active,
   });
   expect(JSON.parse(await client.exec("plugins plan"))).toEqual([]);
   expect(JSON.parse(await client.exec("plugins apply"))).toEqual([]);
@@ -39,22 +35,21 @@ async function assertInitialReconciliation(client: YashClient) {
 }
 
 async function assertAgentPluginDescribed(client: YashClient) {
-  expect(JSON.parse(await client.exec("plugins describe agent"))).toMatchObject(
-    [
-      {
-        name: "agent",
-        actions: [
-          {
-            name: "send",
-            pseudobinary: "agent send PERSONA [--context PATH] MESSAGE",
-          },
-        ],
-        exposures: [
-          { name: "conversation", protocol: "http", status: "designed" },
-        ],
-      },
-    ],
-  );
+  const description = JSON.parse(await client.exec("plugins describe agent"));
+  expect(description).toMatchObject([
+    {
+      name: "agent",
+      actions: [
+        {
+          name: "send",
+          pseudobinary: "agent send PERSONA [--context PATH] MESSAGE",
+        },
+      ],
+      exposures: [
+        { name: "conversation", protocol: "http", status: "designed" },
+      ],
+    },
+  ]);
 }
 
 async function assertReactsToConfigChanges(client: YashClient, config: string) {
@@ -68,7 +63,8 @@ async function assertReactsToConfigChanges(client: YashClient, config: string) {
   expect(JSON.parse(await client.exec("plugins plan"))).toEqual([
     { id: "keep", action: "activate" },
   ]);
-  expect(JSON.parse(await client.exec("plugins apply --prune"))).toEqual(
+  const applied = JSON.parse(await client.exec("plugins apply --prune"));
+  expect(applied).toEqual(
     expect.arrayContaining([
       { id: "demo", action: "unmount" },
       { id: "keep", action: "activate" },
@@ -92,20 +88,14 @@ async function startedDesiredServer(prefix: string, value: string) {
 }
 
 test("plugins refresh forces republishing one plugin from desired config without a manifest path", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-desired-refresh-"));
-  const config = join(directory, "mounts.yaml");
-  await writeFile(config, manifest("first"));
-  const server = await YafsServer.start({
-    dataDir: directory,
-    configPath: config,
-  });
-  const client = await YashClient.connect(server.address());
+  const { client, server } = await startedDesiredServer(
+    "yafs-desired-refresh-",
+    "first",
+  );
   await client.exec("plugins apply");
   expect(JSON.parse(await client.exec("plugins plan"))).toEqual([]);
-  expect(JSON.parse(await client.exec("plugins refresh demo"))).toEqual({
-    id: "demo",
-    action: "refresh",
-  });
+  const refreshed = JSON.parse(await client.exec("plugins refresh demo"));
+  expect(refreshed).toEqual({ id: "demo", action: "refresh" });
   expect(await client.exec("cat demo/value.txt")).toBe("first");
   await expect(client.exec("plugins refresh nope")).rejects.toThrow(
     "No desired mount",

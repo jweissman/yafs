@@ -6,8 +6,8 @@ import { join } from "node:path";
 import Yafs from "../src";
 import { MountManager } from "../src/mounts/MountManager";
 import { NodeStore } from "../src/vfs/NodeStore";
-import { agentTarget } from "../src/agents/AgentTarget";
-import { agentPersonaPath } from "../src/agents/AgentPersonaLookup";
+import { agentTarget } from "../src/plugins/agent/AgentTarget";
+import { agentPersonaPath } from "../src/plugins/agent/AgentPersonaLookup";
 import { manifest } from "./agent_test_helpers";
 
 test("agentTarget rejects an unknown persona and a malformed persisted config", async () => {

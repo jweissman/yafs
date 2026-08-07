@@ -8,7 +8,7 @@ import {
   manifest,
   waitForStatus,
 } from "./agent_test_helpers";
-import { agentCommands } from "../src/commands/AgentCommands";
+import { agentCommands } from "../src/plugins/agent/AgentCommands";
 import { YafsServer } from "../src/protocol/server";
 import { YashClient } from "../src/protocol/client";
 

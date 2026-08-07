@@ -53,12 +53,14 @@ class LnCommand {
         "Only symbolic links are supported; use ln -s TARGET LINK",
       );
     }
-    const target = context.required(this.name, args, 1);
-    context.symlink(
-      target,
-      context.resolve(context.required(this.name, args, 2)),
-    );
+    this.link(context, args);
     return "";
+  }
+
+  private link(context: CommandContext, args: string[]) {
+    const target = context.required(this.name, args, 1);
+    const link = context.resolve(context.required(this.name, args, 2));
+    context.symlink(target, link);
   }
 }
 class UnionCommand {

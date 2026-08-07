@@ -97,13 +97,13 @@ function plannedWrite(
   path: string,
   content: string,
 ): ExecutionPlan {
-  yafs.operationQueue.add({
-    type: "write",
-    path: yafs.shell.resolve(path),
-    content,
-  });
+  yafs.operationQueue.add(writeOperation(yafs, path, content));
   yafs.operationQueue.validate();
   return { result: success(yafs, ""), operations: yafs.operationQueue.all() };
+}
+
+function writeOperation(yafs: Yafs, path: string, content: string) {
+  return { type: "write" as const, path: yafs.shell.resolve(path), content };
 }
 
 function planned(yafs: Yafs, input: string): ExecutionPlan {

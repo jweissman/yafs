@@ -1,4 +1,4 @@
-import { agentConfig } from "../agents/AgentManifest";
+import { agentConfig } from "../plugins/agent/AgentManifest";
 import { MountManager } from "./MountManager";
 import { PreparedMountRecord } from "./types";
 

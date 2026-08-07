@@ -31,23 +31,11 @@ export class TraceService {
       throw new Error("Trace source must be a directory");
     }
     const entries = await this.entries(files, source, "");
-    return this.trace(source, capturedAt, origin, entries);
+    return this.trace({ sourcePath: source, capturedAt, origin, entries });
   }
 
-  private trace(
-    sourcePath: AbsolutePath,
-    capturedAt: string,
-    origin: Provenance | undefined,
-    entries: TraceEntry[],
-  ): Trace {
-    return {
-      kind: "yafs-trace",
-      version: 1,
-      sourcePath,
-      capturedAt,
-      origin,
-      entries,
-    };
+  private trace(fields: Omit<Trace, "kind" | "version">): Trace {
+    return { kind: "yafs-trace", version: 1, ...fields };
   }
 
   async materialize(
@@ -59,6 +47,14 @@ export class TraceService {
       throw new Error(`Trace destination already exists: ${destination}`);
     }
     files.mkdir(destination);
+    await this.writeEntries(files, trace, destination);
+  }
+
+  private async writeEntries(
+    files: TraceFilesystem,
+    trace: Trace,
+    destination: AbsolutePath,
+  ) {
     const target = { files, blobs: this.blobs, reifier: this.reifier };
     for (const entry of trace.entries) {
       await writeEntry(target, trace, destination, entry);
@@ -100,6 +96,14 @@ export class TraceService {
     if (files.type(path) === "file") {
       return [await this.entry(files, path, relative)];
     }
+    return this.directoryEntries(files, path, relative);
+  }
+
+  private async directoryEntries(
+    files: TraceFilesystem,
+    path: AbsolutePath,
+    relative: string,
+  ): Promise<TraceEntry[]> {
     const children = await Promise.all(
       files.list(path).map((name) => this.child(files, path, relative, name)),
     );

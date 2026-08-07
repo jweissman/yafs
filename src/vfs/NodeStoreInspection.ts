@@ -72,14 +72,17 @@ export class NodeStoreInspection {
     parts: string[],
     path: AbsolutePath,
   ): string[] {
-    if (node.unionLayers) {
-      return this.resolver
-        .layers(node)
-        .map((layer) => this.resolver.resolveFrom(layer, parts))
-        .filter(this.node)
-        .map((item) => this.resolver.pathOf(item));
-    }
-    return this.childOrigins(node, parts, path);
+    return node.unionLayers
+      ? this.unionOrigins(node, parts)
+      : this.childOrigins(node, parts, path);
+  }
+
+  private unionOrigins(node: FSNode, parts: string[]) {
+    return this.resolver
+      .layers(node)
+      .map((layer) => this.resolver.resolveFrom(layer, parts))
+      .filter(this.node)
+      .map((item) => this.resolver.pathOf(item));
   }
   private childOrigins(node: FSNode, parts: string[], path: AbsolutePath) {
     const child = node.children?.find((item) => item.name === parts[0]);

@@ -4,6 +4,7 @@ import type { ExecutionResult } from "../types/ExecutionResult";
 import { PROTOCOL_VERSION } from "./version";
 import { CacheRequest } from "../cache/CacheRequest";
 import { completionTarget } from "./CompletionTarget";
+import { LineBuffer } from "./LineBuffer";
 import {
   ErrorResolver,
   PendingRequest,
@@ -13,9 +14,11 @@ import {
   ResultResolver,
 } from "./ClientProtocol";
 
+type Address = { host: string; port: number };
+
 export class YashClient {
   private nextId = 1;
-  private buffer = "";
+  private lines = new LineBuffer();
   private pending = new Map<number, PendingRequest>();
 
   private constructor(private readonly socket: Socket) {
@@ -25,15 +28,9 @@ export class YashClient {
     socket.on("close", () => this.failPending(new Error("Connection closed")));
   }
 
-  static async connect(address: {
-    host: string;
-    port: number;
-  }): Promise<YashClient> {
+  static async connect(address: Address): Promise<YashClient> {
     const socket = createConnection(address);
-    await new Promise<void>((resolve, reject) => {
-      socket.once("connect", resolve);
-      socket.once("error", reject);
-    });
+    await connected(socket);
     return new YashClient(socket);
   }
 
@@ -67,6 +64,9 @@ export class YashClient {
   cacheGc() {
     return this.cache({ operation: "gc" });
   }
+  private cache(request: CacheRequest) {
+    return this.send({ cache: request });
+  }
 
   async close(): Promise<void> {
     this.socket.end();
@@ -86,11 +86,10 @@ export class YashClient {
   }
 
   private receive(chunk: string) {
-    this.buffer += chunk;
-    this.responses().forEach((response) => this.resolve(response));
-  }
-  private cache(request: CacheRequest) {
-    return this.send({ cache: request });
+    this.lines.push(chunk);
+    this.lines
+      .lines()
+      .forEach((line) => this.resolve(JSON.parse(line) as Response));
   }
 
   private send(payload: Payload): Promise<ExecutionResult> {
@@ -122,34 +121,19 @@ export class YashClient {
     this.socket.write(`${request}\n`);
   }
 
-  private responses(): Response[] {
-    const responses: Response[] = [];
-    let newline: number;
-    while ((newline = this.buffer.indexOf("\n")) !== -1) {
-      this.pushResponse(responses, newline);
-    }
-    return responses;
-  }
-
-  private pushResponse(responses: Response[], newline: number) {
-    const line = this.takeLine(newline);
-    if (line) {
-      responses.push(JSON.parse(line) as Response);
-    }
-  }
-
-  private takeLine(newline: number): string {
-    const line = this.buffer.slice(0, newline);
-    this.buffer = this.buffer.slice(newline + 1);
-    return line;
-  }
-
   private resolve(response: Response | ProtocolFailure) {
     const pending = this.pending.get(response.id);
     if (!pending) {
       return;
     }
     this.pending.delete(response.id);
+    this.settle(pending, response);
+  }
+
+  private settle(
+    pending: PendingRequest,
+    response: Response | ProtocolFailure,
+  ) {
     if (response.version !== PROTOCOL_VERSION) {
       return pending.reject(new Error("Unsupported protocol version"));
     }
@@ -165,4 +149,11 @@ export class YashClient {
     }
     this.pending.clear();
   }
+}
+
+function connected(socket: Socket) {
+  return new Promise<void>((resolve, reject) => {
+    socket.once("connect", resolve);
+    socket.once("error", reject);
+  });
 }

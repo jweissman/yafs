@@ -32,11 +32,15 @@ function shellRequest(
   if (args[0] === "put") {
     return putRequest(context, args);
   }
+  return readOrGcRequest(context, args);
+}
+
+function readOrGcRequest(context: CommandContext, args: string[]) {
   if (["get", "stat", "delete"].includes(args[0])) {
     return simpleRequest(context, args);
   }
   if (args[0] === "gc") {
-    return { operation: "gc" };
+    return { operation: "gc" as const };
   }
 }
 

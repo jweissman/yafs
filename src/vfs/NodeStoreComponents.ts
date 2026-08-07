@@ -24,11 +24,7 @@ function components(
   resolver: NodeStoreResolver,
 ): NodeStoreComponents {
   const mutation = new NodeStoreMutation(state, resolver);
-  return {
-    state,
-    resolver,
-    mutation,
-    inspection: new NodeStoreInspection(state, resolver),
-    snapshots: new NodeStoreSnapshot(state, mutation),
-  };
+  const inspection = new NodeStoreInspection(state, resolver);
+  const snapshots = new NodeStoreSnapshot(state, mutation);
+  return { state, resolver, mutation, inspection, snapshots };
 }

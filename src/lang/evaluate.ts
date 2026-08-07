@@ -38,9 +38,15 @@ export async function evaluateWordAsync(
   if (word.kind === "literal" || word.kind === "variable") {
     return simpleWord(word, evaluators);
   }
-  if (word.kind === "compound") {
-    return compoundAsync(word.parts, evaluators);
-  }
+  return word.kind === "compound"
+    ? compoundAsync(word.parts, evaluators)
+    : substitutionOrExpression(word, evaluators);
+}
+
+function substitutionOrExpression(
+  word: Exclude<Word, { kind: "literal" | "variable" | "compound" }>,
+  evaluators: Evaluators<Promise<string>>,
+) {
   return word.kind === "substitution"
     ? evaluators.substitute(word.command)
     : String(evaluateExpression(word.expression));

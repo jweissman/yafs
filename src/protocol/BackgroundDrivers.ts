@@ -1,38 +1,14 @@
-import { AbsolutePath } from "../core/AbsolutePath";
-import { MountManager } from "../mounts/MountManager";
-import { AgentConfig, PersonaConfig, SlackConfig } from "../mounts/types";
-import { FixtureStreamDriver } from "../mounts/FixtureStreamDriver";
-import { AgentDirectoryDriver } from "../agents/AgentDirectoryDriver";
-import { ModelClient } from "../agents/ChatCompletionClient";
-import {
-  SlackDirectoryDriver,
-  SlackPoster,
-} from "../mounts/SlackDirectoryDriver";
+import { Wiring, PluginDriver } from "../mounts/Plugin";
+import { FixturePlugin } from "../plugins/fixture/FixturePlugin";
+import { AgentPlugin, ModelFor } from "../plugins/agent/AgentPlugin";
+import { SlackPlugin, SlackClientFor } from "../plugins/slack/SlackPlugin";
 import { ServerRefresh } from "./ServerRefresh";
-import { CtlHandler } from "./CtlDispatch";
-import { Journal } from "./Journal";
 
-type Enqueue = (work: () => Promise<void>) => Promise<void>;
-type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
-type UnregisterCtl = (path: AbsolutePath) => void;
-export type ModelFor = (
-  persona: PersonaConfig,
-  mount: AgentConfig,
-) => ModelClient;
-export type SlackClientFor = (config: SlackConfig) => SlackPoster;
-export type Wiring = {
-  mounts: MountManager;
-  journal: Journal;
-  enqueue: Enqueue;
-  registerCtl: RegisterCtl;
-  unregisterCtl: UnregisterCtl;
-};
+export type { Wiring, ModelFor, SlackClientFor };
 
 export type BackgroundDrivers = {
   refreshes: ServerRefresh;
-  streams: FixtureStreamDriver;
-  agents: AgentDirectoryDriver;
-  slack: SlackDirectoryDriver;
+  plugins: PluginDriver[];
 };
 
 function refreshDriver(
@@ -44,37 +20,6 @@ function refreshDriver(
   return new ServerRefresh(mounts, journal, enqueue, now, refreshIntervalMs);
 }
 
-function streamsDriver(wiring: Wiring) {
-  const { mounts, journal, enqueue, registerCtl, unregisterCtl } = wiring;
-  return new FixtureStreamDriver(mounts, journal, enqueue, {
-    registerCtl,
-    unregisterCtl,
-  });
-}
-
-function agentsDriver(wiring: Wiring, modelFor: ModelFor) {
-  const { mounts, journal, enqueue, registerCtl, unregisterCtl } = wiring;
-  return new AgentDirectoryDriver(
-    mounts,
-    journal,
-    enqueue,
-    { registerCtl, unregisterCtl },
-    modelFor,
-  );
-}
-
-function slackDriver(wiring: Wiring, slackClientFor: SlackClientFor) {
-  const { mounts, journal, enqueue, registerCtl, unregisterCtl } = wiring;
-  return new SlackDirectoryDriver(
-    mounts,
-    journal,
-    enqueue,
-    registerCtl,
-    unregisterCtl,
-    slackClientFor,
-  );
-}
-
 export function backgroundDrivers(
   wiring: Wiring,
   modelFor: ModelFor,
@@ -84,31 +29,42 @@ export function backgroundDrivers(
 ): BackgroundDrivers {
   return {
     refreshes: refreshDriver(wiring, now, refreshIntervalMs),
-    streams: streamsDriver(wiring),
-    agents: agentsDriver(wiring, modelFor),
-    slack: slackDriver(wiring, slackClientFor),
+    plugins: pluginDrivers(wiring, modelFor, slackClientFor),
   };
+}
+
+function pluginDrivers(
+  wiring: Wiring,
+  modelFor: ModelFor,
+  slackClientFor: SlackClientFor,
+) {
+  return [
+    new FixturePlugin().createDriver(wiring),
+    new AgentPlugin().createDriver(wiring, modelFor),
+    new SlackPlugin().createDriver(wiring, slackClientFor),
+  ];
 }
 
 export function startAll(drivers: BackgroundDrivers) {
   drivers.refreshes.start();
-  drivers.streams.start();
-  drivers.agents.sync();
-  drivers.slack.sync();
+  drivers.plugins.forEach((plugin) =>
+    plugin.start ? plugin.start() : plugin.sync(),
+  );
 }
 
 export function closeAll(drivers: BackgroundDrivers) {
   drivers.refreshes.close();
-  drivers.streams.close();
-  drivers.agents.close();
-  drivers.slack.close();
+  drivers.plugins.forEach((plugin) => plugin.close());
 }
 
 export function syncAll(drivers: BackgroundDrivers) {
-  drivers.streams.sync();
-  drivers.agents.sync();
-  drivers.slack.sync();
+  drivers.plugins.forEach((plugin) => plugin.sync());
 }
+
 export function recoverAll(drivers: BackgroundDrivers) {
-  return drivers.agents.recover();
+  return Promise.all(
+    drivers.plugins
+      .filter((plugin) => plugin.recover)
+      .map((plugin) => plugin.recover!()),
+  );
 }

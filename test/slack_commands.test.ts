@@ -6,8 +6,8 @@ import { expect, test } from "bun:test";
 import { YafsServer } from "../src/protocol/server";
 import { YashClient } from "../src/protocol/client";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
-import { SlackCollectionSource } from "../src/mounts/SlackCollectionSource";
-import { SlackMessage } from "../src/mounts/SlackApiClient";
+import { SlackCollectionSource } from "../src/plugins/slack/SlackCollectionSource";
+import { SlackMessage } from "../src/plugins/slack/SlackApiClient";
 
 test("slack send posts a message and the channel snapshot refreshes to include it", async () => {
   const state = fakeState([{ user: "U1", text: "first", ts: "1.0" }]);

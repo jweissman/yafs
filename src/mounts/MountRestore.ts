@@ -9,11 +9,18 @@ export function assertDesiredAvailable(
   record: MountRecord,
 ) {
   const existing = records.find((item) => item.id === record.id);
-  if (existing && existing.path !== record.path) {
-    throw new Error(`Desired mount path changed: ${record.id}`);
-  }
+  assertUnchangedPath(existing, record);
   if (!existing) {
     planner.assertAvailable(record.path);
+  }
+}
+
+function assertUnchangedPath(
+  existing: PreparedMountRecord | undefined,
+  record: MountRecord,
+) {
+  if (existing && existing.path !== record.path) {
+    throw new Error(`Desired mount path changed: ${record.id}`);
   }
 }
 

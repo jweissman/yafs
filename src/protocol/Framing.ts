@@ -101,9 +101,13 @@ function consumeLines(
   if (current().length > 1_048_576) {
     return socket.destroy();
   }
-  const lines = current().split("\n");
+  splitLines(current(), update).forEach(onLine);
+}
+
+function splitLines(buffer: string, update: (value: string) => void) {
+  const lines = buffer.split("\n");
   update(lines.pop() || "");
-  lines.filter(Boolean).forEach(onLine);
+  return lines.filter(Boolean);
 }
 
 function verifyRequest(request: Request) {

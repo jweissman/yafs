@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import Yafs from "../src";
-import { GitHubCollectionSource } from "../src/mounts/GitHubCollectionSource";
+import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSource";
 import { MountManager } from "../src/mounts/MountManager";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { NodeStore } from "../src/vfs/NodeStore";

@@ -1,4 +1,4 @@
-import { FixtureProvider } from "./FixtureProvider";
+import { FixtureProvider } from "../plugins/fixture/FixtureProvider";
 import { MountRecord } from "./types";
 
 export type ReadOnlyProvider = {

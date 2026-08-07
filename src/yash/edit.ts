@@ -24,6 +24,17 @@ export async function edit(
   return editFile(client, path);
 }
 
+export async function runEdit(client: EditClient, path: string) {
+  try {
+    const error = await edit(client, path);
+    if (error) {
+      console.error(error);
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+  }
+}
+
 async function editFile(
   client: EditClient,
   path: string,
