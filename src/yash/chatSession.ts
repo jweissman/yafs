@@ -11,24 +11,30 @@ type ChatSession = {
   personaPath: string;
   chatId: string;
   interruption: AbortController;
+  context?: string;
 };
 
-export async function runChatSession(
-  client: ChatClient,
-  readline: Readline,
-  personaPath: string,
-) {
-  const session = newSession(client, readline, personaPath);
+export type ChatSessionOptions = {
+  client: ChatClient;
+  readline: Readline;
+  personaPath: string;
+  initialChatId?: string;
+  context?: string;
+};
+
+export async function runChatSession(options: ChatSessionOptions) {
+  const session = newSession(options);
   await withSigintCleanup(session, () => chatTurns(session));
 }
 
-function newSession(
-  client: ChatClient,
-  readline: Readline,
-  personaPath: string,
-): ChatSession {
-  const base = { client, readline, personaPath };
-  return { ...base, chatId: randomUUID(), interruption: new AbortController() };
+function newSession(options: ChatSessionOptions): ChatSession {
+  const { client, readline, personaPath, initialChatId, context } = options;
+  const base = { client, readline, personaPath, context };
+  return {
+    ...base,
+    chatId: initialChatId ?? randomUUID(),
+    interruption: new AbortController(),
+  };
 }
 
 // Node's readline fires every registered SIGINT listener, not just the most
@@ -94,7 +100,9 @@ function turnIfNonEmpty(session: ChatSession, message: string) {
 async function turn(session: ChatSession, message: string) {
   const runId = randomUUID();
   const chatId = session.chatId;
-  const payload = JSON.stringify({ message, chatId, runId });
+  const context = session.context;
+  session.context = undefined;
+  const payload = JSON.stringify({ message, chatId, runId, context });
   await session.client.writeFile(`${session.personaPath}/ctl`, payload);
   const runPath = `${session.personaPath}/runs/${runId}`;
   finishLine(await pollTurn(session.client, runPath));

@@ -59,6 +59,7 @@ function fakeState(messages: SlackMessage[]): FakeState {
 function fakeClient(state: FakeState) {
   return {
     history: async () => state.messages,
+    identity: async () => "BOT",
     postMessage: (channel: string, text: string) => post(state, channel, text),
   };
 }

@@ -35,6 +35,7 @@ export class YafsServer {
     return backgroundDrivers(this.wiring(), modelFor, slackClientFor, {
       now: options.now,
       refreshIntervalMs: options.refreshIntervalMs,
+      slackPollIntervalMs: options.slackPollIntervalMs,
     });
   }
   private wiring() {
@@ -43,8 +44,14 @@ export class YafsServer {
       mounts: this.services.mounts,
       journal: this.services.journal,
       enqueue,
+      ...this.ctlWiring(),
+    };
+  }
+  private ctlWiring() {
+    return {
       registerCtl: this.registerCtl.bind(this),
       unregisterCtl: this.unregisterCtl.bind(this),
+      dispatchCtl: this.dispatchCtl.bind(this),
     };
   }
   static async start(options: StartOptions): Promise<YafsServer> {
@@ -94,6 +101,9 @@ export class YafsServer {
   }
   unregisterCtl(path: AbsolutePath) {
     this.connection.ctl.unregister(path);
+  }
+  dispatchCtl(path: AbsolutePath, payload: string) {
+    return this.connection.ctl.invoke(path, payload);
   }
 
   async refreshDue() {

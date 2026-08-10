@@ -5,6 +5,11 @@ type Fetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 export type SlackMessage = { user?: string; text: string; ts: string };
+export type SlackChannelClient = {
+  history(channel: string, max: number): Promise<SlackMessage[]>;
+  postMessage(channel: string, text: string): Promise<string>;
+  identity(): Promise<string>;
+};
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -27,6 +32,11 @@ export class SlackApiClient {
     const init = { method: "POST", body: JSON.stringify({ channel, text }) };
     const body = await this.call("chat.postMessage", init);
     return body.ts as string;
+  }
+
+  async identity(): Promise<string> {
+    const body = await this.call("auth.test", { method: "POST" });
+    return body.user_id as string;
   }
 
   private async call(

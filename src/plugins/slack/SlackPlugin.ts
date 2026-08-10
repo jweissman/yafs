@@ -6,12 +6,13 @@ import {
 } from "../../mounts/Plugin";
 import { slackConfig } from "./SlackManifest";
 import { slackCommands } from "./SlackCommands";
-import { SlackDirectoryDriver, SlackPoster } from "./SlackDirectoryDriver";
+import { SlackDirectoryDriver } from "./SlackDirectoryDriver";
 import { SlackCollectionSource, SlackSnapshot } from "./SlackCollectionSource";
+import { SlackChannelClient } from "./SlackApiClient";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
 import { MountRecord, SlackConfig } from "../../mounts/types";
 
-export type SlackClientFor = (config: SlackConfig) => SlackPoster;
+export type SlackClientFor = (config: SlackConfig) => SlackChannelClient;
 
 export class SlackPlugin extends Plugin {
   readonly name = "slack" as const;

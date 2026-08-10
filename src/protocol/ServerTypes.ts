@@ -19,6 +19,7 @@ export type StartOptions = {
   slackClientFor?: SlackClientFor;
   configPath?: string;
   refreshIntervalMs?: number;
+  slackPollIntervalMs?: number;
 };
 
 export type Services = {

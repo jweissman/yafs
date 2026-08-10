@@ -17,7 +17,7 @@ export type AgentConfig = {
   endpoint?: string;
   model?: string;
 };
-export type SlackConfig = { channel: string; max?: number };
+export type SlackConfig = { channel: string; max?: number; persona?: string };
 export type MountProvider = "fixture" | "github" | "agent" | "slack";
 export type MountConfig =
   FixtureConfig | GitHubConfig | AgentConfig | SlackConfig;

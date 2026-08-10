@@ -17,6 +17,10 @@ export class CtlDispatch {
     this.handlers.delete(path);
   }
 
+  invoke(path: AbsolutePath, payload: string): Promise<boolean> {
+    return this.dispatchWrite(path, payload);
+  }
+
   async intercept(operations: VfsOperation[]): Promise<VfsOperation[]> {
     const kept: VfsOperation[] = [];
     for (const operation of operations) {

@@ -3,11 +3,29 @@ import { object, only, relative } from "../../mounts/ManifestValidation";
 
 export function slackConfig(value: unknown): SlackConfig {
   const config = object(value, "slack config");
-  only(config, ["channel", "max"], "slack config");
-  if (!relative(config.channel) || config.channel.includes("/")) {
+  only(config, ["channel", "max", "persona"], "slack config");
+  assertValidChannel(config.channel);
+  return {
+    channel: config.channel as string,
+    max: max(config.max),
+    persona: persona(config.persona),
+  };
+}
+
+function assertValidChannel(channel: unknown) {
+  if (!relative(channel) || channel.includes("/")) {
     throw new Error("Invalid slack channel");
   }
-  return { channel: config.channel, max: max(config.max) };
+}
+
+function persona(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || !value) {
+    throw new Error("Invalid slack persona");
+  }
+  return value;
 }
 
 function max(value: unknown): number | undefined {

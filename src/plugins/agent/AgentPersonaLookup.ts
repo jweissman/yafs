@@ -28,6 +28,45 @@ function mountFor(mounts: MountManager, resolved: AbsolutePath) {
   return mounts.mounts().find((item) => resolved.startsWith(`${item.path}/`));
 }
 
+export type PersonaTarget = {
+  personaPath: AbsolutePath;
+  mountId: string;
+  personaName: string;
+};
+
+export function resolvePersonaTarget(
+  mounts: MountManager,
+  reference: string,
+): PersonaTarget {
+  const personaPath = agentPersonaPath(mounts, reference);
+  const record = requiredMountFor(mounts, personaPath, reference);
+  return targetFrom(record, personaPath);
+}
+
+function targetFrom(
+  record: PreparedMountRecord,
+  personaPath: AbsolutePath,
+): PersonaTarget {
+  return {
+    personaPath,
+    mountId: record.id,
+    personaName: personaPath.slice(record.path.length + 1),
+  };
+}
+
+function requiredMountFor(
+  mounts: MountManager,
+  personaPath: AbsolutePath,
+  reference: string,
+) {
+  const record = mountFor(mounts, personaPath);
+  return record || missingPersona(reference);
+}
+
+function missingPersona(reference: string): never {
+  throw new Error(`No such persona: ${reference}`);
+}
+
 function valid(record: PreparedMountRecord, resolved: AbsolutePath) {
   return personas(record).includes(resolved.slice(record.path.length + 1));
 }

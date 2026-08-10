@@ -29,6 +29,7 @@ export type Wiring = {
   enqueue: (work: () => Promise<void>) => Promise<void>;
   registerCtl: (path: AbsolutePath, handler: CtlHandler) => void;
   unregisterCtl: (path: AbsolutePath) => void;
+  dispatchCtl: (path: AbsolutePath, payload: string) => Promise<boolean>;
 };
 
 export type PluginDriver = {

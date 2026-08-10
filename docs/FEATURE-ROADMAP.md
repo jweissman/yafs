@@ -315,15 +315,32 @@ Design checkpoints for every plugin:
   follow-up work. Command substitution is implemented as a deferred nested-
   command AST, including inside double quotes; pipes remain later work.
 - M5 is mechanically complete: the GitHub provider, named network/secret
-  grants, daemon-scheduled and explicit refresh, and `trace` source bindings
-  are implemented and were exercised against a real GitHub Enterprise Cloud
-  repository, including real authentication failure modes. What M5 has not
-  yet produced is the evidence its own extension gates ask for — repeated
-  real use across sessions, not one — which is the actual open question
-  before M6/M7 are worth starting, not anything left to build in M5 itself.
+  grants, daemon-scheduled and explicit refresh, and `trace`/`capture`/
+  `restore` source bindings are implemented and were exercised against a real
+  GitHub Enterprise Cloud repository, including real authentication failure
+  modes.
+- M6/M6.2/M6.3 are complete: the agent runtime (durable acceptance, streaming
+  runs, cancellation, restart interruption), the compositional provider/
+  plugin registry, and canonical `plugins`/`plugin` configuration vocabulary
+  are implemented and regression-tested. In-VFS plugin configuration
+  (`.yafsmeta` + `plugin validate|activate|refresh`) has been removed
+  outright, not just superseded; `yafs.plugins.yaml` is the sole way to grant
+  a capability.
+- M6.4 (durable outbound actions) is **not yet started** — `slack send` is
+  still fire-and-forget from its ctl handler's perspective. This is a real,
+  now-active gap, not a deferred nicety: the Slack inbound bridge built this
+  milestone (see M7) posts replies through that same undurable path, ahead of
+  the gate the roadmap originally asked to close first. Tracked as the next
+  priority, not silently accepted as permanent.
+- M7's first stage (a bounded, explicit-invocation local conversation, plus a
+  one-way Slack bridge into it) is implemented; see the M7 checkpoint below
+  and the ADR's revised "M7 decision" section for what shipped versus the
+  original channel design.
 - `yafs-mcp` is a local stdio client of `yafsd`, not a provider or a second VFS
-  implementation. Its current tools are `yafs.list`, `yafs.read`, and
-  `yafs.inspect`; arbitrary shell execution, MCP writes, and public access are
+  implementation. Its tools are the L0/L1 workspace operations
+  (`yafs.list`/`yafs.read`/`yafs.inspect`/`yafs.query`/`yafs.tree`/
+  `yafs.find`/`yafs.test`/`yafs.diff`/`yafs.grep`) plus `yafs.capture`/
+  `yafs.restore`; arbitrary shell execution, MCP writes, and public access are
   deliberately absent.
 
 ### M0 — Foundation: composable in-memory filesystem
@@ -675,35 +692,50 @@ path that can still silently double-post or lose the record of what it sent —
 the durability has to exist under the mechanism before a human is asked to
 trust an approval built on top of it.
 
-**Not yet started.** `SlackDirectoryDriver` currently posts to the real Slack
-API via fire-and-forget before any durable record exists — a known, real gap
-identified during the M6.3 plugin-restructure review, deliberately deferred
-rather than fixed inline. `PluginDriver`'s optional `recover()` hook (see
-`BackgroundDrivers.ts`) is the seam left for this work: once
-`SlackDirectoryDriver` implements `recover()`, the generic `recoverAll` loop
-picks it up with no further kernel changes required.
+**Not yet started, and now higher priority than when this gate was written.**
+`SlackDirectoryDriver` still posts to the real Slack API via fire-and-forget
+before any durable record exists — a known gap identified during the M6.3
+plugin-restructure review, deliberately deferred rather than fixed inline.
+`PluginDriver`'s optional `recover()` hook (see `BackgroundDrivers.ts`) is the
+seam left for this work: once `SlackDirectoryDriver` implements `recover()`,
+the generic `recoverAll` loop picks it up with no further kernel changes
+required. The M7 Slack inbound bridge (below) was built ahead of this gate
+closing — its reply leg goes through the same undurable `slack send` ctl
+path — which is exactly the ordering this section originally warned against.
+Closing M6.4 is the next priority for that reason, not a hypothetical.
 
 **Language dependency:** after the capability cleanup, L0 in
 [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md) must make typed effects enforceable
 across Yash, MCP, and future web adapters. L1's read/evidence toolbox may run
 in parallel. M7 does not require scripts, iteration, or pipelines.
 
-### M7 — Local conversation channel *(decision gate)*
+### M7 — Local conversation channel *(first stage implemented)*
 
-Checkpoint: a human and named local personas can use one durable,
-append-only channel to review a traced source snapshot. `chat post`, `chat
-read`, and explicit agent-reply commands expose messages, participants,
-per-reply runs, chosen context, cancellation, and terminal state as ordinary
-files. Restart marks an in-flight reply interrupted. The channel has no
-implicit host-process, network, MCP-tool, or recursive-agent authority.
+Checkpoint: a human and named local personas use one durable, append-only
+channel — `agent send`/`agent chat`'s persona-scoped `chats/<chatId>/` history
+— to review a traced source snapshot, with `--context`/`--chat` giving the
+interactive REPL the same context-attach and resume capability the one-shot
+command already had. Messages, per-reply runs, chosen context, cancellation,
+and terminal state are ordinary files (see the ADR's revised "M7 decision"
+section for the exact shape). Restart marks an in-flight reply interrupted.
+The channel has no MCP-tool or recursive-agent authority.
 
-M7 is deliberately two stages. The first is this explicit-invocation channel;
-the second decision—earned only by repeated use—covers subscriptions,
-automatic turn scheduling, rate/budget limits, retries, and agent-to-agent
-conversation. A text exchange alone is not success: the validation must show
-who said what, the precise source/context they read, why a reply ran, and how
-the operator stopped it. The detailed data and lifecycle decisions live in the
-ADR's “M7 decision: local conversation channels” section.
+This milestone also added a one-way Slack bridge: a channel configured with
+`persona:` in its `yafs.plugins.yaml` entry routes new, non-bot messages to
+that persona (one run per message, one continuous history per channel) and
+posts the reply back through the ordinary `slack send` path. It has no
+implicit host-process or network authority beyond that single hop — see the
+ADR for what it explicitly does not yet close (M6.4's outbound durability).
+
+M7 remains deliberately staged. What shipped is explicit-invocation only; the
+next decision — earned only by repeated use — covers subscriptions, automatic
+turn scheduling, rate/budget limits, retries, and agent-to-agent conversation.
+A text exchange alone is not success: the validation must show who said what,
+the precise source/context they read, why a reply ran, and how the operator
+stopped it — see [AGENT-CHAT-VALIDATION.md](AGENT-CHAT-VALIDATION.md) and
+[SLACK-VALIDATION.md](SLACK-VALIDATION.md). The detailed data and lifecycle
+decisions live in the ADR's “M7 decision: local conversation channels”
+section.
 
 ### M8 — Remote/multi-user service *(decision gate)*
 

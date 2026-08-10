@@ -852,10 +852,10 @@ bigger persona directory.
 
 ### M7 decision: local conversation channels before autonomous orchestration
 
-**Decision:** M7 begins with a bounded, local conversation channel, not an
-autonomous multi-agent loop. A channel is a durable resource with an
-append-only, attributable message history, declared participants, and an
-explicit source/context snapshot for each model invocation:
+**Original decision (revised below):** M7 was to begin with a bounded, local
+conversation channel: a durable resource with an append-only, attributable
+message history, declared participants, and an explicit source/context
+snapshot for each model invocation, under a channel-centric namespace:
 
 ```text
 /chats/review-482/
@@ -866,33 +866,125 @@ explicit source/context snapshot for each model invocation:
   status.json              # channel-level observed state
 ```
 
-The first commands are `chat post CHANNEL MESSAGE`, `chat read CHANNEL`, and
-an explicit request for a named participant to reply. They adapt the existing
-durable agent action mechanism; they do not introduce a second transport or
-allow an agent to write arbitrary channel files. Automatic subscriptions,
-agent-to-agent turn taking, MCP tool use, and public chat endpoints are not in
-this first slice.
+with `chat post CHANNEL MESSAGE` / `chat read CHANNEL` as the first commands.
 
-Before implementation, settle these six contracts in an M7 design review:
+**What was actually built, and why that is now the standing decision:** the
+persona-centric shape that grew out of `agent send`/`agent chat` already
+satisfies the workflows this decision exists to unblock — PR review over a
+captured artifact, and, added this milestone, a Slack channel routed to a
+persona — without the heavier channel apparatus:
 
-1. the canonical message record (ID, author, server order/time, body, reply
-   relation, and run/trace reference);
-2. whether messages are only appended (the default) and how redaction or
-   deletion is represented without rewriting history;
-3. the exact readable context snapshot given to each invocation and its size
-   limit;
-4. explicit invocation versus an opt-in subscription policy, including budget,
-   rate, retry, cancellation, and loop-prevention rules;
-5. how a response is atomically attributed to its run and the source snapshot;
-   and
-6. the first operator validation: a human and two named local personas review
-   one traced PR and leave an inspectable, interruptible conversation.
+```text
+agents/<persona>/
+  ctl                        # explicit-invocation trigger (send, or a bridge)
+  chats/<chatId>/
+    messages.ndjson          # append-only {role, content} turns
+  runs/<runId>/
+    request.md                # the message that started the run
+    context.md                 # optional attached context (send/chat --context)
+    response.md                 # the model's reply
+    status.json                  # queued/running/complete/failed/... + timestamps
+```
 
-The M7 exit criterion is not merely that two models exchanged text. It is that
-the validation can answer, from ordinary files, who said what, which exact
-source they read, which run produced a reply, why any automated turn happened,
-and how the operator stopped it. Only repeated use of that narrow channel
-earns the next decision on subscriptions or recursive tool use.
+`chatId` is the channel: a human names it directly (`agent send P --chat ID`,
+or `agent chat P --chat ID` to resume), and the Slack bridge below derives it
+deterministically from the mount and Slack channel, so a Slack channel and a
+human read and extend the *same* durable history when pointed at the same
+chatId. Multi-speaker attribution is handled by prefixing message content
+with the sender's identity (`"alice: can you review PR 482"`) rather than a
+separate `participants.json` — nothing in the current workflows needs to
+distinguish speakers more precisely than that, so the heavier design was not
+built.
+
+This reverses the original decision's specific mechanism (`/chats/CHANNEL/`,
+`participants.json`, `chat post`/`chat read`) but keeps its intent: bounded,
+explicit-invocation, locally-inspectable conversations before any autonomous
+multi-agent loop. Revisit `participants.json`-grade attribution if a workflow
+actually needs to distinguish speakers structurally, not just in message text.
+
+Resolving the six contracts the original decision left open:
+
+1. **Canonical message record:** `{role, content}`
+   (`AgentChatHistory.ChatMessage`), append-only to
+   `agents/<persona>/chats/<chatId>/messages.ndjson`. No message ID,
+   timestamp, or reply-relation field on the record itself — those live one
+   level up, on the *run* (`runs/<runId>/status.json`'s `startedAt`/
+   `completedAt`, and the run's `chatId`/`runId` pair), not per message. A
+   reader skimming raw ndjson cannot get a per-message timestamp without
+   cross-referencing the run that produced it — a real limitation, tracked as
+   follow-up debt rather than fixed this milestone.
+2. **Append-only:** yes, unconditionally (`AgentChatStore.commitTurn`). No
+   redaction or deletion mechanism exists; none was requested.
+3. **Context snapshot:** attached once — every call for
+   `agent send --context PATH`, first turn only for `agent chat --context
+   PATH`. No size limit is enforced; left open rather than invented
+   speculatively.
+4. **Invocation policy:** explicit only. A human triggers `agent send`/
+   `agent chat`, or the Slack inbound poller triggers one run per new,
+   non-bot Slack message on a channel configured with a `persona`. There is
+   no subscription, budget, rate limit, retry, or loop-prevention policy
+   beyond the poller's own per-mount busy-guard and last-seen cursor
+   (in-memory, reset on daemon restart — see the Slack bridge note below).
+5. **Attribution:** the `runId`/`chatId` pair does this atomically enough for
+   today's use — `runs/<runId>/{request,context,response}.md` plus
+   `status.json` is one run's full record, and
+   `chats/<chatId>/messages.ndjson` is that chatId's ordered turn history.
+   Cross-referencing a `runId` back to its `chatId` means reading the run's
+   own request rather than following a structural foreign key — acceptable
+   for today's single-reader workflows.
+6. **First operator validation:** superseded by two standing, repeatable
+   validations instead of a one-time review session —
+   [AGENT-CHAT-VALIDATION.md](AGENT-CHAT-VALIDATION.md) and
+   [SLACK-VALIDATION.md](SLACK-VALIDATION.md).
+
+**Revised M7 exit criterion** (matches what is actually checkable today):
+from ordinary files under `agents/<persona>/`, an operator can see who said
+what and in what order (`chats/<chatId>/messages.ndjson`), which run produced
+which reply and when (`runs/<runId>/status.json`), why an automated turn
+happened (a Slack message arrived on a `persona`-configured channel, or a
+human ran `agent send`/`agent chat`), and how to stop it (`agent cancel`, or
+removing the `persona` field from the Slack mount's config). This is met.
+
+**Slack bridge (this milestone):** a poller (`SlackInboundPoller`) treats a
+Slack channel exactly like a human operator would — it derives one `chatId`
+per channel (not per thread; a channel with concurrent conversations
+interleaves them into one agent history, a known v1 simplification) and
+writes the same ctl payload `agent send` would, through the same
+capability-checked path. It has no authority beyond that single hop: it
+cannot call further Yafs operations, chain into other personas, or retry
+beyond one run per message. What it does *not* yet close, flagged by review
+and left as explicit follow-up: `slack send` — both the human-facing command
+and this poller's reply leg — is fire-and-forget from the ctl handler's
+perspective (`SlackDirectoryDriver.send` does not await its own post before
+the write is acknowledged), so a crash mid-flight loses the action with no
+durable pending record. This is the M6.4 durable-outbound-action gap the
+roadmap already names, and it is a real prerequisite for trusting this bridge
+under failure conditions, not just a style complaint.
+
+### Path-scoping primitive — a named, deferred prerequisite
+
+No session- or actor-scoped path authorization exists anywhere in the
+codebase today: `CommandContext.resolve` is pure path resolution with no ACL,
+so any connected session, or any ctl-triggered handler acting on its behalf,
+can read anywhere in the VFS regardless of which mount, persona, or
+capability context is "asking." `ProviderRegistry.assertGranted` is the real
+authority gate that exists — it governs which *capabilities*
+(`network.slack-api`, `chat.completion`, and so on) a mount holds — but
+nothing scopes which *paths* an actor may read once a capability is granted.
+
+This is the concrete, load-bearing reason recursive-MCP tool-calling (an
+agent persona calling back into Yafs operations mid-run) stays out of scope:
+without a way to bound a persona's self-initiated reads to its own mount, or
+an explicitly declared set of paths, giving any persona tool-calling
+authority would let it read anything any other mount can read, not just its
+own context. This is narrower than full M8 (remote/multi-user authentication
+and per-user authorization) — it is a single local primitive: an optional
+allow-list or path-prefix scope attached to an actor and checked in
+`CommandContext.resolve` or its equivalent.
+
+Not implemented this milestone. Recorded here so recursive-MCP tool-calling's
+deferral has a concrete, checkable unblock condition instead of a vague
+"later," and so it is not silently rediscovered from scratch.
 
 ### Machine/image workspace — later still
 

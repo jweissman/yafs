@@ -38,6 +38,17 @@ test("postMessage sends channel and text as a JSON body and returns the new time
   expect(await requests[0].json()).toEqual({ channel: "C123", text: "hello" });
 });
 
+test("identity returns the bot's own Slack user ID", async () => {
+  const requests: Request[] = [];
+  const client = new SlackApiClient(
+    { apiUrl: "https://slack.test/api", token: "xoxb-1" },
+    fakeFetch(requests, { ok: true, user_id: "UBOT1" }),
+  );
+  expect(await client.identity()).toBe("UBOT1");
+  expect(requests[0].url).toBe("https://slack.test/api/auth.test");
+  expect(requests[0].method).toBe("POST");
+});
+
 test("a 200 response with ok:false is reported as a failure, not treated as success", async () => {
   const client = new SlackApiClient(
     { apiUrl: "https://slack.test/api", token: "xoxb-1" },
