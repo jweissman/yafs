@@ -39,14 +39,7 @@ export class AgentPlugin extends Plugin {
   }
 
   actions(): PluginActionDefinition[] {
-    return [
-      {
-        name: "send",
-        capability: "chat.completion",
-        transport: "ctl",
-        pseudobinary: "agent send PERSONA [--context PATH] [--chat CHATID] MESSAGE",
-      },
-    ];
+    return [sendAction()];
   }
 
   exposures(): PluginExposureDefinition[] {
@@ -72,12 +65,9 @@ export class AgentPlugin extends Plugin {
     snapshots: SnapshotMaterializer,
     current?: PreparedMountRecord,
   ) {
-    const config = record.config as AgentConfig;
-    const fresh = this.personaEntries(config);
-    return snapshots.prepare(
-      record,
-      carryForward(fresh, current, (path) => path.includes("/runs/")),
-    );
+    const fresh = this.personaEntries(record.config as AgentConfig);
+    const isRun = (path: string) => path.includes("/runs/");
+    return snapshots.prepare(record, carryForward(fresh, current, isRun));
   }
 
   private personaEntries(config: AgentConfig): [string, string][] {
@@ -86,4 +76,13 @@ export class AgentPlugin extends Plugin {
       persona.prompt,
     ]);
   }
+}
+
+function sendAction(): PluginActionDefinition {
+  return {
+    name: "send",
+    capability: "chat.completion",
+    transport: "ctl",
+    pseudobinary: "agent send PERSONA [--context PATH] [--chat CHATID] MESSAGE",
+  };
 }

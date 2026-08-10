@@ -32,14 +32,6 @@ export type CommandContext = {
   desiredPlan(): Promise<object[]>;
   applyDesired(prune?: boolean): Promise<object[]>;
   refreshDesired(id: string): Promise<object>;
-  planMount(path: AbsolutePath, id?: string): MountRecord;
-  prepareMount(
-    record: MountRecord,
-  ): PreparedMountRecord | Promise<PreparedMountRecord>;
-  planRefresh(
-    path: AbsolutePath,
-    id?: string,
-  ): PreparedMountRecord | Promise<PreparedMountRecord>;
   planUnmount(id: string): MountRecord;
   mkdir(path: AbsolutePath): void;
   touch(path: AbsolutePath): void;

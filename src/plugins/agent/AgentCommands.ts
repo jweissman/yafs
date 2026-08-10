@@ -48,11 +48,13 @@ class AgentCommand {
     flag: string,
     value: string,
   ) {
-    if (flag === "--chat") {
-      flags.chatId = value;
-      return;
-    }
-    flags.context = this.contextValue(context, flag, value);
+    Object.assign(flags, this.flagPatch(context, flag, value));
+  }
+
+  private flagPatch(context: CommandContext, flag: string, value: string) {
+    return flag === "--chat"
+      ? { chatId: value }
+      : { context: this.contextValue(context, flag, value) };
   }
 
   private contextValue(context: CommandContext, flag: string, value: string) {
@@ -100,9 +102,10 @@ function agentAction(
   args: string[],
 ) {
   const action = agentActions(command)[args[0]];
-  if (action) {
-    return action(context, args);
-  }
+  return action ? action(context, args) : unknownAction();
+}
+
+function unknownAction(): never {
   throw new Error("agent expects send, status, cancel, personas, or target");
 }
 

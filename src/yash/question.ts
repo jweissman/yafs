@@ -1,15 +1,13 @@
 import { createInterface } from "node:readline/promises";
 
-export async function question(
+export function question(
   readline: ReturnType<typeof createInterface>,
   prompt: string,
   interruption: AbortController,
 ) {
-  try {
-    return await readline.question(prompt, { signal: interruption.signal });
-  } catch (error) {
-    return abortedOrThrow(interruption, error);
-  }
+  return readline
+    .question(prompt, { signal: interruption.signal })
+    .catch((error: unknown) => abortedOrThrow(interruption, error));
 }
 
 function abortedOrThrow(interruption: AbortController, error: unknown) {

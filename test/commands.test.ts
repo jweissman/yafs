@@ -93,9 +93,6 @@ function unimplemented(): never {
 
 function mountContext() {
   return {
-    planMount: unimplemented,
-    prepareMount: unimplemented,
-    planRefresh: unimplemented,
     planUnmount: unimplemented,
     mount: () => undefined,
     refresh: () => undefined,

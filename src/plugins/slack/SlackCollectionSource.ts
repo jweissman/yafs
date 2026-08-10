@@ -18,16 +18,17 @@ export class SlackCollectionSource {
   constructor(private readonly client: SlackClient) {}
 
   async snapshot(config: SlackConfig): Promise<SlackSnapshot> {
-    const messages = await this.client.history(
-      config.channel,
-      config.max || DEFAULT_MAX,
-    );
-    return {
-      entries: [["messages.ndjson", rendered(messages)]],
-      revision: revision(messages),
-      fetchedAt: new Date().toISOString(),
-    };
+    const max = config.max || DEFAULT_MAX;
+    return snapshotOf(await this.client.history(config.channel, max));
   }
+}
+
+function snapshotOf(messages: SlackMessage[]): SlackSnapshot {
+  return {
+    entries: [["messages.ndjson", rendered(messages)]],
+    revision: revision(messages),
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 function rendered(messages: SlackMessage[]) {

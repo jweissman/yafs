@@ -1,26 +1,21 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { YashClient } from "../src/protocol/client";
-import { YafsServer } from "../src/protocol/server";
 import {
   chunkedModel,
   manifest,
   sleep,
   waitForRun,
 } from "./agent_test_helpers";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("a chunked reply is readable as growing content mid-run, then settles to the full reply", async () => {
-  const modelFor = () => chunkedModel(["first-", "second-", "third"], 150);
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-stream-")),
-    modelFor,
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { server, client } = await startedHostConfigServer(
+    "yafs-agent-stream-",
+    manifest({ reviewer: "prompt" }),
+    { modelFor: () => chunkedModel(["first-", "second-", "third"], 150) },
+  );
+  await client.exec("plugins apply");
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   await assertPartialThenFull(client);
   await client.close();

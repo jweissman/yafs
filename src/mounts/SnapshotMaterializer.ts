@@ -1,10 +1,8 @@
 import { Buffer } from "node:buffer";
 
-import { AbsolutePath } from "../core/AbsolutePath";
-import { PathResolver } from "../core/PathResolver";
-import { ProviderOrigin } from "../vfs/FSNode";
-import { NodeStore } from "../vfs/NodeStore";
 import { MountRecord, PreparedMountRecord, PublishedSnapshot } from "./types";
+import { NodeStore } from "../vfs/NodeStore";
+import { populateSnapshot } from "./SnapshotWrite";
 
 export type SnapshotLimits = { files: number; bytes: number };
 
@@ -29,12 +27,12 @@ export class SnapshotMaterializer {
   }
 
   materialize(record: PreparedMountRecord) {
-    this.publish((candidate) => this.populate(candidate, record));
+    this.publish((candidate) => populateSnapshot(candidate, record));
   }
   replace(record: PreparedMountRecord) {
     this.publish((candidate) => {
       candidate.removeTree(record.path);
-      this.populate(candidate, record);
+      populateSnapshot(candidate, record);
     });
   }
   remove(record: MountRecord) {
@@ -53,13 +51,6 @@ export class SnapshotMaterializer {
     const store = new NodeStore();
     store.restore(this.store.snapshot(0));
     return store;
-  }
-  private populate(store: NodeStore, record: PreparedMountRecord) {
-    store.mkdir(record.path);
-    record.snapshot.entries.forEach((entry) =>
-      this.write(store, record.path, entry),
-    );
-    store.setProviderOrigin(record.path, this.origin(record));
   }
   private snapshot(
     entries: [string, string][],
@@ -83,44 +74,6 @@ export class SnapshotMaterializer {
       throw new Error(`Snapshot exceeds ${this.limits.bytes} bytes`);
     }
   }
-  private write(store: NodeStore, root: AbsolutePath, entry: [string, string]) {
-    const [relative, content] = entry;
-    const path = PathResolver.resolve(relative, root);
-    if (!path.startsWith(`${root}/`)) {
-      throw new Error(`Invalid fixture path: ${relative}`);
-    }
-    this.parents(store, root, path);
-    store.write(path, content);
-  }
-  private parents(store: NodeStore, root: AbsolutePath, path: AbsolutePath) {
-    const parts = path.slice(root.length + 1).split("/");
-    parts.pop();
-    parts.reduce<AbsolutePath>(
-      (parent, name) => this.directory(store, parent, name),
-      root,
-    );
-  }
-  private directory(
-    store: NodeStore,
-    parent: AbsolutePath,
-    name: string,
-  ): AbsolutePath {
-    const path = PathResolver.resolve(name, parent);
-    if (!store.get(path, false)) {
-      store.mkdir(path);
-    }
-    return path;
-  }
-  private origin(record: MountRecord): ProviderOrigin {
-    return {
-      mountId: record.id,
-      provider: record.provider,
-      revision: record.revision,
-      activatedAt: record.activatedAt,
-      fetchedAt: record.fetchedAt,
-      readOnly: true,
-    };
-  }
 }
 
 function snapshotOf(
@@ -128,10 +81,11 @@ function snapshotOf(
   byteCount: number,
   resourceReferences?: Record<string, object>,
 ): PublishedSnapshot {
-  return {
-    entries: entries.map(([path, content]) => [path, content]),
-    fileCount: entries.length,
-    byteCount,
-    resourceReferences,
-  };
+  const copied = copiedEntries(entries);
+  const fileCount = entries.length;
+  return { entries: copied, fileCount, byteCount, resourceReferences };
+}
+
+function copiedEntries(entries: [string, string][]): [string, string][] {
+  return entries.map(([path, content]) => [path, content]);
 }

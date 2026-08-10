@@ -8,6 +8,8 @@ import {
 import { MountManager } from "../src/mounts/MountManager";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { NodeStore } from "../src/vfs/NodeStore";
+import { parseManifest } from "../src/mounts/Manifest";
+import { activateDesired } from "./desired_mount_helpers";
 
 test("a Slack channel becomes an ordered, immutable message snapshot", async () => {
   const yafs = configuredYafs(
@@ -17,10 +19,7 @@ test("a Slack channel becomes an ordered, immutable message snapshot", async () 
       new SlackCollectionSource(fakeClient()),
     ),
   );
-  yafs.store.write("/home/root/.yafsmeta", slackManifest());
-  expect((await yafs.executeAsync("plugin activate .yafsmeta")).stdout).toBe(
-    "updates active",
-  );
+  await activateDesired(yafs, slackManifest());
   assertMessagesPublished(yafs);
   assertPluginDescribed(yafs);
 });
@@ -58,7 +57,7 @@ function assertPluginDescribed(yafs: Yafs) {
   ]);
 }
 
-test("a Slack manifest requires both capabilities and rejects unknown configuration", () => {
+test("a Slack manifest requires both capabilities and rejects unknown configuration", async () => {
   const yafs = configuredYafs(
     new ProviderRegistry(
       undefined,
@@ -66,48 +65,35 @@ test("a Slack manifest requires both capabilities and rejects unknown configurat
       new SlackCollectionSource(fakeClient()),
     ),
   );
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    slackManifest().replace("secret.slack-token", "secret.other"),
+  const ungranted = slackManifest().replace(
+    "secret.slack-token",
+    "secret.other",
   );
-  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(
+  await expect(activateDesired(yafs, ungranted)).rejects.toThrow(
     "Capabilities are not granted: secret.other",
   );
-  assertRejectsInvalidConfig(yafs);
+  assertRejectsInvalidConfig();
 });
 
-function assertRejectsInvalidConfig(yafs: Yafs) {
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    slackManifest().replace("max: 10", "unknown: 10"),
-  );
-  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
+function assertRejectsInvalidConfig() {
+  expect(() =>
+    parseManifest(slackManifest().replace("max: 10", "unknown: 10")),
+  ).toThrow(
     "Unknown slack config field: unknown (expected one of: channel, max)",
   );
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    slackManifest().replace("C123", "a/b"),
-  );
-  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
+  expect(() => parseManifest(slackManifest().replace("C123", "a/b"))).toThrow(
     "Invalid slack channel",
   );
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    slackManifest().replace("max: 10", "max: 0"),
-  );
-  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
-    "Invalid slack max",
-  );
+  expect(() =>
+    parseManifest(slackManifest().replace("max: 10", "max: 0")),
+  ).toThrow("Invalid slack max");
 }
 
 test("an unconfigured Slack provider fails clearly instead of silently publishing nothing", async () => {
   const yafs = configuredYafs(new ProviderRegistry());
-  yafs.store.write("/home/root/.yafsmeta", slackManifest());
-  await expect(
-    yafs.executeAsync("plugin activate .yafsmeta"),
-  ).resolves.toMatchObject({
-    stderr: "Slack provider is not configured",
-  });
+  await expect(activateDesired(yafs, slackManifest())).rejects.toThrow(
+    "Slack provider is not configured",
+  );
 });
 
 function configuredYafs(providers: ProviderRegistry) {

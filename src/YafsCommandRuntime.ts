@@ -10,15 +10,20 @@ export class YafsCommandRuntime {
   constructor(private readonly yafs: Yafs) {}
 
   handle(command: Command): string {
+    const output = this.syncOutput(command);
+    return command.redirect
+      ? this.redirect(command.redirect.target, output)
+      : output;
+  }
+
+  private syncOutput(command: Command): string {
     const output = this.run(command.name, this.arguments(command));
     if (output instanceof Promise) {
       throw new Error(
         `Command requires asynchronous execution: ${command.name}`,
       );
     }
-    return command.redirect
-      ? this.redirect(command.redirect.target, output)
-      : output;
+    return output;
   }
 
   async handleAsync(command: Command): Promise<string> {

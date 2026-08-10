@@ -92,20 +92,26 @@ rejected before it runs.
 | `plugins status` | read | Describe the daemon-selected external configuration. |
 | `plugins plan` | read | Read-only reconciliation plan for the selected configuration. |
 | `plugins apply [--prune]` | control | Activate or refresh declared plugin instances; only `--prune` removes undeclared active instances. |
-| `plugin validate MANIFEST [ID]` | control | Compatibility/development validation of a VFS-resident manifest; it does not select deployment configuration. |
-| `plugin activate MANIFEST [ID]` | control | Compatibility/development activation of a declared plugin projection. |
-| `plugin refresh MANIFEST [ID]` | control | Compatibility/development snapshot refresh. |
 | `plugin deactivate ID` | control | Durably detach an active plugin projection. |
 
 A daemon configuration is external infrastructure-as-code, selected by
 `yafsd --config FILE` or `YAFS_CONFIG`; it has no implicit data-directory
 default. Its canonical YAML uses `plugins:` and each declaration uses
-`plugin:`. The `mount` (singular) command has been removed; `plugin
-validate|activate|refresh|deactivate` above is its sole replacement. The
-older `mounts:`/`provider:` manifest YAML key spelling is a separate,
-still-unscheduled compatibility alias (see the ADR's "Capabilities,
-distribution, and adapters" removal policy) — don't build new tooling against
-it, but existing `.yafsmeta` files using it keep working.
+`plugin:`. The `mount` (singular) command has been removed; `plugins
+status|plan|apply` plus `plugin deactivate` above is its sole replacement.
+There is no in-VFS way to configure a plugin: `plugin validate|activate|
+refresh MANIFEST` accepting a manifest read out of the VFS was removed as a
+security fix — writing a file into your own workspace and granting yourself
+real external capabilities (a GitHub token, a Slack token, an LLM
+credential) were, until this removal, the same permission, since both paths
+converged on the identical capability check. `plugin activate`/`validate`/
+`refresh` now fail immediately with a message pointing at `yafs.plugins.yaml`
+and `plugins apply`; only `plugin deactivate ID` survives, since it grants no
+capability and reads no manifest. The older `mounts:`/`provider:` manifest
+YAML key spelling is a separate, still-unscheduled compatibility alias (see
+the ADR's "Capabilities, distribution, and adapters" removal policy) — don't
+build new tooling against it, but existing `yafs.plugins.yaml` files using it
+keep working.
 
 ```yaml
 version: 1
@@ -120,7 +126,7 @@ plugins:
 A manifest with a field no plugin schema recognizes fails with
 `Unknown <section> field: <the field name> (expected one of: <allowed
 fields>)` — the offending key and the valid set are always named, not just
-"unknown field" with no indication of what or where. `plugin activate`
+"unknown field" with no indication of what or where. `plugins apply`
 targeting a VFS path that already holds *something* (a stray plain
 directory from an earlier `mkdir`, not necessarily a mount) fails with
 `Mount path already exists: PATH` — that content has to be removed first

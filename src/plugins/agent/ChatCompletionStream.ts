@@ -22,12 +22,8 @@ function pumpFor(
   state: StreamState,
   onDelta?: (delta: string) => void,
 ): Pump {
-  return {
-    reader: body.getReader(),
-    decoder: new TextDecoder(),
-    state,
-    onDelta,
-  };
+  const reader = body.getReader();
+  return { reader, decoder: new TextDecoder(), state, onDelta };
 }
 
 async function drain(pump: Pump) {
@@ -47,6 +43,10 @@ function applyChunk(
 ) {
   state.raw += text;
   state.buffer += text;
+  applyEvents(state, onDelta);
+}
+
+function applyEvents(state: StreamState, onDelta?: (delta: string) => void) {
   const { events, rest } = splitEvents(state.buffer);
   state.buffer = rest;
   events.forEach((event) => applyEvent(state, event, onDelta));
@@ -65,9 +65,17 @@ function applyEvent(
 ) {
   const delta = deltaFrom(event);
   if (delta) {
-    state.full += delta;
-    onDelta?.(delta);
+    applyDelta(state, delta, onDelta);
   }
+}
+
+function applyDelta(
+  state: StreamState,
+  delta: string,
+  onDelta?: (delta: string) => void,
+) {
+  state.full += delta;
+  onDelta?.(delta);
 }
 
 function flushRemainder(state: StreamState, onDelta?: (delta: string) => void) {

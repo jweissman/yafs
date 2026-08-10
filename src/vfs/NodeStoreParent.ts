@@ -17,6 +17,10 @@ function checkedParent(
   if (!name || !parent) {
     throw new Error(`No such parent directory: ${path}`);
   }
+  return withWritableCheck(parent, name, path);
+}
+
+function withWritableCheck(parent: FSNode, name: string, path: AbsolutePath) {
   assertWritableDirectory(parent, path);
   return { parent, name };
 }

@@ -15,12 +15,7 @@ export class NodeStoreResolver {
       : this.traverse(path, follow, depth);
   }
   private traverse(path: AbsolutePath, follow: boolean, depth: number) {
-    return this.find(
-      this.state.origin,
-      path.slice(1).split("/"),
-      follow,
-      depth,
-    );
+    return this.find(this.state.origin, path.slice(1).split("/"), follow, depth);
   }
 
   child(node: FSNode, name: string): FSNode | undefined {
@@ -79,10 +74,13 @@ export class NodeStoreResolver {
     follow: boolean,
     depth: number,
   ) {
-    if (child.symlinkTarget && (follow || parts.length > 1)) {
-      return this.follow(child, parts.slice(1), follow, depth);
-    }
-    return this.descend(child, parts, follow, depth);
+    return this.shouldFollow(child, parts, follow)
+      ? this.follow(child, parts.slice(1), follow, depth)
+      : this.descend(child, parts, follow, depth);
+  }
+
+  private shouldFollow(child: FSNode, parts: string[], follow: boolean) {
+    return Boolean(child.symlinkTarget) && (follow || parts.length > 1);
   }
   private descend(
     child: FSNode,

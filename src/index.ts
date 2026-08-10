@@ -5,8 +5,7 @@ import { ExecutionResult } from "./types/ExecutionResult";
 import { ExecutionPlan } from "./types/ExecutionPlan";
 import { BuiltinCommand } from "./commands/BuiltinCommand";
 import { Interpreter } from "./lang/Interpreter";
-import { Clock, systemClock } from "./core/Clock";
-import { builtinCommands } from "./commands/registry";
+import { Clock } from "./core/Clock";
 import { MountManager } from "./mounts/MountManager";
 import { YafsOperationQueue } from "./YafsOperationQueue";
 import { YafsWorkspace } from "./YafsWorkspace";
@@ -21,12 +20,13 @@ import {
 } from "./YafsExecution";
 import { YafsCommandRuntime } from "./YafsCommandRuntime";
 import { BlobStore } from "./protocol/BlobStore";
-import { memoryBlobStore } from "./protocol/MemoryBlobStore";
 import { TraceService } from "./traces/TraceService";
 import { DesiredMounts } from "./mounts/DesiredMounts";
 import { CacheService } from "./cache/CacheService";
+import { requiredArg } from "./YafsValues";
+import { initializeYafs } from "./YafsInitialization";
 
-type YafsOptions = {
+export type YafsOptions = {
   store?: NodeStore;
   user?: User;
   clock?: Clock;
@@ -54,52 +54,7 @@ export default class Yafs {
   commands = new YafsCommandRuntime(this);
 
   constructor(options: YafsOptions = {}) {
-    this.initialize(options);
-  }
-
-  private initialize(options: YafsOptions) {
-    this.clock = options.clock || systemClock;
-    this.store = options.store || new NodeStore(this.clock);
-    this.initializeTraces(options);
-    this.configure(options);
-  }
-  private initializeTraces(options: YafsOptions) {
-    this.blobs = options.blobs || memoryBlobStore();
-    this.traces = options.traces || new TraceService(this.blobs);
-    this.cache = options.cache || new CacheService(this.blobs);
-  }
-
-  private configure(options: YafsOptions) {
-    this.user = options.user || { name: "root" };
-    this.configureMounts(options);
-    this.initializeShell();
-    this.initializeWorkspace();
-    this.initializeOperations();
-  }
-
-  private configureMounts(options: YafsOptions) {
-    this.mounts = options.mounts || new MountManager(this.store);
-    this.desired = options.desired;
-  }
-
-  private initializeWorkspace() {
-    this.workspace = new YafsWorkspace(this.shell, this.store, () =>
-      this.mounts.mounts(),
-    );
-  }
-  private initializeOperations() {
-    this.operationQueue = new YafsOperationQueue(
-      this.store,
-      this.mounts,
-      this.clock,
-      () => this.user.name,
-    );
-  }
-
-  private initializeShell() {
-    this.shell = new Shell(this.user, this.store);
-    this.interpreter = new Interpreter();
-    this.registerBuiltins();
+    initializeYafs(this, options);
   }
 
   static exec(input: string) {
@@ -149,16 +104,6 @@ export default class Yafs {
   }
 
   requiredArg(command: string, args: string[], index: number): string {
-    const value = args[index];
-    if (!value) {
-      throw new Error(`${command} requires argument ${index + 1}`);
-    }
-    return value;
-  }
-
-  private registerBuiltins() {
-    this.builtins = new Map(
-      builtinCommands().map((command) => [command.name, command]),
-    );
+    return requiredArg(command, args, index);
   }
 }

@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 
 import { AbsolutePath } from "../core/AbsolutePath";
-import { PathResolver } from "../core/PathResolver";
 import { Provenance } from "../mounts/types";
 import { BlobStore } from "../protocol/BlobStore";
-import { Trace, TraceEntry, TraceFilesystem, TraceReifier } from "./TraceTypes";
+import { Trace, TraceFilesystem, TraceReifier } from "./TraceTypes";
 import { writeEntry } from "./TraceMaterializer";
 import { assertEntry } from "./TraceEntryValidation";
+import { collectEntries } from "./TraceCapture";
 
 export type {
   TraceEntry,
@@ -27,11 +27,15 @@ export class TraceService {
     origin?: Provenance,
     capturedAt = new Date().toISOString(),
   ): Promise<Trace> {
+    this.assertDirectory(files, source);
+    const entries = await collectEntries(this.blobs, files, source, "");
+    return this.trace({ sourcePath: source, capturedAt, origin, entries });
+  }
+
+  private assertDirectory(files: TraceFilesystem, source: AbsolutePath) {
     if (files.type(source) !== "directory") {
       throw new Error("Trace source must be a directory");
     }
-    const entries = await this.entries(files, source, "");
-    return this.trace({ sourcePath: source, capturedAt, origin, entries });
   }
 
   private trace(fields: Omit<Trace, "kind" | "version">): Trace {
@@ -43,11 +47,15 @@ export class TraceService {
     trace: Trace,
     destination: AbsolutePath,
   ) {
+    this.assertAvailable(files, destination);
+    files.mkdir(destination);
+    await this.writeEntries(files, trace, destination);
+  }
+
+  private assertAvailable(files: TraceFilesystem, destination: AbsolutePath) {
     if (files.exists(destination)) {
       throw new Error(`Trace destination already exists: ${destination}`);
     }
-    files.mkdir(destination);
-    await this.writeEntries(files, trace, destination);
   }
 
   private async writeEntries(
@@ -88,52 +96,8 @@ export class TraceService {
     }
   }
 
-  private async entries(
-    files: TraceFilesystem,
-    path: AbsolutePath,
-    relative: string,
-  ): Promise<TraceEntry[]> {
-    if (files.type(path) === "file") {
-      return [await this.entry(files, path, relative)];
-    }
-    return this.directoryEntries(files, path, relative);
-  }
-
-  private async directoryEntries(
-    files: TraceFilesystem,
-    path: AbsolutePath,
-    relative: string,
-  ): Promise<TraceEntry[]> {
-    const children = await Promise.all(
-      files.list(path).map((name) => this.child(files, path, relative, name)),
-    );
-    return children.flat();
-  }
-  private child(
-    files: TraceFilesystem,
-    path: AbsolutePath,
-    relative: string,
-    name: string,
-  ) {
-    return this.entries(
-      files,
-      PathResolver.resolve(name, path),
-      join(relative, name),
-    );
-  }
-  private async entry(
-    files: TraceFilesystem,
-    path: AbsolutePath,
-    relative: string,
-  ) {
-    const bytes = new TextEncoder().encode(files.read(path));
-    return { path: relative, digest: await this.blobs.put(bytes) };
-  }
 }
 
-function join(parent: string, name: string) {
-  return parent ? `${parent}/${name}` : name;
-}
 export function digest(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }

@@ -15,16 +15,26 @@ export function sse(chunks: string[]) {
 
 function sseStream(chunks: string[]) {
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(new TextEncoder().encode(event(chunk)));
-        await Promise.resolve();
-      }
-      controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-      controller.close();
-    },
+    start: (controller) => streamAll(controller, chunks),
   });
 }
+
+async function streamAll(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  chunks: string[],
+) {
+  for (const chunk of chunks) {
+    controller.enqueue(new TextEncoder().encode(event(chunk)));
+    await Promise.resolve();
+  }
+  finish(controller);
+}
+
+function finish(controller: ReadableStreamDefaultController<Uint8Array>) {
+  controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+  controller.close();
+}
+
 
 function event(content: string) {
   const payload = JSON.stringify({ choices: [{ delta: { content } }] });

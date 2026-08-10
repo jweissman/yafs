@@ -37,17 +37,24 @@ function newSession(
 // controller as a side effect (the exact bug this whole function exists to
 // avoid) once chat returns. Swap the outer listener(s) out for the duration
 // instead, and restore them verbatim afterward.
-async function withSigintCleanup(session: ChatSession, action: () => Promise<void>) {
+async function withSigintCleanup(
+  session: ChatSession,
+  action: () => Promise<void>,
+) {
   const readline = session.readline;
   const outer = swapOutSigint(readline);
   const onSigint = () => session.interruption.abort();
   readline.on("SIGINT", onSigint);
-  try {
-    await action();
-  } finally {
-    readline.off("SIGINT", onSigint);
-    outer.forEach((listener) => readline.on("SIGINT", listener));
-  }
+  await action().finally(() => restoreSigint(readline, onSigint, outer));
+}
+
+function restoreSigint(
+  readline: Readline,
+  onSigint: () => void,
+  outer: (() => void)[],
+) {
+  readline.off("SIGINT", onSigint);
+  outer.forEach((listener) => readline.on("SIGINT", listener));
 }
 
 function swapOutSigint(readline: Readline): (() => void)[] {
@@ -64,12 +71,16 @@ async function chatTurns(session: ChatSession) {
 }
 
 async function chatStep(session: ChatSession): Promise<boolean> {
-  const message = await question(session.readline, "you> ", session.interruption);
+  const message = await promptMessage(session);
   if (!shouldContinue(message)) {
     return false;
   }
   await turnIfNonEmpty(session, message);
   return true;
+}
+
+function promptMessage(session: ChatSession) {
+  return question(session.readline, "you> ", session.interruption);
 }
 
 function shouldContinue(message: string | undefined): message is string {

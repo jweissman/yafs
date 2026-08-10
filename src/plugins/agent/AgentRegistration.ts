@@ -70,12 +70,8 @@ export class AgentRegistration {
       return;
     }
     this.quarantined.add(record.id);
-    this.mounts.audit(
-      record,
-      "system",
-      "quarantine",
-      `Invalid persisted agent configuration: ${record.id}`,
-    );
+    const detail = `Invalid persisted agent configuration: ${record.id}`;
+    this.mounts.audit(record, "system", "quarantine", detail);
   }
 
   private registerPersona(

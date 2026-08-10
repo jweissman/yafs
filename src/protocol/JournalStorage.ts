@@ -54,12 +54,20 @@ export async function removeIfPresent(path: string) {
 
 export async function writeAtomically(path: string, data: string) {
   const temporary = `${path}.tmp`;
-  const file = await open(temporary, "w");
+  await writeSynced(temporary, data);
+  await rename(temporary, path);
+  await syncDirectory(dirname(path));
+}
+
+async function writeSynced(path: string, data: string) {
+  const file = await open(path, "w");
   await file.writeFile(data);
   await file.sync();
   await file.close();
-  await rename(temporary, path);
-  const directory = await open(dirname(path), "r");
+}
+
+async function syncDirectory(path: string) {
+  const directory = await open(path, "r");
   await directory.sync();
   await directory.close();
 }

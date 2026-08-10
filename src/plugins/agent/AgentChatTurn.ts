@@ -29,8 +29,11 @@ export function finishChatTurn(
   chatId: string | undefined,
   reply: string,
 ) {
-  const message: ChatMessage = { role: "assistant", content: reply };
   return chatId
-    ? chats.appendChatTurn(context, chatId, message)
+    ? chats.appendChatTurn(context, chatId, assistantTurn(reply))
     : Promise.resolve();
+}
+
+function assistantTurn(reply: string): ChatMessage {
+  return { role: "assistant", content: reply };
 }

@@ -36,11 +36,9 @@ export async function replay(
   ctx: ReplayContext,
   sequence: number,
 ) {
-  try {
-    return applyRecords(await readFile(path, "utf8"), ctx, sequence);
-  } catch (error: unknown) {
-    return replayFallback(error, sequence);
-  }
+  return readFile(path, "utf8")
+    .then((data) => applyRecords(data, ctx, sequence))
+    .catch((error: unknown) => replayFallback(error, sequence));
 }
 
 function replayFallback(error: unknown, sequence: number) {
@@ -72,10 +70,9 @@ function replayRecord(
   sequence: number,
 ) {
   verifyRecord(record);
-  if (record.sequence <= sequence) {
-    return sequence;
-  }
-  return applyNext(record, ctx, sequence);
+  return record.sequence <= sequence
+    ? sequence
+    : applyNext(record, ctx, sequence);
 }
 
 function applyNext(
@@ -86,6 +83,10 @@ function applyNext(
   if (record.sequence !== sequence + 1) {
     throw new Error("Corrupt journal record");
   }
+  return applied(record, ctx);
+}
+
+function applied(record: JournalRecord, ctx: ReplayContext) {
   ctx.store.apply(record.operation);
   ctx.replayer?.(record.operation);
   return record.sequence;

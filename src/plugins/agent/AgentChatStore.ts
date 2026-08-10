@@ -1,6 +1,6 @@
 import { Journal } from "../../protocol/Journal";
 import { MountManager } from "../../mounts/MountManager";
-import { publishEntries } from "../../mounts/MountEntryPublish";
+import { MountJournal, publishEntries } from "../../mounts/MountEntryPublish";
 import { PreparedMountRecord } from "../../mounts/types";
 import { ChatMessage, historyEntry, historyFrom } from "./AgentChatHistory";
 
@@ -51,7 +51,11 @@ export class AgentChatStore {
   ) {
     const history = [...historyFrom(record, personaName, chatId), message];
     const entry = historyEntry(personaName, chatId, history);
-    return publishEntries(this.mounts, this.journal, record, [entry]);
+    return publishEntries(this.deps(), record, [entry]);
+  }
+
+  private deps(): MountJournal {
+    return { mounts: this.mounts, journal: this.journal };
   }
 
   private record(mountId: string) {

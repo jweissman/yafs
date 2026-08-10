@@ -27,6 +27,12 @@ function completeStatus(startedAt: string): Status {
   };
 }
 
+function withContext(entries: Entry[], id: RunId, context?: string) {
+  return context === undefined
+    ? entries
+    : [...entries, contextEntry(id, context)];
+}
+
 export class AgentRunStore {
   constructor(
     private readonly mounts: MountManager,
@@ -58,9 +64,7 @@ export class AgentRunStore {
     context?: string,
   ) {
     const entries = [statusEntry(id, status), requestEntry(id, message)];
-    return context === undefined
-      ? entries
-      : [...entries, contextEntry(id, context)];
+    return withContext(entries, id, context);
   }
 
   interrupt(id: RunId, status: Status) {
@@ -75,13 +79,8 @@ export class AgentRunStore {
     request: RunId & { startedAt: string; message: string; reply: string },
   ) {
     const { startedAt, message, reply, ...id } = request;
-    const { updates, entryDetail } = this.completion(
-      id,
-      startedAt,
-      message,
-      reply,
-    );
-    return this.commitEntries(id, updates, entryDetail);
+    const completed = this.completion(id, startedAt, message, reply);
+    return this.commitEntries(id, completed.updates, completed.entryDetail);
   }
 
   private completion(
@@ -101,11 +100,8 @@ export class AgentRunStore {
     message: string,
     reply: string,
   ): Entry[] {
-    return [
-      statusEntry(id, status),
-      requestEntry(id, message),
-      responseEntry(id, reply),
-    ];
+    const request = requestEntry(id, message);
+    return [statusEntry(id, status), request, responseEntry(id, reply)];
   }
 
   private commitEntries(id: RunId, updates: Entry[], entryDetail: string) {
@@ -115,7 +111,8 @@ export class AgentRunStore {
   private async applyEntries(id: RunId, updates: Entry[], info: string) {
     const record = this.record(id.mountId);
     if (record) {
-      await publishEntries(this.mounts, this.journal, record, updates, info);
+      const deps = { mounts: this.mounts, journal: this.journal };
+      await publishEntries(deps, record, updates, info);
     }
   }
 

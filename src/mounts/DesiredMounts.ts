@@ -5,13 +5,8 @@ import { parseManifest } from "./Manifest";
 import { MountManager } from "./MountManager";
 import { Change, DesiredMountChanges } from "./DesiredMountChanges";
 import { activeEntries } from "./DesiredMountEntries";
-import { ManifestMount, PreparedMountRecord } from "./types";
+import { applyChange, Mutations, Target } from "./DesiredMountPublish";
 
-type Mutations = {
-  mount(record: PreparedMountRecord): void;
-  refresh(record: PreparedMountRecord): void;
-  unmount(id: string): void;
-};
 type DesiredMountsOptions = { path?: string; root?: AbsolutePath };
 
 export class DesiredMounts {
@@ -38,16 +33,21 @@ export class DesiredMounts {
   async apply(mutations: Mutations, prune = false) {
     const loaded = await this.required();
     const changes = this.changesFor(loaded, prune);
+    const target = this.target();
     for (const change of changes) {
-      await this.applyChange(change, loaded.manifest.mounts, mutations);
+      await applyChange(target, change, loaded.manifest.mounts, mutations);
     }
     return changes;
   }
   async refreshOne(id: string, mutations: Mutations) {
     const loaded = await this.required();
     const change: Change = { id, action: this.forcedAction(id) };
-    await this.applyChange(change, loaded.manifest.mounts, mutations);
+    await applyChange(this.target(), change, loaded.manifest.mounts, mutations);
     return change;
+  }
+
+  private target(): Target {
+    return { mounts: this.mounts, root: this.root };
   }
 
   private changesFor(
@@ -67,59 +67,6 @@ export class DesiredMounts {
       : "activate";
   }
 
-  private async applyChange(
-    change: Change,
-    declarations: ManifestMount[],
-    mutations: Mutations,
-  ) {
-    if (change.action === "unmount") {
-      return mutations.unmount(change.id);
-    }
-    return this.publish(change, declarations, mutations);
-  }
-
-  private async publish(
-    change: Change,
-    declarations: ManifestMount[],
-    mutations: Mutations,
-  ) {
-    const record = this.recordFor(declarations, change.id);
-    return Promise.resolve(
-      this.mounts.prepareActivation(record, "system"),
-    ).then((prepared) => this.publishPrepared(change, mutations, prepared));
-  }
-
-  private recordFor(declarations: ManifestMount[], id: string) {
-    return this.mounts.planDesired(
-      this.declaration(declarations, id),
-      this.digest(declarations),
-      this.root,
-    );
-  }
-
-  private publishPrepared(
-    change: Change,
-    mutations: Mutations,
-    record: PreparedMountRecord,
-  ) {
-    if (change.action === "activate") {
-      mutations.mount(record);
-    } else {
-      mutations.refresh(record);
-    }
-  }
-
-  private declaration(declarations: ManifestMount[], id: string) {
-    const declaration = declarations.find((item) => item.id === id);
-    if (!declaration) {
-      throw new Error(`No desired mount: ${id}`);
-    }
-    return declaration;
-  }
-
-  private digest(declarations: ManifestMount[]) {
-    return JSON.stringify(declarations);
-  }
   private async required() {
     const loaded = await this.loaded();
     if (!loaded) {

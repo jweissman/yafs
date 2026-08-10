@@ -27,9 +27,15 @@ async function interrupt(
   runs: AgentRunStore,
 ) {
   const run = running(path, content);
-  if (run) {
-    await runs.interrupt(runId(mountId, run), interruptedStatus(run.startedAt));
-  }
+  await (run ? interruptRun(mountId, run, runs) : undefined);
+}
+
+function interruptRun(
+  mountId: string,
+  run: { persona: string; id: string; startedAt: string },
+  runs: AgentRunStore,
+) {
+  return runs.interrupt(runId(mountId, run), interruptedStatus(run.startedAt));
 }
 
 function runId(mountId: string, run: { persona: string; id: string }) {

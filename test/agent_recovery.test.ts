@@ -10,16 +10,15 @@ import {
 } from "./agent_test_helpers";
 import { YafsServer } from "../src/protocol/server";
 import { YashClient } from "../src/protocol/client";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("restart marks an accepted in-flight run interrupted", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-agents-recover-"));
-  const server = await YafsServer.start({
-    dataDir: directory,
-    modelFor: () => pendingModel(),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { directory, server, client } = await startedHostConfigServer(
+    "yafs-agents-recover-",
+    manifest({ reviewer: "prompt" }),
+    { modelFor: () => pendingModel() },
+  );
+  await client.exec("plugins apply");
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForStatus(
     client,

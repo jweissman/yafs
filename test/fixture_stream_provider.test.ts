@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 
 import { YashClient } from "../src/protocol/client";
-import { YafsServer } from "../src/protocol/server";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("a manifest-declared fixture stream delivers chunks into a live mount without blocking other clients", async () => {
   const { server, client } = await startedFixtureClient(
@@ -40,21 +38,21 @@ test("an operator plugin refresh preserves stream progress instead of resetting 
     manifest(),
   );
   await waitForExact(client, "demo/output.txt", "one-two-three");
-  await client.exec("plugin refresh .yafsmeta demo");
+  await client.exec("plugins refresh demo");
   expect(await client.exec("cat demo/output.txt")).toBe("one-two-three");
   await client.close();
   await server.close();
 });
 
 test("reactivating a mount with a different stream config starts from its own beginning, not stale progress", async () => {
-  const { server, client } = await startedFixtureClient(
+  const { configPath, server, client } = await startedFixtureClient(
     "yafs-fixture-stream-restart-",
     manifest(),
   );
   await waitForExact(client, "demo/output.txt", "one-two-three");
   await client.exec("plugin deactivate demo");
-  await client.exec(`printf '${otherManifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  await writeFile(configPath, otherManifest());
+  await client.exec("plugins apply");
   expect(await client.exec("cat demo/output.txt")).toBe("");
   await waitForExact(client, "demo/output.txt", "uno-");
   await client.close();
@@ -89,13 +87,10 @@ test("a ctl restart naming an unknown stream is rejected without breaking the co
 });
 
 async function startedFixtureClient(prefix: string, manifestSource: string) {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), prefix)),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${manifestSource}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
-  return { server, client };
+  const { directory, configPath, server, client } =
+    await startedHostConfigServer(prefix, manifestSource);
+  await client.exec("plugins apply");
+  return { directory, configPath, server, client };
 }
 
 function restartPayload(path: string) {

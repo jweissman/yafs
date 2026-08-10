@@ -1,22 +1,16 @@
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, test } from "bun:test";
 
 import { fakeExchangeModel, waitForRun } from "./agent_test_helpers";
-import { YafsServer } from "../src/protocol/server";
-import { YashClient } from "../src/protocol/client";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("a review run consumes a reified trace and preserves the exact diff context", async () => {
   const calls: Array<{ system: string; message: string }> = [];
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-context-review-")),
-    modelFor: () => fakeExchangeModel("review: looks safe", calls),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${manifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta source");
-  await client.exec("plugin activate .yafsmeta agents");
+  const { server, client } = await startedHostConfigServer(
+    "yafs-context-review-",
+    manifest(),
+    { modelFor: () => fakeExchangeModel("review: looks safe", calls) },
+  );
+  await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
   await client.exec("trace source artifacts/review-42");
   await client.exec("reify artifacts/review-42 restored-42");

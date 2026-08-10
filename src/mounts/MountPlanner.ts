@@ -1,13 +1,9 @@
-import { dirname } from "node:path";
-
 import { AbsolutePath } from "../core/AbsolutePath";
 import { PathResolver } from "../core/PathResolver";
 import { NodeStore } from "../vfs/NodeStore";
-import { parseManifest } from "./Manifest";
 import { ManifestMount, MountRecord, PreparedMountRecord } from "./types";
 import { ProviderRegistry } from "./ProviderRegistry";
 
-type Details = { declaration: ManifestMount; digest: string };
 type Declaration = {
   manifestPath: AbsolutePath;
   mount: ManifestMount;
@@ -21,25 +17,6 @@ export class MountPlanner {
     private readonly providers: ProviderRegistry,
   ) {}
 
-  validate(path: AbsolutePath) {
-    return parseManifest(this.store.read(path));
-  }
-
-  plan(path: AbsolutePath, id?: string): MountRecord {
-    const { declaration, digest } = this.details(path, id);
-    this.providers.assertGranted(declaration);
-    return this.record({ manifestPath: path, mount: declaration, digest });
-  }
-  refresh(path: AbsolutePath, id?: string): MountRecord {
-    const { declaration, digest } = this.details(path, id);
-    this.providers.assertGranted(declaration);
-    return this.refreshRecord({
-      manifestPath: path,
-      mount: declaration,
-      digest,
-    });
-  }
-
   desired(
     mount: ManifestMount,
     digest: string,
@@ -49,44 +26,6 @@ export class MountPlanner {
     const path = PathResolver.resolve(mount.path, root);
     const manifestPath = "/.yafs/daemon-mounts.yaml" as AbsolutePath;
     return this.activeRecord(path, { manifestPath, mount, digest });
-  }
-
-  private details(path: AbsolutePath, id?: string): Details {
-    const { manifest, digest } = this.validate(path);
-    return { declaration: this.declaration(manifest.mounts, id), digest };
-  }
-
-  private declaration(mounts: ManifestMount[], id?: string) {
-    const selected = mounts.filter((mount) => !id || mount.id === id);
-    if (selected.length !== 1) {
-      throw new Error("Expected exactly one declared mount");
-    }
-    return selected[0];
-  }
-
-  private record(declaration: Declaration): MountRecord {
-    const path = this.resolvedPath(declaration);
-    this.assertAvailable(path);
-    return this.activeRecord(path, declaration);
-  }
-  private refreshRecord(declaration: Declaration): MountRecord {
-    const path = this.resolvedPath(declaration);
-    this.assertActive(declaration.mount.id, path);
-    return this.activeRecord(path, declaration);
-  }
-
-  private resolvedPath({ manifestPath, mount }: Declaration) {
-    return PathResolver.resolve(
-      mount.path,
-      dirname(manifestPath) as AbsolutePath,
-    );
-  }
-
-  private assertActive(id: string, path: AbsolutePath) {
-    const active = this.records().find((record) => record.id === id);
-    if (!active || active.path !== path) {
-      throw new Error(`No active mount: ${id}`);
-    }
   }
 
   private activeRecord(
@@ -132,6 +71,10 @@ export class MountPlanner {
     if (this.store.get(path, false)) {
       throw new Error(`Mount path already exists: ${path}`);
     }
+    this.assertNotActive(path);
+  }
+
+  private assertNotActive(path: AbsolutePath) {
     if (this.records().some((record) => record.path === path)) {
       throw new Error(`Mount already active: ${path}`);
     }

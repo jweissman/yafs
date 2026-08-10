@@ -18,9 +18,28 @@ export async function writeEntry(
 ) {
   assertEntry(entry);
   const path = resolveDestination(destination, entry.path);
-  const bytes = await bytesFor(target, trace, entry.digest);
-  ensureParents(target.files, destination, path);
-  target.files.write(path, new TextDecoder().decode(bytes));
+  await finishWrite(target, trace, destination, path, entry.digest);
+}
+
+async function finishWrite(
+  target: Materializer,
+  trace: Trace,
+  destination: AbsolutePath,
+  path: AbsolutePath,
+  digest: string,
+) {
+  const bytes = await bytesFor(target, trace, digest);
+  writeMaterialized(target.files, destination, path, bytes);
+}
+
+function writeMaterialized(
+  files: TraceFilesystem,
+  destination: AbsolutePath,
+  path: AbsolutePath,
+  bytes: Uint8Array,
+) {
+  ensureParents(files, destination, path);
+  files.write(path, new TextDecoder().decode(bytes));
 }
 
 async function bytesFor(target: Materializer, trace: Trace, digest: string) {
@@ -49,11 +68,11 @@ async function recoverBytes(
   trace: Trace,
   digest: string,
 ) {
-  const bytes = await reifier.reify(trace, digest);
-  if (!bytes) {
-    throw new Error(`Missing trace blob: ${digest}`);
-  }
-  return bytes;
+  return (await reifier.reify(trace, digest)) || missingBlob(digest);
+}
+
+function missingBlob(digest: string): never {
+  throw new Error(`Missing trace blob: ${digest}`);
 }
 
 function assertRecoveredDigest(actual: string, expected: string) {
@@ -90,6 +109,10 @@ function ensureParent(
   name: string,
 ) {
   const path = PathResolver.resolve(name, parent);
+  return mkdirIfMissing(files, path);
+}
+
+function mkdirIfMissing(files: TraceFilesystem, path: AbsolutePath) {
   if (!files.exists(path)) {
     files.mkdir(path);
   }

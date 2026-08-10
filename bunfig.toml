@@ -1,4 +1,4 @@
 [test]
 
 coverage = true
-coverageThreshold = 0.9
+coverageThreshold = 0.92

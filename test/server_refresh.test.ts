@@ -1,25 +1,23 @@
 import { expect, spyOn, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSource";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { YashClient } from "../src/protocol/client";
-import { YafsServer } from "../src/protocol/server";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("a failed scheduled refresh does not sever an unrelated client connection", async () => {
   const error = spyOn(console, "error").mockImplementation(() => undefined);
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-refresh-failure-")),
-    now: () => Date.now() + 120_000,
-    providers: new ProviderRegistry(
-      new GitHubCollectionSource(unreliableClient()),
-    ),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${scheduledManifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { server, client } = await startedHostConfigServer(
+    "yafs-refresh-failure-",
+    scheduledManifest(),
+    {
+      now: () => Date.now() + 120_000,
+      providers: new ProviderRegistry(
+        new GitHubCollectionSource(unreliableClient()),
+      ),
+    },
+  );
+  await client.exec("plugins apply");
   await server.refreshDue();
   expect(await client.exec("echo still alive")).toBe("still alive");
   expect(error).toHaveBeenCalled();
@@ -29,17 +27,18 @@ test("a failed scheduled refresh does not sever an unrelated client connection",
 });
 
 test("the background refresh timer itself, not just a manually-triggered refresh, picks up due mounts", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-refresh-timer-")),
-    now: () => Date.now() + 120_000,
-    refreshIntervalMs: 5,
-    providers: new ProviderRegistry(
-      new GitHubCollectionSource(countingClient()),
-    ),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${scheduledManifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { server, client } = await startedHostConfigServer(
+    "yafs-refresh-timer-",
+    scheduledManifest(),
+    {
+      now: () => Date.now() + 120_000,
+      refreshIntervalMs: 5,
+      providers: new ProviderRegistry(
+        new GitHubCollectionSource(countingClient()),
+      ),
+    },
+  );
+  await client.exec("plugins apply");
   const initial = await client.exec("cat reviews/pulls/42/metadata.json");
   await waitForChange(client, initial);
   await client.close();

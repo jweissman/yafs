@@ -2,30 +2,25 @@ import { NodeStore } from "../vfs/NodeStore";
 import { cacheMetadataRoot } from "./CachePaths";
 import { CacheService } from "./CacheService";
 
-export function retainCaches(
-  store: NodeStore,
-  cache: CacheService,
-  now = new Date(),
-) {
-  if (!store.get(cacheMetadataRoot, false)) {
+type Retention = { store: NodeStore; cache: CacheService };
+
+export function retainCaches(deps: Retention, now = new Date()) {
+  if (!deps.store.get(cacheMetadataRoot, false)) {
     return;
   }
-  store
-    .list(cacheMetadataRoot)
-    .forEach((name) => retain(store, cache, name, now));
+  const names = deps.store.list(cacheMetadataRoot);
+  names.forEach((name) => retain(deps, name, now));
 }
 
-function retain(
-  store: NodeStore,
-  cache: CacheService,
-  name: string,
-  now: Date,
-) {
-  const path = entryPath(name);
-  const entry = cache.parse(store.read(path));
-  if (!cache.expired(entry, now)) {
-    cache.retain(entry);
+function retain(deps: Retention, name: string, now: Date) {
+  const entry = readEntry(deps, name);
+  if (!deps.cache.expired(entry, now)) {
+    deps.cache.retain(entry);
   }
+}
+
+function readEntry(deps: Retention, name: string) {
+  return deps.cache.parse(deps.store.read(entryPath(name)));
 }
 
 function entryPath(name: string) {

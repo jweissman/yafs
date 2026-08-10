@@ -1,16 +1,8 @@
-import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { MountRecord, PreparedMountRecord } from "./types";
+import { appendSynced, syncDirectory, writeSynced } from "../core/SyncedFileIO";
 
 type StoredMounts = { version: 1; mounts: PreparedMountRecord[] };
 export type AuditOutcome = {
@@ -55,10 +47,9 @@ export class MountPersistence {
     action: string,
     outcome: AuditOutcome = { outcome: "success" },
   ) {
-    if (!this.auditPath) {
-      return;
+    if (this.auditPath) {
+      this.appendAudit({ record, actor, action, outcome });
     }
-    this.appendAudit({ record, actor, action, outcome });
   }
 
   private appendAudit(event: AuditEvent) {
@@ -88,8 +79,7 @@ export class MountPersistence {
       relativePath: "",
       capabilitiesUsed: record.capabilities,
       outcome: outcome.outcome,
-      beforeRevision: outcome.before,
-      afterRevision: outcome.after,
+      ...revisionFields(outcome),
       detail: outcome.detail,
     };
   }
@@ -116,6 +106,10 @@ function valid(stored: StoredMounts) {
   return stored.mounts;
 }
 
+function revisionFields(outcome: AuditOutcome) {
+  return { beforeRevision: outcome.before, afterRevision: outcome.after };
+}
+
 function hasSnapshot(record: PreparedMountRecord) {
   return Array.isArray(record.snapshot?.entries);
 }
@@ -129,35 +123,6 @@ function writeMounts(path: string, mounts: PreparedMountRecord[]) {
   );
   renameSync(temporary, path);
   syncDirectory(path);
-}
-
-function writeSynced(path: string, data: string) {
-  const descriptor = openSync(path, "w");
-  try {
-    writeFileSync(descriptor, data);
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-}
-
-function appendSynced(path: string, data: string) {
-  const descriptor = openSync(path, "a");
-  try {
-    writeFileSync(descriptor, data);
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-}
-
-function syncDirectory(path: string) {
-  const descriptor = openSync(dirname(path), "r");
-  try {
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
 }
 
 function auditSequence(path?: string) {

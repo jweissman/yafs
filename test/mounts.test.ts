@@ -1,22 +1,25 @@
 import { expect, test } from "bun:test";
-import { access, mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import Yafs from "../src";
 import { YashClient } from "../src/protocol/client";
 import { YafsServer } from "../src/protocol/server";
+import { parseManifest } from "../src/mounts/Manifest";
 import {
   auditSequences,
   expectInvalidManifest,
   fixtureManifest,
   invalidManifests,
-  nestedFixtureManifest,
 } from "./mount_manifest_helpers";
+import {
+  activateDesired,
+  startedHostConfigServer,
+} from "./desired_mount_helpers";
 
-test("a validated manifest activates a read-only fixture mount with provenance", () => {
+test("a validated manifest activates a read-only fixture mount with provenance", async () => {
   const yafs = new Yafs();
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
+  await activateDesired(yafs, fixtureManifest());
   verifyFixture(yafs);
   const origin = JSON.parse(yafs.exec("inspect fixture/hello.txt")).origins[0];
   expect(origin).toMatchObject({
@@ -27,59 +30,52 @@ test("a validated manifest activates a read-only fixture mount with provenance",
 });
 
 test("mount activation persists state, audit, and fixture content across restart", async () => {
-  const { directory, server, client } = await startedServer("yafs-mount-");
-  await client.exec(`printf '${fixtureManifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { directory, configPath, server, client } =
+    await startedHostConfigServer("yafs-mount-", fixtureHostConfig());
+  await client.exec("plugins apply");
   await client.close();
   await server.close();
   await access(join(directory, "mounts.json"));
   await access(join(directory, "audit.ndjson"));
   const auditText = await readFile(join(directory, "audit.ndjson"), "utf8");
   expect(auditText).toContain('"afterRevision":"fixture:');
-  const restarted = await YafsServer.start({ dataDir: directory });
+  const restarted = await YafsServer.start({ dataDir: directory, configPath });
   const restored = await YashClient.connect(restarted.address());
   expect(await restored.exec("cat /home/root/fixture/hello.txt")).toBe("hello");
   await restored.exec("plugin deactivate demo");
-  await restored.exec("plugin activate .yafsmeta");
+  await restored.exec("plugins apply");
   await restored.close();
   await restarted.close();
   const auditLog = await readFile(join(directory, "audit.ndjson"), "utf8");
   expect(auditSequences(auditLog)).toEqual([1, 2, 3]);
 });
 
-test("mount manifests reject unknown fields and unmount removes the provider view", () => {
-  const yafs = new Yafs();
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    "{version: 1, mounts: [], unknown: true}",
-  );
-  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
+test("mount manifests reject unknown fields and unmount removes the provider view", async () => {
+  expect(() =>
+    parseManifest("{version: 1, mounts: [], unknown: true}"),
+  ).toThrow(
     "Unknown manifest field: unknown (expected one of: version, plugins, mounts)",
   );
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    fixtureManifest().replace("capabilities: []", "capabilities: [network]"),
+  const yafs = new Yafs();
+  const ungranted = fixtureManifest().replace(
+    "capabilities: []",
+    "capabilities: [network]",
   );
-  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(
+  await expect(activateDesired(yafs, ungranted)).rejects.toThrow(
     "Capabilities are not granted: network",
   );
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
-  yafs.exec("plugin activate .yafsmeta");
+  await activateDesired(yafs, fixtureManifest());
   expect(yafs.exec("plugin deactivate demo")).toBe("demo deactivated");
   expect(yafs.execute("cat fixture/hello.txt").error?.code).toBe("not_found");
 });
 
 test("mount manifests reject duplicate keys, YAML tags, aliases, and anchors", () => {
-  const yafs = new Yafs();
-  invalidManifests().forEach((manifest) =>
-    expectInvalidManifest(yafs, manifest),
-  );
+  invalidManifests().forEach((manifest) => expectInvalidManifest(manifest));
 });
 
-test("fixture snapshots participate in links, unions, and provenance", () => {
+test("fixture snapshots participate in links, unions, and provenance", async () => {
   const yafs = new Yafs();
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
-  yafs.exec("plugin activate .yafsmeta");
+  await activateDesired(yafs, fixtureManifest());
   yafs.exec("mkdir notes");
   yafs.exec("echo local > notes/alice.md");
   yafs.exec("ln -s fixture/hello.txt latest");
@@ -94,20 +90,20 @@ test("fixture snapshots participate in links, unions, and provenance", () => {
   });
 });
 
-test("a mount may not replace an existing local node", () => {
+test("a mount may not replace an existing local node", async () => {
   const yafs = new Yafs();
   yafs.exec("mkdir fixture");
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
-  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(
+  await expect(activateDesired(yafs, fixtureManifest())).rejects.toThrow(
     "Mount path already exists: /home/root/fixture",
   );
 });
 
 test("nested snapshot files survive replay and disappear after durable unmount", async () => {
-  const { directory, server, client } =
-    await startedServer("yafs-mount-replay-");
-  await client.exec(`printf '${nestedFixtureManifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { directory, server, client } = await startedHostConfigServer(
+    "yafs-mount-replay-",
+    nestedFixtureHostConfig(),
+  );
+  await client.exec("plugins apply");
   await client.close();
   await server.close();
   const restarted = await YafsServer.start({ dataDir: directory });
@@ -127,16 +123,15 @@ test("nested snapshot files survive replay and disappear after durable unmount",
   await afterUnmount.close();
 });
 
-async function startedServer(prefix: string) {
-  const directory = await mkdtemp(join(tmpdir(), prefix));
-  const server = await YafsServer.start({ dataDir: directory });
-  const client = await YashClient.connect(server.address());
-  return { directory, server, client };
+function fixtureHostConfig() {
+  return "{version: 1, plugins: [{id: demo, path: fixture, plugin: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}";
+}
+
+function nestedFixtureHostConfig() {
+  return "{version: 1, plugins: [{id: demo, path: fixture, plugin: fixture, config: {files: {nested/hello.txt: hello}}, capabilities: []}]}";
 }
 
 function verifyFixture(yafs: Yafs) {
-  expect(yafs.exec("plugin validate .yafsmeta")).toContain('"id":"demo"');
-  expect(yafs.exec("plugin activate .yafsmeta")).toBe("demo active");
   expect(yafs.exec("ls")).toContain("fixture");
   expect(yafs.exec("cat fixture/hello.txt")).toBe("hello");
   expect(yafs.execute("readlink fixture/hello.txt").stderr).toContain(

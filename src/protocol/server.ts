@@ -32,13 +32,10 @@ export class YafsServer {
   }
   private driversFor(options: StartOptions) {
     const [modelFor, slackClientFor] = defaultClients(options);
-    return backgroundDrivers(
-      this.wiring(),
-      modelFor,
-      slackClientFor,
-      options.now,
-      options.refreshIntervalMs,
-    );
+    return backgroundDrivers(this.wiring(), modelFor, slackClientFor, {
+      now: options.now,
+      refreshIntervalMs: options.refreshIntervalMs,
+    });
   }
   private wiring() {
     const enqueue = this.connection.enqueueWork.bind(this.connection);

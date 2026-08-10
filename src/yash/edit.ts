@@ -15,13 +15,18 @@ export async function edit(
   client: EditClient,
   path: string,
 ): Promise<string | undefined> {
+  const rejection = rejectedArgs(path);
+  return rejection || editFile(client, path);
+}
+
+function rejectedArgs(path: string): string | undefined {
   if (!path) {
     return "edit requires a path";
   }
   if (!stdin.isTTY) {
     return "edit requires an interactive terminal";
   }
-  return editFile(client, path);
+  return undefined;
 }
 
 export async function runEdit(client: EditClient, path: string) {
@@ -41,11 +46,9 @@ async function editFile(
 ): Promise<string | undefined> {
   const original = await readCurrent(client, path);
   const temporary = await stage(path, original);
-  try {
-    return await publish(client, path, original, temporary);
-  } finally {
-    await rm(temporary, { force: true });
-  }
+  return publish({ client, path, original }, temporary).finally(() =>
+    rm(temporary, { force: true }),
+  );
 }
 
 async function readCurrent(client: EditClient, path: string): Promise<string> {
@@ -69,26 +72,18 @@ async function stage(path: string, content: string): Promise<string> {
   return temporary;
 }
 
-async function publish(
-  client: EditClient,
-  path: string,
-  original: string,
-  temporary: string,
-) {
+type EditTarget = { client: EditClient; path: string; original: string };
+
+async function publish(target: EditTarget, temporary: string) {
   const exitCode = await runEditor(temporary);
-  return exitCode === 0
-    ? afterEdit(client, path, original, temporary)
-    : aborted();
+  return exitCode === 0 ? afterEdit(target, temporary) : aborted();
 }
 
-async function afterEdit(
-  client: EditClient,
-  path: string,
-  original: string,
-  temporary: string,
-) {
+async function afterEdit(target: EditTarget, temporary: string) {
   const edited = await readFile(temporary, "utf8");
-  return edited === original ? undefined : commit(client, path, edited);
+  return edited === target.original
+    ? undefined
+    : commit(target.client, target.path, edited);
 }
 
 function aborted() {

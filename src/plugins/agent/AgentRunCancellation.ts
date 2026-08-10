@@ -12,13 +12,17 @@ export class AgentRunCancellation {
   async cancel(mountId: string, personaName: string, runId: string) {
     const startedAt = this.startedAt(mountId, personaName, runId);
     this.cancelled.add(this.key(mountId, runId));
-    const status = {
+    const status = this.cancelledStatus(startedAt);
+    await this.runs.cancel({ mountId, personaName, runId }, status);
+  }
+
+  private cancelledStatus(startedAt: string) {
+    return {
       state: "cancelled" as const,
       startedAt,
       completedAt: new Date().toISOString(),
       error: "Cancelled by operator",
     };
-    await this.runs.cancel({ mountId, personaName, runId }, status);
   }
 
   cancelledRun(mountId: string, runId: string) {

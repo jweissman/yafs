@@ -14,9 +14,18 @@ export function mountContext(
   desired?: DesiredMounts,
 ) {
   return {
+    ...coreMountContext(manager, operations),
+    ...desiredMounts(desired, operations),
+  };
+}
+
+function coreMountContext(
+  manager: MountManager,
+  operations: YafsOperationQueue,
+) {
+  return {
     ...mountPlanning(manager),
     ...mountMutations(operations),
-    ...desiredMounts(desired, operations),
     ...pluginLookups(manager),
   };
 }
@@ -32,10 +41,7 @@ function pluginLookups(manager: MountManager) {
 
 function mountPlanning(manager: MountManager) {
   return {
-    ...mountActivation(manager),
     ...resourceReferences(manager),
-    planRefresh: (path: AbsolutePath, id?: string) =>
-      manager.prepareRefresh(path, id),
     planUnmount: (id: string) => manager.planUnmount(id),
   };
 }
@@ -90,14 +96,6 @@ function missingDesiredMounts() {
 function resourceReferences(manager: MountManager) {
   return {
     resourceReference: (path: AbsolutePath) => manager.resourceReference(path),
-  };
-}
-
-function mountActivation(manager: MountManager) {
-  return {
-    planMount: (path: AbsolutePath, id?: string) =>
-      manager.planActivation(path, id),
-    prepareMount: (record) => manager.prepareActivation(record),
   };
 }
 

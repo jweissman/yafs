@@ -4,16 +4,16 @@ import { Journal } from "../../protocol/Journal";
 import { MountManager } from "../../mounts/MountManager";
 import { AgentConfig, PersonaConfig } from "../../mounts/types";
 import { ModelClient } from "./ChatCompletionClient";
-import { AgentRunStore, Status } from "./AgentRunStore";
+import { AgentRunStore } from "./AgentRunStore";
 import { AgentChatStore } from "./AgentChatStore";
 import { recoverAgentRuns } from "./AgentRunRecovery";
 import { AgentRunCancellation, cancelId } from "./AgentRunCancellation";
 import { AgentRegistration } from "./AgentRegistration";
 import { AgentTarget, agentTarget, RunContext } from "./AgentTarget";
-import { failedStatus, queuedStatus, runningStatus } from "./AgentStatus";
-import { AgentRequest, completeAgent, parseAgentRequest } from "./AgentRequest";
-import { deltaWriter } from "./AgentDeltaWriter";
-import { acceptChatTurn, chatHistoryFor, finishChatTurn } from "./AgentChatTurn";
+import { queuedStatus } from "./AgentStatus";
+import { AgentRequest, parseAgentRequest } from "./AgentRequest";
+import { acceptChatTurn } from "./AgentChatTurn";
+import { AgentRunExecutor } from "./AgentRunExecutor";
 
 type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
 type UnregisterCtl = (path: AbsolutePath) => void;
@@ -22,22 +22,32 @@ type ModelFor = (persona: PersonaConfig, mount: AgentConfig) => ModelClient;
 type Enqueue = (work: () => Promise<void>) => Promise<void>;
 
 export class AgentDirectoryDriver {
-  private readonly runs: AgentRunStore;
-  private readonly chats: AgentChatStore;
-  private readonly cancels: AgentRunCancellation;
+  private runs: AgentRunStore;
+  private chats: AgentChatStore;
+  private cancels: AgentRunCancellation;
   private readonly registration: AgentRegistration;
+  private executor: AgentRunExecutor;
 
   constructor(
     private readonly mounts: MountManager,
     journal: Journal,
     enqueue: Enqueue,
     ctl: Ctl,
-    private readonly modelFor: ModelFor,
+    modelFor: ModelFor,
   ) {
-    this.runs = new AgentRunStore(mounts, journal, enqueue);
-    this.chats = new AgentChatStore(mounts, journal, enqueue);
-    this.cancels = new AgentRunCancellation(mounts, this.runs);
+    this.buildStores(journal, enqueue, modelFor);
     this.registration = this.buildRegistration(ctl);
+  }
+
+  private buildStores(journal: Journal, enqueue: Enqueue, modelFor: ModelFor) {
+    this.runs = new AgentRunStore(this.mounts, journal, enqueue);
+    this.chats = new AgentChatStore(this.mounts, journal, enqueue);
+    this.cancels = new AgentRunCancellation(this.mounts, this.runs);
+    this.executor = this.buildExecutor(modelFor);
+  }
+
+  private buildExecutor(modelFor: ModelFor) {
+    return new AgentRunExecutor(this.runs, this.chats, this.cancels, modelFor);
   }
 
   private buildRegistration({ registerCtl, unregisterCtl }: Ctl) {
@@ -77,7 +87,7 @@ export class AgentDirectoryDriver {
     const request = parseAgentRequest(payload);
     const target = this.persona(mountId, personaName);
     const context = await this.accept(mountId, personaName, request);
-    void this.settle(target, context, request);
+    void this.executor.settle(target, context, request);
   }
 
   private async accept(
@@ -85,82 +95,25 @@ export class AgentDirectoryDriver {
     personaName: string,
     request: AgentRequest,
   ): Promise<RunContext> {
-    const startedAt = new Date().toISOString();
-    const runId = request.runId || startedAt.replace(/[:.]/g, "-");
-    const context = { mountId, personaName, runId, startedAt };
+    const context = this.newContext(mountId, personaName, request);
     await this.acceptRun(context, request);
     return context;
+  }
+
+  private newContext(
+    mountId: string,
+    personaName: string,
+    request: AgentRequest,
+  ): RunContext {
+    const startedAt = new Date().toISOString();
+    const runId = request.runId || startedAt.replace(/[:.]/g, "-");
+    return { mountId, personaName, runId, startedAt };
   }
 
   private async acceptRun(context: RunContext, request: AgentRequest) {
     const status = queuedStatus(context.startedAt);
     await this.runs.accept(context, request.message, status, request.context);
     await acceptChatTurn(this.chats, context, request);
-  }
-
-  private settle(
-    target: AgentTarget,
-    context: RunContext,
-    request: AgentRequest,
-  ) {
-    return this.startRun(context).then(() =>
-      this.run(target, context, request),
-    );
-  }
-
-  private async run(
-    target: AgentTarget,
-    context: RunContext,
-    request: AgentRequest,
-  ) {
-    try {
-      await this.succeed(target, context, request);
-    } catch (error) {
-      await this.fail(context, error);
-    }
-  }
-
-  private startRun(context: RunContext) {
-    return this.writeStatus(context, runningStatus(context.startedAt));
-  }
-
-  private async succeed(
-    target: AgentTarget,
-    context: RunContext,
-    request: AgentRequest,
-  ) {
-    const model = this.modelFor(target.persona, target.config);
-    const onDelta = deltaWriter(this.runs, context);
-    const history = chatHistoryFor(this.chats, context, request);
-    const reply = await completeAgent(model, target.persona, request, onDelta, history);
-    await this.finishUnlessCancelled(context, request, reply);
-  }
-
-  private finishUnlessCancelled(
-    context: RunContext,
-    request: AgentRequest,
-    reply: string,
-  ) {
-    if (this.cancels.cancelledRun(context.mountId, context.runId)) {
-      return;
-    }
-    return this.finish(context, request, reply);
-  }
-
-  private async finish(context: RunContext, request: AgentRequest, reply: string) {
-    // Append chat history before the "complete" status, not after — a
-    // poller waiting on status.json reaching "complete" must be able to
-    // trust the chat history is already durable by then.
-    await finishChatTurn(this.chats, context, request.chatId, reply);
-    await this.runs.finish({ ...context, message: request.message, reply });
-  }
-
-  private fail(context: RunContext, error: unknown) {
-    return this.writeStatus(context, failedStatus(context.startedAt, error));
-  }
-
-  private writeStatus(context: RunContext, status: Status) {
-    return this.runs.writeStatus(context, status);
   }
 
   private persona(mountId: string, personaName: string): AgentTarget {

@@ -1,13 +1,9 @@
 import { expect } from "bun:test";
 
-import Yafs from "../src";
+import { parseManifest } from "../src/mounts/Manifest";
 
 export function fixtureManifest() {
   return "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}";
-}
-
-export function nestedFixtureManifest() {
-  return "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {nested/hello.txt: hello}}, capabilities: []}]}";
 }
 
 export function auditSequences(source: string) {
@@ -26,9 +22,6 @@ export function invalidManifests() {
   ];
 }
 
-export function expectInvalidManifest(yafs: Yafs, manifest: string) {
-  yafs.store.write("/home/root/.yafsmeta", manifest);
-  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
-    "Invalid .yafsmeta YAML",
-  );
+export function expectInvalidManifest(manifest: string) {
+  expect(() => parseManifest(manifest)).toThrow("Invalid .yafsmeta YAML");
 }

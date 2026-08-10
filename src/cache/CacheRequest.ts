@@ -18,6 +18,10 @@ function validOperation(request: Partial<CacheRequest>) {
   if (request.operation === "put") {
     return validPut(request);
   }
+  return validKeyedOperation(request);
+}
+
+function validKeyedOperation(request: { operation?: string; key?: unknown }) {
   return (
     ["get", "stat", "delete"].includes(request.operation || "") &&
     typeof request.key === "string"

@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import { YafsServer } from "../src/protocol/server";
 import { YashClient } from "../src/protocol/client";
 import Yafs from "../src";
+import { activateDesired } from "./desired_mount_helpers";
 
 test("the daemon reconciles its selected configuration without exposing a host path to yash", async () => {
   const { client, server, config } = await startedDesiredServer(
@@ -42,7 +43,8 @@ async function assertAgentPluginDescribed(client: YashClient) {
       actions: [
         {
           name: "send",
-          pseudobinary: "agent send PERSONA [--context PATH] [--chat CHATID] MESSAGE",
+          pseudobinary:
+            "agent send PERSONA [--context PATH] [--chat CHATID] MESSAGE",
         },
       ],
       exposures: [
@@ -104,10 +106,9 @@ test("plugins refresh forces republishing one plugin from desired config without
   await server.close();
 });
 
-test("plugin is the canonical lifecycle command while mount remains compatible", () => {
+test("plugin deactivate is the sole surviving plugin (singular) lifecycle verb", async () => {
   const yafs = new Yafs();
-  yafs.store.write("/home/root/.yafsmeta", manifest("hello"));
-  expect(yafs.exec("plugin activate .yafsmeta")).toBe("demo active");
+  await activateDesired(yafs, manifest("hello"));
   expect(yafs.execute("mounts status").error?.message).toContain("use plugins");
   expect(yafs.exec("plugin deactivate demo")).toBe("demo deactivated");
 });

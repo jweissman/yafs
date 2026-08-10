@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   sha256,
   assertDigest,
+  assertMissing,
   validDigest,
   validShard,
   missing,
@@ -43,15 +44,9 @@ class LocalBlobStore implements BlobStore {
   }
 
   private async exists(path: string) {
-    try {
-      await readFile(path);
-      return true;
-    } catch (error) {
-      if (!missing(error)) {
-        throw error;
-      }
-      return false;
-    }
+    return readFile(path)
+      .then(() => true)
+      .catch((error) => assertMissing(error));
   }
   async get(digest: string) {
     try {
@@ -85,9 +80,8 @@ class LocalBlobStore implements BlobStore {
     return `${path}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   }
   private prepare(path: string) {
-    return mkdir(join(this.directory, path.slice(-64, -62)), {
-      recursive: true,
-    });
+    const shard = join(this.directory, path.slice(-64, -62));
+    return mkdir(shard, { recursive: true });
   }
   private async replace(temporary: string, path: string) {
     await rename(temporary, path);

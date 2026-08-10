@@ -48,8 +48,7 @@ export class SlackPlugin extends Plugin {
       wiring.mounts,
       wiring.journal,
       wiring.enqueue,
-      wiring.registerCtl,
-      wiring.unregisterCtl,
+      { registerCtl: wiring.registerCtl, unregisterCtl: wiring.unregisterCtl },
       slackClientFor,
     );
   }

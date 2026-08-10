@@ -11,20 +11,36 @@ export async function pollTurn(client: PollClient, runPath: string) {
   let printed = "";
   while (true) {
     printed = await printGrowth(client, runPath, printed);
-    const status = await readStatus(client, runPath);
-    if (TERMINAL_STATES.includes(status.state)) {
+    const status = await tick(client, runPath);
+    if (status) {
       return status;
     }
-    await sleep(POLL_INTERVAL_MS);
   }
 }
 
-async function printGrowth(client: PollClient, runPath: string, printed: string) {
+async function tick(client: PollClient, runPath: string) {
+  const status = await readStatus(client, runPath);
+  if (TERMINAL_STATES.includes(status.state)) {
+    return status;
+  }
+  await sleep(POLL_INTERVAL_MS);
+  return undefined;
+}
+
+async function printGrowth(
+  client: PollClient,
+  runPath: string,
+  printed: string,
+) {
   const content = (await client.execute(`cat ${runPath}/response.md`)).stdout;
+  printGrowthDelta(content, printed);
+  return content;
+}
+
+function printGrowthDelta(content: string, printed: string) {
   if (content.length > printed.length) {
     process.stdout.write(content.slice(printed.length));
   }
-  return content;
 }
 
 async function readStatus(client: PollClient, runPath: string) {

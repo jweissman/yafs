@@ -8,6 +8,7 @@ import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSo
 import { MountManager } from "../src/mounts/MountManager";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { NodeStore } from "../src/vfs/NodeStore";
+import { activateDesired } from "./desired_mount_helpers";
 
 test("provider audit links a persisted fetch attempt to its published snapshot", async () => {
   const directory = await mkdtemp(join(tmpdir(), "yafs-provider-audit-"));
@@ -15,8 +16,7 @@ test("provider audit links a persisted fetch attempt to its published snapshot",
     directory,
     new GitHubCollectionSource({ pulls: async () => [pull()] }),
   );
-  yafs.store.write("/home/root/.yafsmeta", manifest());
-  await yafs.executeAsync("plugin activate .yafsmeta");
+  await activateDesired(yafs, manifest());
   const events = await audit(directory);
   expect(events.map((event) => event.action)).toEqual(["fetch", "activation"]);
   expect(events.map((event) => event.correlationId)).toEqual([
@@ -37,8 +37,7 @@ test("a failed provider fetch is durable audit state without publishing a mount"
     },
   });
   const yafs = configuredYafs(directory, source);
-  yafs.store.write("/home/root/.yafsmeta", manifest());
-  expect((await yafs.executeAsync("plugin activate .yafsmeta")).stderr).toBe(
+  await expect(activateDesired(yafs, manifest())).rejects.toThrow(
     "unavailable",
   );
   const events = await audit(directory);

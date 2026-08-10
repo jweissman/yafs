@@ -23,8 +23,9 @@ class PluginsCommand {
   readonly name = "plugins";
   readonly synopsis =
     "plugins [describe [NAME]|status|plan|apply [--prune]|refresh ID]";
-  // apply/refresh mutate; access is per-command, not per-subcommand, so the whole
-  // command must stay non-'read' — matching how `mount` already treats `validate`.
+  // apply/refresh mutate; access is per-command, not per-subcommand, so the
+  // whole command must stay non-'read' — matching how `mount` already
+  // treats `validate`.
   readonly access = "control";
 
   constructor() {}
@@ -44,8 +45,7 @@ class PluginsCommand {
 class PluginLifecycleCommand {
   readonly name = "plugin";
   readonly access = "control";
-  readonly synopsis =
-    "plugin validate|activate|refresh MANIFEST [ID] | deactivate ID";
+  readonly synopsis = "plugin deactivate ID";
 
   constructor() {}
 
@@ -75,9 +75,14 @@ function desiredRead(context: CommandContext, action: string) {
   if (action === "status") {
     return context.desiredStatus().then(JSON.stringify);
   }
-  if (action === "plan") {
-    return context.desiredPlan().then(JSON.stringify);
-  }
+  return action === "plan" ? plannedRead(context) : unknownAction();
+}
+
+function plannedRead(context: CommandContext) {
+  return context.desiredPlan().then(JSON.stringify);
+}
+
+function unknownAction(): never {
   throw new Error(
     "plugins expects describe, status, plan, apply [--prune], or refresh ID",
   );

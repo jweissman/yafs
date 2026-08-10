@@ -21,22 +21,30 @@ export function withEntries(
   };
 }
 
+export type MountJournal = { mounts: MountManager; journal: Journal };
+
 export async function publishEntries(
-  mounts: MountManager,
-  journal: Journal,
+  deps: MountJournal,
   record: PreparedMountRecord,
   updates: Entry[],
   detail?: string,
   extra?: Partial<PreparedMountRecord>,
 ) {
+  const updated = mergedRecord(record, updates, extra);
+  await commitRefresh(deps, updated, detail);
+}
+
+function mergedRecord(
+  record: PreparedMountRecord,
+  updates: Entry[],
+  extra?: Partial<PreparedMountRecord>,
+) {
   const entries = mergeEntries(record.snapshot.entries, updates);
-  const updated = { ...withEntries(record, entries), ...extra };
-  await commitRefresh(mounts, journal, updated, detail);
+  return { ...withEntries(record, entries), ...extra };
 }
 
 async function commitRefresh(
-  mounts: MountManager,
-  journal: Journal,
+  { mounts, journal }: MountJournal,
   updated: PreparedMountRecord,
   detail?: string,
 ) {

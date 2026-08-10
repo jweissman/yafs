@@ -8,6 +8,7 @@ import { YafsServer } from "../src/protocol/server";
 import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSource";
 import { GitHubTraceReifier } from "../src/plugins/github/GitHubTraceReifier";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("a durable trace survives restart, retains its blobs, and reifies without its source", async () => {
   const directory = await mkdtemp(join(tmpdir(), "yafs-trace-recovery-"));
@@ -29,13 +30,12 @@ test("a durable trace survives restart, retains its blobs, and reifies without i
 });
 
 test("a daemon reifies a missing pinned GitHub trace only through its provider hook", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-provider-reify-"));
-  const server = await YafsServer.start({
-    dataDir: directory,
-    providers: providers(),
-  });
-  const client = await YashClient.connect(server.address());
-  await mount(client);
+  const { directory, server, client } = await startedHostConfigServer(
+    "yafs-provider-reify-",
+    manifest(),
+    { providers: providers() },
+  );
+  await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
   await client.exec("trace reviews/pulls/42 artifacts/one");
   const trace = JSON.parse(await client.exec("cat artifacts/one/trace.json"));
@@ -54,8 +54,7 @@ test("a daemon reifies a missing pinned GitHub trace only through its provider h
 });
 
 test("a daemon reifies a missing pinned GitHub trace by refetching the pull through the real GitHub reifier", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-github-reify-"));
-  const trace = await capturedGitHubTrace(directory);
+  const { directory, trace } = await capturedGitHubTrace();
   await removeBlobs(directory, trace);
   const reifier = new GitHubTraceReifier({ pull: async () => pull() });
   const restarted = await YafsServer.start({
@@ -75,19 +74,19 @@ test("a daemon reifies a missing pinned GitHub trace by refetching the pull thro
   await restarted.close();
 });
 
-async function capturedGitHubTrace(directory: string) {
-  const server = await YafsServer.start({
-    dataDir: directory,
-    providers: providers(),
-  });
-  const client = await YashClient.connect(server.address());
-  await mount(client);
+async function capturedGitHubTrace() {
+  const { directory, server, client } = await startedHostConfigServer(
+    "yafs-github-reify-src-",
+    manifest(),
+    { providers: providers() },
+  );
+  await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
   await client.exec("trace reviews/pulls/42 artifacts/one");
   const trace = JSON.parse(await client.exec("cat artifacts/one/trace.json"));
   await client.close();
   await server.close();
-  return trace;
+  return { directory, trace };
 }
 
 async function removeBlobs(
@@ -113,12 +112,8 @@ function pull() {
     diff: "diff --git",
   };
 }
-function mount(client: YashClient) {
-  return client
-    .exec(
-      "printf '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, query: \"is:open\", max: 1}, capabilities: [network.github-api]}]}' > .yafsmeta",
-    )
-    .then(() => client.exec("plugin activate .yafsmeta"));
+function manifest() {
+  return '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, query: "is:open", max: 1}, capabilities: [network.github-api]}]}';
 }
 function blobPath(directory: string, digest: string) {
   return join(directory, "blobs", digest.slice(0, 2), digest);

@@ -57,6 +57,12 @@ export async function cacheRequest(
   if (request.operation === "put") {
     return put(context, request);
   }
+  return readOrMutate(context, request);
+}
+function readOrMutate(
+  context: CommandContext,
+  request: Exclude<CacheRequest, { operation: "put" }>,
+) {
   if (request.operation === "get") {
     return get(context, request.key);
   }
@@ -69,10 +75,16 @@ function inspectOrMutate(
   if (request.operation === "stat") {
     return stat(context, request.key);
   }
-  if (request.operation === "delete") {
-    return remove(context, request.key);
-  }
-  return gc(context);
+  return deleteOrGc(context, request);
+}
+
+function deleteOrGc(
+  context: CommandContext,
+  request: Exclude<CacheRequest, { operation: "put" | "get" | "stat" }>,
+) {
+  return request.operation === "delete"
+    ? remove(context, request.key)
+    : gc(context);
 }
 async function get(context: CommandContext, key: string) {
   return context.cache.read(requiredEntry(context, key));

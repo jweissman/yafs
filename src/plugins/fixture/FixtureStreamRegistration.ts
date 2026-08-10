@@ -48,11 +48,8 @@ export class FixtureStreamRegistration {
     record: PreparedMountRecord,
     paths: Set<AbsolutePath>,
   ) {
-    if (record.provider !== "fixture") {
-      return;
-    }
     const streams = (record.config as FixtureConfig).streams || {};
-    if (Object.keys(streams).length) {
+    if (record.provider === "fixture" && Object.keys(streams).length) {
       paths.add(this.registerStreamCtl(record));
     }
   }

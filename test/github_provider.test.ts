@@ -5,16 +5,14 @@ import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSo
 import { MountManager } from "../src/mounts/MountManager";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { NodeStore } from "../src/vfs/NodeStore";
+import { parseManifest } from "../src/mounts/Manifest";
+import { activateDesired, refreshDesired } from "./desired_mount_helpers";
 
 test("a GitHub collection becomes an immutable, attributable review snapshot", async () => {
   const source = new GitHubCollectionSource(fakeClient());
   const yafs = configuredYafs(new ProviderRegistry(source));
-  yafs.store.write("/home/root/.yafsmeta", githubManifest());
-  const result = await yafs.executeAsync("plugin activate .yafsmeta");
-  expect(result.stdout).toBe("review active");
-  expect((await yafs.executeAsync("plugin refresh .yafsmeta")).stdout).toBe(
-    "review refreshed",
-  );
+  await activateDesired(yafs, githubManifest());
+  await refreshDesired(yafs, githubManifest());
   expect(yafs.exec("cat reviews/pulls/42/diff.patch")).toBe(
     "diff --git a/a b/a",
   );
@@ -30,20 +28,17 @@ test("a GitHub collection becomes an immutable, attributable review snapshot", a
   });
 });
 
-test("a GitHub manifest declares its network capability and rejects unknown configuration", () => {
+test("a GitHub manifest declares its network capability and rejects unknown configuration", async () => {
   const yafs = configuredYafs(new ProviderRegistry(fakeSource()));
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    githubManifest().replace("network.github-api", "network.other"),
+  const ungranted = githubManifest().replace(
+    "network.github-api",
+    "network.other",
   );
-  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(
+  await expect(activateDesired(yafs, ungranted)).rejects.toThrow(
     "Capabilities are not granted: network.other",
   );
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    githubManifest().replace("max: 2", "unknown: 2"),
-  );
-  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
+  const unknownField = githubManifest().replace("max: 2", "unknown: 2");
+  expect(() => parseManifest(unknownField)).toThrow(
     "Unknown github config field: unknown (expected one of: repository, query, max)",
   );
 });
@@ -58,14 +53,11 @@ test("a declared secret grant selects an authenticated provider source", async (
   const yafs = configuredYafs(
     new ProviderRegistry(publicSource, privateSource),
   );
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    githubManifest().replace(
-      "[network.github-api]",
-      "[network.github-api, secret.github-token]",
-    ),
+  const manifest = githubManifest().replace(
+    "[network.github-api]",
+    "[network.github-api, secret.github-token]",
   );
-  await yafs.executeAsync("plugin activate .yafsmeta");
+  await activateDesired(yafs, manifest);
   expect(yafs.exec("cat reviews/pulls/42/diff.patch")).toBe("private");
 });
 

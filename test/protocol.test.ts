@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { YafsServer } from "../src/protocol/server";
 import { YashClient } from "../src/protocol/client";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("a yash client talks to a persistent server", async () => {
   const directory = await mkdtemp(join(tmpdir(), "yafs-"));
@@ -46,15 +47,11 @@ test("a structured write RPC round-trips content the command grammar cannot repr
 });
 
 test("a structured write RPC honors read-only mount rejection", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-write-mount-"));
-  const server = await YafsServer.start({
-    walPath: join(directory, "yafs.wal"),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(
-    "printf '{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hi}}, capabilities: []}]}' > .yafsmeta",
+  const { server, client } = await startedHostConfigServer(
+    "yafs-write-mount-",
+    "{version: 1, plugins: [{id: demo, path: fixture, plugin: fixture, config: {files: {hello.txt: hi}}, capabilities: []}]}",
   );
-  await client.exec("plugin activate .yafsmeta");
+  await client.exec("plugins apply");
   expect(
     (await client.writeFile("fixture/hello.txt", "nope")).error?.code,
   ).toBe("read_only_mount");

@@ -6,9 +6,10 @@ export function resourceReference(
   path: AbsolutePath,
 ) {
   const record = mountFor(records, path);
-  if (!record) {
-    return undefined;
-  }
+  return record && referenceFor(record, path);
+}
+
+function referenceFor(record: PreparedMountRecord, path: AbsolutePath) {
   const relative = path.slice(record.path.length + 1);
   return record.snapshot.resourceReferences?.[relative];
 }

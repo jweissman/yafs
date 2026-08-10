@@ -40,13 +40,15 @@ export class Journal {
     store: NodeStore,
     replay?: JournalReplayer,
   ): Promise<Journal> {
-    try {
-      this.sequence = await this.recoveredSequence(store, replay);
-      return this;
-    } catch (error) {
-      await this.close();
-      throw error;
-    }
+    this.sequence = await this.recoveredSequence(store, replay).catch((error) =>
+      this.closeThenRethrow(error),
+    );
+    return this;
+  }
+
+  private async closeThenRethrow(error: unknown): Promise<never> {
+    await this.close();
+    throw error;
   }
 
   private recoveredSequence(store: NodeStore, replay?: JournalReplayer) {

@@ -11,12 +11,11 @@ export type BackgroundDrivers = {
   plugins: PluginDriver[];
 };
 
-function refreshDriver(
-  wiring: Wiring,
-  now?: () => number,
-  refreshIntervalMs?: number,
-) {
+export type RefreshTiming = { now?: () => number; refreshIntervalMs?: number };
+
+function refreshDriver(wiring: Wiring, timing: RefreshTiming) {
   const { mounts, journal, enqueue } = wiring;
+  const { now, refreshIntervalMs } = timing;
   return new ServerRefresh(mounts, journal, enqueue, now, refreshIntervalMs);
 }
 
@@ -24,13 +23,11 @@ export function backgroundDrivers(
   wiring: Wiring,
   modelFor: ModelFor,
   slackClientFor: SlackClientFor,
-  now?: () => number,
-  refreshIntervalMs?: number,
+  timing: RefreshTiming = {},
 ): BackgroundDrivers {
-  return {
-    refreshes: refreshDriver(wiring, now, refreshIntervalMs),
-    plugins: pluginDrivers(wiring, modelFor, slackClientFor),
-  };
+  const refreshes = refreshDriver(wiring, timing);
+  const plugins = pluginDrivers(wiring, modelFor, slackClientFor);
+  return { refreshes, plugins };
 }
 
 function pluginDrivers(
@@ -38,11 +35,10 @@ function pluginDrivers(
   modelFor: ModelFor,
   slackClientFor: SlackClientFor,
 ) {
-  return [
-    new FixturePlugin().createDriver(wiring),
-    new AgentPlugin().createDriver(wiring, modelFor),
-    new SlackPlugin().createDriver(wiring, slackClientFor),
-  ];
+  const fixture = new FixturePlugin().createDriver(wiring);
+  const agent = new AgentPlugin().createDriver(wiring, modelFor);
+  const slack = new SlackPlugin().createDriver(wiring, slackClientFor);
+  return [fixture, agent, slack];
 }
 
 export function startAll(drivers: BackgroundDrivers) {

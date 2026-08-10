@@ -26,15 +26,9 @@ export class FixturePlugin extends Plugin {
   }
 
   createDriver(wiring: Wiring): PluginDriver {
-    return new FixtureStreamDriver(
-      wiring.mounts,
-      wiring.journal,
-      wiring.enqueue,
-      {
-        registerCtl: wiring.registerCtl,
-        unregisterCtl: wiring.unregisterCtl,
-      },
-    );
+    const { mounts, journal, enqueue, registerCtl, unregisterCtl } = wiring;
+    const ctl = { registerCtl, unregisterCtl };
+    return new FixtureStreamDriver(mounts, journal, enqueue, ctl);
   }
 
   prepare(
@@ -44,9 +38,7 @@ export class FixturePlugin extends Plugin {
   ) {
     const config = record.config as FixtureConfig;
     const fresh = FixtureProvider.from(config).entries();
-    return snapshots.prepare(
-      record,
-      carryForward(fresh, current, (path) => Boolean(config.streams?.[path])),
-    );
+    const isStreamed = (path: string) => Boolean(config.streams?.[path]);
+    return snapshots.prepare(record, carryForward(fresh, current, isStreamed));
   }
 }

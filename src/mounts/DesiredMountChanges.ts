@@ -13,10 +13,8 @@ export class DesiredMountChanges {
     prune = false,
   ): Change[] {
     this.assertUnique(declared);
-    return [
-      ...this.declaredChanges(declared, active),
-      ...this.removals(declared, active, prune),
-    ];
+    const changes = this.declaredChanges(declared, active);
+    return [...changes, ...this.removals(declared, active, prune)];
   }
 
   private assertUnique(declared: ManifestMount[]) {
@@ -29,12 +27,9 @@ export class DesiredMountChanges {
     declared: ManifestMount[],
     active: PreparedMountRecord[],
   ): Change[] {
-    return declared.flatMap((item) =>
-      this.change(
-        item,
-        active.find((record) => record.id === item.id),
-      ),
-    );
+    const activeFor = (item: ManifestMount) =>
+      active.find((record) => record.id === item.id);
+    return declared.flatMap((item) => this.change(item, activeFor(item)));
   }
 
   private change(
@@ -44,9 +39,7 @@ export class DesiredMountChanges {
     if (!active) {
       return [{ id: item.id, action: "activate" }];
     }
-    return this.matches(item, active)
-      ? []
-      : [{ id: item.id, action: "refresh" }];
+    return this.matches(item, active) ? [] : [refreshOf(item)];
   }
 
   private matches(item: ManifestMount, active: PreparedMountRecord) {
@@ -81,11 +74,19 @@ export class DesiredMountChanges {
     active: PreparedMountRecord[],
     prune: boolean,
   ): Change[] {
-    if (!prune) {
-      return [];
-    }
-    return active
-      .filter((record) => !declared.some((item) => item.id === record.id))
-      .map((record) => ({ id: record.id, action: "unmount" as const }));
+    return prune ? undeclaredRemovals(declared, active) : [];
   }
+}
+
+function refreshOf(item: ManifestMount): Change {
+  return { id: item.id, action: "refresh" };
+}
+
+function undeclaredRemovals(
+  declared: ManifestMount[],
+  active: PreparedMountRecord[],
+): Change[] {
+  return active
+    .filter((record) => !declared.some((item) => item.id === record.id))
+    .map((record) => ({ id: record.id, action: "unmount" as const }));
 }

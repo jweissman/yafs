@@ -11,6 +11,7 @@ import {
   RegisterCtl,
   UnregisterCtl,
 } from "./FixtureStreamRegistration";
+import { pendingDelivery } from "./FixtureStreamSchedule";
 
 const POLL_MS = 50;
 type Ctl = { registerCtl: RegisterCtl; unregisterCtl: UnregisterCtl };
@@ -73,60 +74,23 @@ export class FixtureStreamDriver {
     path: string,
     spec: StreamSpec,
   ) {
-    const delivery = this.pendingDelivery(record, path, spec);
+    const delivery = pendingDelivery(this.now, record, path, spec);
     if (delivery) {
       void this.enqueue(() => this.commit(delivery));
     }
   }
 
-  private pendingDelivery(
-    record: PreparedMountRecord,
-    path: string,
-    spec: StreamSpec,
-  ): Delivery | undefined {
-    const content = this.content(record, path);
-    const index = this.deliveredCount(content, spec.chunks);
-    const due = index < spec.chunks.length && this.due(record, spec.intervalMs);
-    return due
-      ? nextDelivery(record, path, content, spec.chunks[index], index)
-      : undefined;
-  }
-
-  private content(record: PreparedMountRecord, path: string): string {
-    const found = record.snapshot.entries.find(
-      ([entryPath]) => entryPath === path,
-    );
-    return found?.[1] || "";
-  }
-
-  private deliveredCount(content: string, chunks: string[]): number {
-    let cumulative = "";
-    let count = 0;
-    for (const chunk of chunks) {
-      if (!content.startsWith(cumulative + chunk)) {
-        break;
-      }
-      cumulative += chunk;
-      count++;
-    }
-    return count;
-  }
-
-  private due(record: PreparedMountRecord, intervalMs: number): boolean {
-    const baseline = record.fetchedAt || record.activatedAt;
-    return !baseline || this.now() - Date.parse(baseline) >= intervalMs;
-  }
-
   private async restart(mountId: string, payload: string) {
     const record = this.mounts.mounts().find((item) => item.id === mountId);
-    if (!record) {
-      return;
+    if (record) {
+      await this.restartRecord(record, payload);
     }
-    const path = this.restartTarget(
-      payload,
-      (record.config as FixtureConfig).streams || {},
-    );
-    await this.commit({ record, path, content: "", count: 0 });
+  }
+
+  private restartRecord(record: PreparedMountRecord, payload: string) {
+    const streams = (record.config as FixtureConfig).streams || {};
+    const path = this.restartTarget(payload, streams);
+    return this.commit({ record, path, content: "", count: 0 });
   }
 
   private restartTarget(
@@ -143,14 +107,4 @@ export class FixtureStreamDriver {
   private commit(delivery: Delivery) {
     return commitDelivery(this.mounts, this.journal, delivery);
   }
-}
-
-function nextDelivery(
-  record: PreparedMountRecord,
-  path: string,
-  content: string,
-  chunk: string,
-  index: number,
-): Delivery {
-  return { record, path, content: content + chunk, count: index + 1 };
 }

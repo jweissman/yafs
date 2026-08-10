@@ -1,22 +1,24 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 
 import Yafs from "../src";
 import { MountManager } from "../src/mounts/MountManager";
 import { YashClient } from "../src/protocol/client";
 import { YafsServer } from "../src/protocol/server";
 import { NodeStore } from "../src/vfs/NodeStore";
+import {
+  activateDesired,
+  refreshDesired,
+  startedHostConfigServer,
+} from "./desired_mount_helpers";
 
-test("a refresh republishes one snapshot for direct, link, and union reads", () => {
-  const yafs = mountedWorkspace();
+test("a refresh republishes one snapshot for direct, link, and union reads", async () => {
+  const yafs = await mountedWorkspace();
   yafs.exec("ln -s fixture/hello.txt latest");
   yafs.exec("mkdir notes");
   yafs.exec("echo local > notes/local.txt");
   yafs.exec("union review notes fixture");
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest("updated"));
-  expect(yafs.exec("plugin refresh .yafsmeta")).toBe("demo refreshed");
+  await refreshDesired(yafs, fixtureManifest("updated"));
   expect(yafs.exec("cat fixture/hello.txt")).toBe("updated");
   expect(yafs.exec("cat latest")).toBe("updated");
   expect(yafs.exec("cat review/hello.txt")).toBe("updated");
@@ -28,22 +30,21 @@ test("a refresh republishes one snapshot for direct, link, and union reads", () 
   );
 });
 
-test("a bounded snapshot is rejected before it becomes a mount", () => {
+test("a bounded snapshot is rejected before it becomes a mount", async () => {
   const store = new NodeStore();
   const mounts = new MountManager(store, undefined, undefined, {
     files: 0,
     bytes: 1,
   });
   const yafs = new Yafs({ store, mounts });
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest("hello"));
-  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(
+  await expect(activateDesired(yafs, fixtureManifest("hello"))).rejects.toThrow(
     "Snapshot exceeds 0 files",
   );
   expect(yafs.execute("cat fixture/hello.txt").error?.code).toBe("not_found");
 });
 
-test("an unmounted union layer disappears and a remount rejoins by path", () => {
-  const yafs = mountedWorkspace();
+test("an unmounted union layer disappears and a remount rejoins by path", async () => {
+  const yafs = await mountedWorkspace();
   yafs.exec("mkdir notes");
   yafs.exec("echo local > notes/local.txt");
   yafs.exec("ln -s fixture/hello.txt latest");
@@ -53,28 +54,25 @@ test("an unmounted union layer disappears and a remount rejoins by path", () => 
   expect(yafs.exec("ls review")).toBe("local.txt");
   expect(yafs.execute("cat review/hello.txt").error?.code).toBe("not_found");
   expect(yafs.execute("cat latest").error?.code).toBe("not_found");
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest("again"));
-  yafs.exec("plugin activate .yafsmeta");
+  await activateDesired(yafs, fixtureManifest("again"));
   expect(yafs.exec("cat review/hello.txt")).toBe("again");
   expect(yafs.exec("cat latest")).toBe("again");
   expect(fixtureRevision(yafs)).not.toBe(revision);
 });
 
 test("recovery preserves a union through refresh, unmount, and remount", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-refresh-"));
-  const server = await YafsServer.start({ dataDir: directory });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${fixtureManifest("hello")}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { directory, configPath, server, client } =
+    await startedHostConfigServer("yafs-refresh-", hostConfig("hello"));
+  await client.exec("plugins apply");
   await client.exec("mkdir notes");
   await client.exec("union review notes fixture");
-  await client.exec(`printf '${fixtureManifest("recovered")}' > .yafsmeta`);
-  await client.exec("plugin refresh .yafsmeta");
+  await writeFile(configPath, hostConfig("recovered"));
+  await client.exec("plugins refresh demo");
   await client.exec("plugin deactivate demo");
-  await client.exec("plugin activate .yafsmeta");
+  await client.exec("plugins apply");
   await client.close();
   await server.close();
-  const restored = await YafsServer.start({ dataDir: directory });
+  const restored = await YafsServer.start({ dataDir: directory, configPath });
   const verified = await YashClient.connect(restored.address());
   expect(await verified.exec("cat /home/root/review/hello.txt")).toBe(
     "recovered",
@@ -83,15 +81,18 @@ test("recovery preserves a union through refresh, unmount, and remount", async (
   await restored.close();
 });
 
-function mountedWorkspace() {
+async function mountedWorkspace() {
   const yafs = new Yafs();
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest("hello"));
-  yafs.exec("plugin activate .yafsmeta");
+  await activateDesired(yafs, fixtureManifest("hello"));
   return yafs;
 }
 
 function fixtureManifest(content: string) {
   return `{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: ${content}}}, capabilities: []}]}`;
+}
+
+function hostConfig(content: string) {
+  return `{version: 1, plugins: [{id: demo, path: fixture, plugin: fixture, config: {files: {hello.txt: ${content}}}, capabilities: []}]}`;
 }
 
 function fixtureRevision(yafs: Yafs) {

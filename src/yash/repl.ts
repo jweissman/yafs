@@ -22,10 +22,19 @@ export async function setupRepl(
   historyPath: string,
 ): Promise<Repl> {
   const readline = readlineFor(client);
+  const history = await attachedHistory(readline, historyPath);
+  return { client, readline, history, promptTemplate, serverName };
+}
+
+async function attachedHistory(readline: Readline, historyPath: string) {
   const history = await CommandHistory.open(historyPath);
+  attachHistory(readline, history);
+  return history;
+}
+
+function attachHistory(readline: Readline, history: CommandHistory) {
   historyInterface(readline).history = [...history.entries()].reverse();
   installReverseSearch(readline, history);
-  return { client, readline, history, promptTemplate, serverName };
 }
 
 function readlineFor(client: Client) {

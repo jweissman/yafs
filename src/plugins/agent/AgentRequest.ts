@@ -51,9 +51,16 @@ export function completeAgent(
   onDelta?: (delta: string) => void,
   history?: ChatMessage[],
 ) {
+  return model.completeChat(messagesFor(persona, request, history), onDelta);
+}
+
+function messagesFor(
+  persona: PersonaConfig,
+  request: AgentRequest,
+  history?: ChatMessage[],
+) {
   const system = { role: "system", content: persona.prompt };
-  const messages = history ? [system, ...history] : [system, userTurn(request)];
-  return model.completeChat(messages, onDelta);
+  return history ? [system, ...history] : [system, userTurn(request)];
 }
 
 export function userTurn(request: AgentRequest): ChatMessage {

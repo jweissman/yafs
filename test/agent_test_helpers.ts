@@ -1,5 +1,6 @@
 import { YashClient } from "../src/protocol/client";
-import { ModelClient } from "../src/plugins/agent/ChatCompletionClient";
+
+export * from "./agent_model_fakes";
 
 type StatusMatcher = (status: { state: string }) => boolean;
 type PollState = {
@@ -9,85 +10,16 @@ type PollState = {
   deadline: number;
 };
 
-export function fakeExchangeModel(
-  reply: string,
-  calls: Array<{ system: string; message: string }>,
-): ModelClient {
-  return {
-    completeChat: async (chat) => {
-      calls.push(exchange(chat));
-      return reply;
-    },
-  };
-}
-
-function exchange(chat: { role: string; content: string }[]) {
-  return { system: chat[0].content, message: chat[chat.length - 1].content };
-}
-
-export function fakeMessageModel(collected: string[]): ModelClient {
-  return {
-    completeChat: async (chat) => {
-      const message = chat[chat.length - 1].content;
-      collected.push(message);
-      return `reply-to-${message}`;
-    },
-  };
-}
-
-export function failingModel(message: string): ModelClient {
-  return {
-    completeChat: async () => {
-      throw new Error(message);
-    },
-  };
-}
-
-export function slowModel(reply: string, delayMs: number): ModelClient {
-  return {
-    completeChat: async () => {
-      await sleep(delayMs);
-      return reply;
-    },
-  };
-}
-
-export function chunkedModel(chunks: string[], delayMs: number): ModelClient {
-  return {
-    completeChat: async (_chat, onDelta) => {
-      for (const chunk of chunks) {
-        await sleep(delayMs);
-        onDelta?.(chunk);
-      }
-      return chunks.join("");
-    },
-  };
-}
-
-export function recordingModel(
-  replies: string[],
-  calls: Array<{ role: string; content: string }[]>,
-): ModelClient {
-  let index = 0;
-  return {
-    completeChat: async (chat) => {
-      calls.push(chat);
-      return replies[index++];
-    },
-  };
-}
-
-export async function waitForRun(
+export function waitForRun(
   client: YashClient,
   runsDir: string,
   timeoutMs = 3000,
 ): Promise<string> {
-  return waitForStatus(
-    client,
-    runsDir,
-    (status) => status.state === "complete",
-    timeoutMs,
-  );
+  return waitForStatus(client, runsDir, isComplete, timeoutMs);
+}
+
+function isComplete(status: { state: string }) {
+  return status.state === "complete";
 }
 
 export async function waitForStatus(
@@ -118,15 +50,17 @@ function assertNotTimedOut(state: PollState) {
 }
 
 async function pollRunId(state: PollState): Promise<string | undefined> {
-  const listing = await state.client
-    .exec(`ls ${state.runsDir}`)
-    .catch(() => "");
-  const runId = listing?.split("\n")[0];
+  const runId = await firstRunId(state);
   if (!runId) {
     return undefined;
   }
   const status = await readStatus(state.client, state.runsDir, runId);
   return state.matches(status) ? runId : undefined;
+}
+
+async function firstRunId(state: PollState) {
+  const listing = await state.client.exec(`ls ${state.runsDir}`).catch(() => "");
+  return listing?.split("\n")[0];
 }
 
 async function readStatus(client: YashClient, runsDir: string, runId: string) {

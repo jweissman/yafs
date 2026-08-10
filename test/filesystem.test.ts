@@ -109,3 +109,19 @@ test("filesystem errors distinguish missing paths and non-directories", () => {
     "Not a directory: /home/root/note",
   );
 });
+
+test("a command with a missing required argument names it by position", () => {
+  const yafs = new Yafs();
+  expect(() => yafs.exec("ln -s only-target")).toThrow(
+    "ln requires argument 3",
+  );
+});
+
+test("union rejects a layer that is not a directory", () => {
+  const yafs = new Yafs();
+  yafs.exec("echo file > note");
+  yafs.exec("mkdir dir");
+  expect(() => yafs.exec("union workspace dir note")).toThrow(
+    "Union layer is not a directory: /home/root/note",
+  );
+});

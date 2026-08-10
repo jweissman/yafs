@@ -1,14 +1,13 @@
 import { renderPrompt } from "./yash/prompt";
 import { connect } from "./yash/connect";
-import { runEdit } from "./yash/edit";
-import { runChat } from "./yash/chat";
-import { withTerminalHandoff } from "./yash/terminalHandoff";
 import { question } from "./yash/question";
 import { print, printHistory } from "./yash/output";
 import { cliOptions } from "./yash/cliOptions";
 import { setupRepl } from "./yash/repl";
 import type { Readline, Repl } from "./yash/repl";
+import { specialLine } from "./yash/specialLine";
 import type { AbsolutePath } from "./core/AbsolutePath";
+import type { ExecutionResult } from "./types/ExecutionResult";
 
 type Session = { user: string; cwd: AbsolutePath };
 
@@ -42,6 +41,10 @@ async function runOnce(client: Client, command: string, json: boolean) {
     console.log(JSON.stringify(result));
     return;
   }
+  printResult(result);
+}
+
+function printResult(result: ExecutionResult) {
   print(result.stdout);
   if (result.stderr) {
     console.error(result.stderr);
@@ -63,11 +66,9 @@ async function runInteractive(
 async function replLoop(repl: Repl) {
   let session = (await repl.client.execute("pwd")).session;
   const interruption = interruptionFor(repl.readline);
-  while (true) {
-    const line = await nextCommand(repl, session, interruption);
-    if (line === undefined) {
-      return;
-    }
+  let line: string | undefined;
+  const next = () => nextCommand(repl, session, interruption);
+  while ((line = await next()) !== undefined) {
     session = await handleLine(repl, line, session);
   }
 }
@@ -79,9 +80,11 @@ async function nextCommand(
 ) {
   const prompt = renderPrompt(repl.promptTemplate, session, repl.serverName);
   const line = await question(repl.readline, prompt, interruption);
-  return line === undefined || line === "exit" || line === "quit"
-    ? undefined
-    : line;
+  return exitCommand(line) ? undefined : line;
+}
+
+function exitCommand(line: string | undefined) {
+  return line === undefined || line === "exit" || line === "quit";
 }
 
 function interruptionFor(readline: Readline) {
@@ -95,35 +98,16 @@ async function handleLine(repl: Repl, line: string, session: Session) {
     printHistory(repl.history);
     return session;
   }
+  return handleCommandLine(repl, line, session);
+}
+
+async function handleCommandLine(repl: Repl, line: string, session: Session) {
   const special = specialLine(repl, line);
   if (special) {
     await special;
     return session;
   }
   return executeLine(repl, line, session);
-}
-
-function specialLine(repl: Repl, line: string): Promise<void> | undefined {
-  if (line === "edit" || line.startsWith("edit ")) {
-    return editLine(repl, line);
-  }
-  if (line === "agent chat" || line.startsWith("agent chat ")) {
-    return chatLine(repl, line);
-  }
-  return undefined;
-}
-
-async function editLine(repl: Repl, line: string) {
-  await repl.history.record(line);
-  await withTerminalHandoff(repl.readline, () =>
-    runEdit(repl.client, line.slice(5).trim()),
-  );
-}
-
-async function chatLine(repl: Repl, line: string) {
-  await repl.history.record(line);
-  const persona = line.slice("agent chat".length).trim();
-  await runChat(repl.client, repl.readline, persona);
 }
 
 async function executeLine(repl: Repl, line: string, session: Session) {

@@ -10,15 +10,19 @@ type YamlNode = {
 };
 
 export function decoded(source: string) {
-  const document = parseDocument(source, {
-    schema: "core",
-    uniqueKeys: true,
-    merge: false,
-  });
+  const document = parsedDocument(source);
   if (document.errors.length || document.warnings.length) {
     throw new Error("Invalid .yafsmeta YAML");
   }
   return documentValue(document);
+}
+
+function parsedDocument(source: string) {
+  return parseDocument(source, {
+    schema: "core",
+    uniqueKeys: true,
+    merge: false,
+  });
 }
 
 function documentValue(document: YamlDocument) {

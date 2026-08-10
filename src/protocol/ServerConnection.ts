@@ -86,14 +86,15 @@ export class ServerConnection {
 
   private async executeLine(session: Yafs, line: string, socket: Socket) {
     const request = requestOrReject(line, socket);
-    if (!request) {
-      return;
+    if (request) {
+      await this.guardedExecute(session, request, socket);
     }
-    try {
-      await this.executeRequest(session, request, socket);
-    } catch (error) {
-      respond(socket, persistenceFailure(request.id, error));
-    }
+  }
+
+  private guardedExecute(session: Yafs, request: Request, socket: Socket) {
+    return this.executeRequest(session, request, socket).catch((error) =>
+      respond(socket, persistenceFailure(request.id, error)),
+    );
   }
 
   private async executeRequest(

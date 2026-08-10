@@ -1,23 +1,16 @@
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, test } from "bun:test";
 
 import { fakeExchangeModel, manifest, waitForRun } from "./agent_test_helpers";
-import { YafsServer } from "../src/protocol/server";
-import { YashClient } from "../src/protocol/client";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("agent send records and supplies an explicit virtual-file context", async () => {
   const calls: Array<{ system: string; message: string }> = [];
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-context-")),
-    modelFor: () => fakeExchangeModel("review", calls),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(
-    `printf '${manifest({ reviewer: "review carefully" })}' > .yafsmeta`,
+  const { server, client } = await startedHostConfigServer(
+    "yafs-agent-context-",
+    manifest({ reviewer: "review carefully" }),
+    { modelFor: () => fakeExchangeModel("review", calls) },
   );
-  await client.exec("plugin activate .yafsmeta");
+  await client.exec("plugins apply");
   await client.exec("printf diff-body > diff.patch");
   await client.exec(
     'agent send agents/reviewer --context diff.patch "Review this"',

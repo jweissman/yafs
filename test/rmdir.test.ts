@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 
 import Yafs from "../src";
+import { activateDesired } from "./desired_mount_helpers";
 
-test("rmdir removes an empty directory but refuses a non-empty one, a file, or a read-only mount", () => {
+test("rmdir removes an empty directory but refuses a non-empty one, a file, or a read-only mount", async () => {
   const yafs = new Yafs();
   yafs.exec("mkdir empty");
   yafs.exec("mkdir full");
@@ -12,8 +13,7 @@ test("rmdir removes an empty directory but refuses a non-empty one, a file, or a
   expect(yafs.execute("rmdir full").error?.code).toBe("not_empty");
   expect(yafs.execute("rmdir full/inside").error?.code).toBe("not_directory");
   expect(yafs.execute("rmdir missing").error?.code).toBe("not_found");
-  yafs.store.write("/home/root/.yafsmeta", fixtureManifest());
-  yafs.exec("plugin activate .yafsmeta");
+  await activateDesired(yafs, fixtureManifest());
   expect(yafs.execute("rmdir fixture").error?.code).toBe("read_only_mount");
 });
 

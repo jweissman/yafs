@@ -20,7 +20,7 @@ export default defineConfig([
       "max-lines-per-function": [
         "error",
         {
-          max: 12,
+          max: 10,
           skipBlankLines: true,
           skipComments: true,
           IIFEs: true,
@@ -29,7 +29,7 @@ export default defineConfig([
       "@stylistic/max-len": [
         "error",
         {
-          code: 120,
+          code: 80,
           tabWidth: 2,
           ignoreUrls: true,
           ignoreStrings: true,
@@ -39,11 +39,12 @@ export default defineConfig([
       "max-lines": [
         "error",
         {
-          max: 150,
+          max: 125,
           skipBlankLines: true,
           skipComments: true,
         },
       ],
+      "max-params": ["error", 5],
     },
   },
   {
@@ -56,6 +57,14 @@ export default defineConfig([
           skipBlankLines: true,
           skipComments: true,
           IIFEs: true,
+        },
+      ],
+      "max-lines": [
+        "error",
+        {
+          max: 150,
+          skipBlankLines: true,
+          skipComments: true,
         },
       ],
     },

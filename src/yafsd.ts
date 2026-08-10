@@ -1,9 +1,10 @@
-import { mkdir, open, readFile } from "node:fs/promises";
-import { spawn, type ChildProcess } from "node:child_process";
-import { clearState, currentState, paths, writeState } from "./daemon";
+import { mkdir, open } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { clearState, paths, writeState } from "./daemon";
 import { configArgument, restartConfig, selectedConfig } from "./DaemonConfig";
 import { YafsServer } from "./protocol/server";
-import { delay, managedState, waitForStop } from "./DaemonHealth";
+import { managedState, waitForStop } from "./DaemonHealth";
+import { waitForState } from "./DaemonStartup";
 
 const command = process.argv[2] || "serve";
 const settings = {
@@ -54,10 +55,14 @@ async function announce(server: YafsServer) {
     address,
     settings.configPath,
   );
+  logListening(address);
+  return state;
+}
+
+function logListening(address: { host: string; port: number }) {
   console.log(
     `yafsd listening on ${address.host}:${address.port}; data: ${statePaths.directory}`,
   );
-  return state;
 }
 
 async function start(configPath = settings.configPath) {
@@ -65,7 +70,7 @@ async function start(configPath = settings.configPath) {
     return report("running");
   }
   const child = await launch(configPath);
-  await waitForState(child);
+  await waitForState(child, statePaths);
   report("started");
 }
 
@@ -117,47 +122,6 @@ function usage(): never {
 
 function report(value: string) {
   console.log(`yafsd ${value}; data: ${statePaths.directory}`);
-}
-
-async function waitForState(child: ChildProcess) {
-  for (let count = 0; count < 30; count++) {
-    if (await tick(child)) {
-      return;
-    }
-    await delay(100);
-  }
-  throw new Error(`Timed out starting yafsd; see ${statePaths.log}`);
-}
-
-async function tick(child: ChildProcess) {
-  if (await currentState(statePaths.state)) {
-    return true;
-  }
-  if (child.exitCode !== null) {
-    throw await startupFailure();
-  }
-  return false;
-}
-
-async function startupFailure() {
-  return new Error(
-    (await errorLine()) || `yafsd failed to start; see ${statePaths.log}`,
-  );
-}
-
-async function errorLine() {
-  try {
-    return lastError(await readFile(statePaths.log, "utf8"));
-  } catch {
-    return undefined;
-  }
-}
-
-function lastError(content: string) {
-  const line = [...content.trim().split("\n")]
-    .reverse()
-    .find((entry) => entry.startsWith("error:"));
-  return line && `yafsd failed to start: ${line.slice("error:".length).trim()}`;
 }
 
 function waitForSignal() {

@@ -30,15 +30,10 @@ export class NodeStoreSnapshot {
     this.index(this.state.origin);
   }
   private node(node: FSNode): SnapshotNode {
-    return {
-      name: node.name,
-      dir: node.dir,
-      content: node.content,
-      symlinkTarget: node.symlinkTarget,
-      ...this.nodeMetadata(node),
-      children: node.children?.map((child) => this.node(child)),
-      unionLayers: node.unionLayers,
-    };
+    const { name, dir, content, symlinkTarget, unionLayers } = node;
+    const children = node.children?.map((child) => this.node(child));
+    const base = { name, dir, content, symlinkTarget };
+    return { ...base, ...this.nodeMetadata(node), children, unionLayers };
   }
   private nodeMetadata(node: FSNode) {
     return {

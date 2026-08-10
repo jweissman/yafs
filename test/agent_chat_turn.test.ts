@@ -1,22 +1,18 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { YashClient } from "../src/protocol/client";
-import { YafsServer } from "../src/protocol/server";
 import { manifest, recordingModel, sleep } from "./agent_test_helpers";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("--chat turns accumulate structured history and each call sees prior turns", async () => {
   const calls: Array<{ role: string; content: string }[]> = [];
   const model = recordingModel(["reply one", "reply two"], calls);
-  const modelFor = () => model;
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-chat-")),
-    modelFor,
-  });
-  const client = await YashClient.connect(server.address());
-  await setUpChat(client);
+  const { server, client } = await startedHostConfigServer(
+    "yafs-agent-chat-",
+    manifest({ reviewer: "prompt" }),
+    { modelFor: () => model },
+  );
+  await client.exec("plugins apply");
   await sendTurn(client, "msg1");
   await sendTurn(client, "msg2");
   assertCalls(calls);
@@ -24,11 +20,6 @@ test("--chat turns accumulate structured history and each call sees prior turns"
   await client.close();
   await server.close();
 });
-
-async function setUpChat(client: YashClient) {
-  await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
-}
 
 async function sendTurn(client: YashClient, message: string) {
   const accepted = await client.exec(

@@ -24,9 +24,11 @@ function paths(
   const path = `${parent === "/" ? "" : parent}/${name}` as AbsolutePath;
   return store.type(path) === "directory"
     ? tracePaths(store, path)
-    : name === "trace.json"
-      ? [path]
-      : [];
+    : leafPaths(name, path);
+}
+
+function leafPaths(name: string, path: AbsolutePath): AbsolutePath[] {
+  return name === "trace.json" ? [path] : [];
 }
 function isTrace(content: string) {
   try {

@@ -1,34 +1,27 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { YashClient } from "../src/protocol/client";
-import { YafsServer } from "../src/protocol/server";
 import {
   fakeExchangeModel,
   waitForRun,
   manifest,
   sleep,
 } from "./agent_test_helpers";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("an operator plugin refresh keeps run history durable and still picks up a changed prompt", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agents-refresh-")),
-    modelFor: () => fakeExchangeModel("ok", []),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(
-    `printf '${manifest({ reviewer: "v1 prompt" })}' > .yafsmeta`,
+  const { configPath, server, client } = await startedHostConfigServer(
+    "yafs-agents-refresh-",
+    manifest({ reviewer: "v1 prompt" }),
+    { modelFor: () => fakeExchangeModel("ok", []) },
   );
-  await client.exec("plugin activate .yafsmeta");
+  await client.exec("plugins apply");
   await sleep(400);
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForRun(client, "agents/reviewer/runs");
-  await client.exec(
-    `printf '${manifest({ reviewer: "v2 prompt" })}' > .yafsmeta`,
-  );
-  await client.exec("plugin refresh .yafsmeta reviewer");
+  await writeFile(configPath, manifest({ reviewer: "v2 prompt" }));
+  await client.exec("plugins refresh reviewer");
   expect(await client.exec("cat agents/reviewer/prompt.md")).toBe("v2 prompt");
   expect(
     await client.exec(`cat agents/reviewer/runs/${runId}/status.json`),
@@ -38,14 +31,12 @@ test("an operator plugin refresh keeps run history durable and still picks up a 
 });
 
 test("a ctl-triggered run leaves an audit entry naming the persona and run, not just the mount", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "yafs-agents-audit-"));
-  const server = await YafsServer.start({
-    dataDir: directory,
-    modelFor: () => fakeExchangeModel("ok", []),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { directory, server, client } = await startedHostConfigServer(
+    "yafs-agents-audit-",
+    manifest({ reviewer: "prompt" }),
+    { modelFor: () => fakeExchangeModel("ok", []) },
+  );
+  await client.exec("plugins apply");
   await sleep(400);
   await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
   const runId = await waitForRun(client, "agents/reviewer/runs");

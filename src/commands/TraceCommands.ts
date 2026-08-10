@@ -63,11 +63,8 @@ async function reify(context: CommandContext, args: string[]) {
   const artifact = path(context, args, 0, "reify");
   const destination = path(context, args, 1, "reify");
   const captured = context.traces.parse(context.read(manifest(artifact)));
-  await context.traces.materialize(
-    traceFilesystem(context),
-    captured,
-    destination,
-  );
+  const files = traceFilesystem(context);
+  await context.traces.materialize(files, captured, destination);
   return "";
 }
 function blobCommand(): BuiltinCommand {

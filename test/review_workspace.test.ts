@@ -1,24 +1,22 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { GitHubCollectionSource } from "../src/plugins/github/GitHubCollectionSource";
 import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { YashClient } from "../src/protocol/client";
-import { YafsServer } from "../src/protocol/server";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("two review sessions share one GitHub revision and leave separate durable traces", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-review-")),
-    providers: new ProviderRegistry(
-      new GitHubCollectionSource({ pulls: async () => [pull()] }),
-    ),
-  });
-  const alice = await YashClient.connect(server.address());
+  const { server, client: alice } = await startedHostConfigServer(
+    "yafs-review-",
+    manifest(),
+    {
+      providers: new ProviderRegistry(
+        new GitHubCollectionSource({ pulls: async () => [pull()] }),
+      ),
+    },
+  );
   const bob = await YashClient.connect(server.address());
-  await alice.exec(`printf '${manifest()}' > .yafsmeta`);
-  await alice.exec("plugin activate .yafsmeta");
+  await alice.exec("plugins apply");
   await alice.exec("mkdir notes");
   await alice.exec("mkdir notes/42");
   await alice.exec("trace reviews/pulls/42 notes/42/alice");
@@ -38,16 +36,17 @@ test("two review sessions share one GitHub revision and leave separate durable t
 
 test("a due daemon refresh publishes the next complete GitHub snapshot", async () => {
   const pulls = [pull()];
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-refresh-")),
-    now: () => Date.now() + 120_000,
-    providers: new ProviderRegistry(
-      new GitHubCollectionSource({ pulls: async () => pulls }),
-    ),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${scheduledManifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { server, client } = await startedHostConfigServer(
+    "yafs-refresh-",
+    scheduledManifest(),
+    {
+      now: () => Date.now() + 120_000,
+      providers: new ProviderRegistry(
+        new GitHubCollectionSource({ pulls: async () => pulls }),
+      ),
+    },
+  );
+  await client.exec("plugins apply");
   pulls[0] = { ...pull(), diff: "new diff" };
   await server.refreshDue();
   expect(await client.exec("cat reviews/pulls/42/diff.patch")).toBe("new diff");

@@ -3,15 +3,16 @@ import { CtlHandler } from "../../protocol/CtlDispatch";
 import { Journal } from "../../protocol/Journal";
 import { MountManager } from "../../mounts/MountManager";
 import { PreparedMountRecord, SlackConfig } from "../../mounts/types";
+import { withError } from "./SlackErrorRecord";
 
 export type SlackPoster = {
   postMessage(channel: string, text: string): Promise<string>;
 };
 type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
 type UnregisterCtl = (path: AbsolutePath) => void;
+export type Ctl = { registerCtl: RegisterCtl; unregisterCtl: UnregisterCtl };
 type ClientFor = (config: SlackConfig) => SlackPoster;
 type Enqueue = (work: () => Promise<void>) => Promise<void>;
-type Failure = { message: string; error: unknown };
 
 export class SlackDirectoryDriver {
   private registered = new Set<AbsolutePath>();
@@ -20,13 +21,12 @@ export class SlackDirectoryDriver {
     private readonly mounts: MountManager,
     private readonly journal: Journal,
     private readonly enqueue: Enqueue,
-    private readonly registerCtl: RegisterCtl,
-    private readonly unregisterCtl: UnregisterCtl,
+    private readonly ctl: Ctl,
     private readonly clientFor: ClientFor,
   ) {}
 
   close() {
-    this.registered.forEach((path) => this.unregisterCtl(path));
+    this.registered.forEach((path) => this.ctl.unregisterCtl(path));
     this.registered.clear();
   }
 
@@ -35,24 +35,31 @@ export class SlackDirectoryDriver {
     this.mounts
       .mounts()
       .forEach((record) => this.registerRecord(record, paths));
+    this.unregisterUnpaired(paths);
+    this.registered = paths;
+  }
+
+  private unregisterUnpaired(paths: Set<AbsolutePath>) {
     this.registered.forEach((path) => {
       if (!paths.has(path)) {
-        this.unregisterCtl(path);
+        this.ctl.unregisterCtl(path);
       }
     });
-    this.registered = paths;
   }
 
   private registerRecord(
     record: PreparedMountRecord,
     paths: Set<AbsolutePath>,
   ) {
-    if (record.provider !== "slack") {
-      return;
+    if (record.provider === "slack") {
+      paths.add(this.registerCtl(record));
     }
+  }
+
+  private registerCtl(record: PreparedMountRecord): AbsolutePath {
     const path = `${record.path}/ctl` as AbsolutePath;
-    this.registerCtl(path, (payload) => this.send(record.id, payload));
-    paths.add(path);
+    this.ctl.registerCtl(path, (payload) => this.send(record.id, payload));
+    return path;
   }
 
   private async send(mountId: string, payload: string) {
@@ -108,49 +115,9 @@ export class SlackDirectoryDriver {
 
   private async applyError(mountId: string, message: string, error: unknown) {
     const record = this.mounts.mounts().find((item) => item.id === mountId);
-    if (!record) {
-      return;
+    if (record) {
+      await this.commit(withError(record, message, error));
     }
-    await this.commit(this.withError(record, message, error));
-  }
-
-  private withError(
-    record: PreparedMountRecord,
-    message: string,
-    error: unknown,
-  ): PreparedMountRecord {
-    const failure = { message, error };
-    const entries = this.errorEntries(record.snapshot.entries, failure);
-    return this.updated(record, entries);
-  }
-  private updated(
-    record: PreparedMountRecord,
-    entries: [string, string][],
-  ): PreparedMountRecord {
-    return {
-      ...record,
-      fetchedAt: new Date().toISOString(),
-      snapshot: { ...record.snapshot, entries },
-    };
-  }
-
-  private errorEntries(
-    entries: [string, string][],
-    failure: Failure,
-  ): [string, string][] {
-    const content = this.errorContent(failure);
-    const byPath = new Map(entries);
-    byPath.set("last-error.json", content);
-    return [...byPath];
-  }
-
-  private errorContent(failure: Failure) {
-    return JSON.stringify(this.errorPayload(failure));
-  }
-
-  private errorPayload({ message, error }: Failure) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return { message, error: detail, at: new Date().toISOString() };
   }
 
   private async commit(updated: PreparedMountRecord) {

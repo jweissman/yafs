@@ -9,17 +9,24 @@ export function assertDesiredAvailable(
   record: MountRecord,
 ) {
   const existing = records.find((item) => item.id === record.id);
-  assertUnchangedPath(existing, record);
-  if (!existing) {
-    planner.assertAvailable(record.path);
-  }
+  assertCompatible(planner, existing, record);
 }
 
-function assertUnchangedPath(
+function assertCompatible(
+  planner: MountPlanner,
   existing: PreparedMountRecord | undefined,
   record: MountRecord,
 ) {
-  if (existing && existing.path !== record.path) {
+  return existing
+    ? assertUnchangedPath(existing, record)
+    : planner.assertAvailable(record.path);
+}
+
+function assertUnchangedPath(
+  existing: PreparedMountRecord,
+  record: MountRecord,
+) {
+  if (existing.path !== record.path) {
     throw new Error(`Desired mount path changed: ${record.id}`);
   }
 }
@@ -49,9 +56,17 @@ export function restoredUnmount(
   records: PreparedMountRecord[],
   id: string,
 ): PreparedMountRecord[] {
+  removeSnapshotIfPresent(snapshots, records, id);
+  return withRemoved(records, id);
+}
+
+function removeSnapshotIfPresent(
+  snapshots: SnapshotMaterializer,
+  records: PreparedMountRecord[],
+  id: string,
+) {
   const record = records.find((item) => item.id === id);
   if (record) {
     snapshots.remove(record);
   }
-  return withRemoved(records, id);
 }

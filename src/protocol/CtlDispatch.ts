@@ -31,11 +31,15 @@ export class CtlDispatch {
     if (operation.type !== "write") {
       return false;
     }
-    const handler = this.handlers.get(operation.path);
+    return this.dispatchWrite(operation.path, operation.content);
+  }
+
+  private async dispatchWrite(path: AbsolutePath, content: string) {
+    const handler = this.handlers.get(path);
     if (!handler) {
       return false;
     }
-    await handler(operation.content);
+    await handler(content);
     return true;
   }
 }

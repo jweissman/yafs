@@ -24,6 +24,13 @@ export function missing(error: unknown) {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 
+export function assertMissing(error: unknown): false {
+  if (!missing(error)) {
+    throw error;
+  }
+  return false;
+}
+
 export async function syncDirectory(path: string) {
   const file = await open(join(path, ".."), "r");
   await file.sync();

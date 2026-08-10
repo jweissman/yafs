@@ -4,14 +4,14 @@ import { object, only, relative } from "../../mounts/ManifestValidation";
 export function fixtureStreams(
   value: unknown,
 ): Record<string, StreamSpec> | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
+  return value === undefined ? undefined : parsedStreams(value);
+}
+
+function parsedStreams(value: unknown): Record<string, StreamSpec> {
   const entries = Object.entries(object(value, "fixture streams"));
   assertPaths(entries);
-  return Object.fromEntries(
-    entries.map((entry) => [entry[0], streamSpec(entry[1])]),
-  );
+  const specs = entries.map((entry) => [entry[0], streamSpec(entry[1])]);
+  return Object.fromEntries(specs);
 }
 
 function assertPaths(entries: [string, unknown][]) {

@@ -17,11 +17,11 @@ export async function callTool(
   name: string,
   input: unknown,
 ) {
-  try {
-    return result(await execute(client, command(name, argumentsFor(input))));
-  } catch (error) {
-    return failure(error);
-  }
+  return attemptTool(client, name, input).catch(failure);
+}
+
+async function attemptTool(client: McpClient, name: string, input: unknown) {
+  return result(await execute(client, command(name, argumentsFor(input))));
 }
 
 function listTool() {

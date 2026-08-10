@@ -20,14 +20,13 @@ export function replay(mounts: MountManager) {
   return (operation: VfsOperation) => replayOperation(mounts, operation);
 }
 function replayOperation(mounts: MountManager, operation: VfsOperation) {
-  if (operation.type === "mount") {
-    mounts.replay.activation(operation.record);
-  }
-  if (operation.type === "refresh") {
-    mounts.replay.refresh(operation.record);
-  }
-  if (operation.type === "unmount") {
-    mounts.replay.unmount(operation.id);
+  switch (operation.type) {
+    case "mount":
+      return mounts.replay.activation(operation.record);
+    case "refresh":
+      return mounts.replay.refresh(operation.record);
+    case "unmount":
+      return mounts.replay.unmount(operation.id);
   }
 }
 type Base = { store: NodeStore; mounts: MountManager };
@@ -55,11 +54,14 @@ async function finishServices(
   cache: CacheService,
   options: StartOptions,
 ) {
-  const { store, mounts } = base;
   const journal = await openJournal(base, options);
+  retain(base.store, traces, cache);
+  return { ...base, journal, traces, cache };
+}
+
+function retain(store: NodeStore, traces: TraceService, cache: CacheService) {
   retainTraces(store, traces);
-  retainCaches(store, cache);
-  return { store, mounts, journal, traces, cache };
+  retainCaches({ store, cache });
 }
 function openJournal(base: Base, options: StartOptions) {
   return Journal.open(journalPath(options), base.store, replay(base.mounts));

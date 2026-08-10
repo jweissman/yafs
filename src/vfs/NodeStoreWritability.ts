@@ -5,6 +5,8 @@ import { nodeStoreWriteGuard } from "./NodeStoreWriteGuard";
 import { NodeStoreResolver } from "./NodeStoreResolver";
 import { NodeStoreState } from "./NodeStoreState";
 
+type Walk = { parts: string[]; path: AbsolutePath; depth: number };
+
 export class NodeStoreWritability {
   private readonly guard = nodeStoreWriteGuard;
   constructor(
@@ -16,44 +18,35 @@ export class NodeStoreWritability {
     if (depth > 40) {
       throw new Error("Too many symbolic links");
     }
-    this.writable(this.state.origin, path.slice(1).split("/"), path, depth);
+    const parts = path.slice(1).split("/");
+    this.writable(this.state.origin, { parts, path, depth });
   }
 
-  private writable(
-    node: FSNode,
-    parts: string[],
-    path: AbsolutePath,
-    depth: number,
-  ) {
-    this.guard.assertWritable(node, path);
-    const child = node.children?.find((item) => item.name === parts[0]);
+  private writable(node: FSNode, walk: Walk) {
+    this.guard.assertWritable(node, walk.path);
+    this.writableChildIfFound(node, walk);
+  }
+
+  private writableChildIfFound(node: FSNode, walk: Walk) {
+    const child = node.children?.find((item) => item.name === walk.parts[0]);
     if (child) {
-      this.writableChild(child, parts, path, depth);
+      this.writableChild(child, walk);
     }
   }
 
-  private writableChild(
-    child: FSNode,
-    parts: string[],
-    path: AbsolutePath,
-    depth: number,
-  ) {
+  private writableChild(child: FSNode, walk: Walk) {
     if (child.symlinkTarget) {
-      return this.writableLink(child, parts.slice(1), depth);
+      return this.writableLink(child, walk.parts.slice(1), walk.depth);
     }
-    this.writableDescendant(child, parts, path, depth);
+    this.writableDescendant(child, walk);
   }
 
-  private writableDescendant(
-    child: FSNode,
-    parts: string[],
-    path: AbsolutePath,
-    depth: number,
-  ) {
-    if (parts.length > 1) {
-      return this.writable(child, parts.slice(1), path, depth);
+  private writableDescendant(child: FSNode, walk: Walk) {
+    if (walk.parts.length > 1) {
+      const rest = { ...walk, parts: walk.parts.slice(1) };
+      return this.writable(child, rest);
     }
-    this.guard.assertWritable(child, path);
+    this.guard.assertWritable(child, walk.path);
   }
 
   private writableLink(link: FSNode, rest: string[], depth: number) {

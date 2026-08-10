@@ -20,14 +20,29 @@ still accepted and `response.md` still appears, but the run ends in
 `failed` with a connection error rather than a reply — useful for
 confirming §3's failure path even with no model available.
 
+Create `yafs.plugins.yaml` — this is the only way to activate a plugin
+instance; there is no in-VFS equivalent:
+
+```yaml
+version: 1
+plugins:
+  - id: agents
+    path: agents
+    plugin: agent
+    config:
+      personas:
+        reviewer:
+          prompt: "You are a terse, careful code reviewer."
+    capabilities: [chat.completion]
+```
+
 ```sh
-bun run yafsd -- start
+bun run yafsd -- start --config yafs.plugins.yaml
 bun run yash
 ```
 
 ```text
-yash:/home/root$ printf '{version: 1, plugins: [{id: agents, path: agents, plugin: agent, config: {personas: {reviewer: {prompt: "You are a terse, careful code reviewer."}}}, capabilities: [chat.completion]}]}' > .yafsmeta
-yash:/home/root$ plugin activate .yafsmeta
+yash:/home/root$ plugins apply
 ```
 
 ## 1. Sole-persona default and a real multi-turn exchange
@@ -105,13 +120,33 @@ type another message or exit normally afterward.
 
 ## 4. Multiple personas require an explicit choice
 
-Activate a second, differently-pathed manifest alongside the first one from
-Setup (same persona-lookup mechanism `agent send` already uses, so this
-mirrors the existing "ambiguous persona" test):
+Add a second, differently-pathed instance to `yafs.plugins.yaml` alongside
+`agents` from Setup (same persona-lookup mechanism `agent send` already uses,
+so this mirrors the existing "ambiguous persona" test):
+
+```yaml
+version: 1
+plugins:
+  - id: agents
+    path: agents
+    plugin: agent
+    config:
+      personas:
+        reviewer:
+          prompt: "You are a terse, careful code reviewer."
+    capabilities: [chat.completion]
+  - id: agents2
+    path: agents2
+    plugin: agent
+    config:
+      personas:
+        second:
+          prompt: "second"
+    capabilities: [chat.completion]
+```
 
 ```text
-yash:/home/root$ printf '{version: 1, plugins: [{id: agents2, path: agents2, plugin: agent, config: {personas: {second: {prompt: "second"}}}, capabilities: [chat.completion]}]}' > .yafsmeta2
-yash:/home/root$ plugin activate .yafsmeta2 second
+yash:/home/root$ plugins apply
 yash:/home/root$ agent chat
 ```
 

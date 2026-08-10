@@ -8,6 +8,11 @@ Cache, agents, remote multi-user service, and runtime execution are gated
 extension hypotheses; they are not implied commitments merely because they are
 listed below.
 
+Yash has a linked language track in [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md).
+L0 (the typed command boundary) and L1 (workspace literacy) are planned paving
+stones before broader MCP or web surfaces; later script, iteration, and pipeline
+work is evidence-gated rather than an implicit POSIX-compatibility commitment.
+
 ## Product thesis
 
 Yafs is a virtual filesystem service whose directories can acquire explicit
@@ -235,7 +240,8 @@ the opt-in host bridge. [POSIX command search and execution](https://pubs.opengr
 ## Plugin model
 
 Each mount declares a provider, configuration, and requested capabilities in
-`.yafsmeta`. A provider package contributes declarative metadata, snapshot
+host-side `yafs.plugins.yaml`, selected by `yafsd --config` — there is no
+in-VFS way to declare or activate one. A provider package contributes declarative metadata, snapshot
 preparation, and (where applicable) resource/action definitions. The kernel
 continues to own VFS mutation, path resolution, grants, journal commits,
 auditing, and lifecycle transitions. Plugin discovery must be separate from
@@ -403,6 +409,14 @@ Checkpoint: a fixture provider is mounted through a strict, schema-validated
 `.yafsmeta` declaration. Discovery does not activate it; activation receives
 only its configured subtree and granted capabilities. Mount state, refresh,
 unmount, provenance, and capability use are inspectable and auditable.
+
+**Later removal:** the in-VFS `.yafsmeta` declaration + `plugin
+validate|activate|refresh` lifecycle described above was the sole activation
+mechanism through M4/M4.5, then removed entirely as a security fix once
+external providers made it possible to grant real capabilities this way —
+see M6.2/M6.3's "later removal" note and the ADR's "Capabilities,
+distribution, and adapters" removal policy. Host-side `yafs.plugins.yaml` is
+now the only way to activate a plugin instance.
 
 ### M4.5 — Published snapshot resolver
 
@@ -629,6 +643,18 @@ implemented with a compatibility alias for `mounts`/`provider`. This is the
 final terminology and action-boundary cleanup before M7, not a claim that
 `yash add` or public plugin endpoints exist.
 
+**Later removal:** `plugin validate|activate|refresh MANIFEST [ID]` — the
+in-VFS counterpart to `plugins status|plan|apply`, dating back to M4 — has
+since been removed outright, not just renamed. It read a manifest out of the
+VFS and activated it through the identical `ProviderRegistry.assertGranted`
+capability check host-side `yafs.plugins.yaml` uses, with no session/
+authorization concept anywhere to distinguish "write a file" from "grant a
+real external credential." Only `plugin deactivate ID` survives, since it
+grants no capability. See the ADR's "Capabilities, distribution, and
+adapters" removal policy for the full rationale; the still-unscheduled
+`mounts:`/`provider:` YAML *key* alias mentioned above is unaffected by this
+and remains separately open.
+
 ### M6.4 — Durable outbound actions *(gate before M7's Slack outbox)*
 
 Checkpoint: an outbound write to an external system (starting with `slack
@@ -654,6 +680,11 @@ rather than fixed inline. `PluginDriver`'s optional `recover()` hook (see
 `BackgroundDrivers.ts`) is the seam left for this work: once
 `SlackDirectoryDriver` implements `recover()`, the generic `recoverAll` loop
 picks it up with no further kernel changes required.
+
+**Language dependency:** after the capability cleanup, L0 in
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md) must make typed effects enforceable
+across Yash, MCP, and future web adapters. L1's read/evidence toolbox may run
+in parallel. M7 does not require scripts, iteration, or pipelines.
 
 ### M7 — Local conversation channel *(decision gate)*
 

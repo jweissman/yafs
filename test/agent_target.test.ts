@@ -9,6 +9,7 @@ import { NodeStore } from "../src/vfs/NodeStore";
 import { agentTarget } from "../src/plugins/agent/AgentTarget";
 import { agentPersonaPath } from "../src/plugins/agent/AgentPersonaLookup";
 import { manifest } from "./agent_test_helpers";
+import { activateDesired } from "./desired_mount_helpers";
 
 test("agentTarget rejects an unknown persona and a malformed persisted config", async () => {
   const mounts = await malformedMounts();
@@ -17,10 +18,9 @@ test("agentTarget rejects an unknown persona and a malformed persisted config", 
   );
 });
 
-test("a path-form persona reference that resolves to no mount is rejected", () => {
+test("a path-form persona reference that resolves to no mount is rejected", async () => {
   const yafs = new Yafs();
-  yafs.store.write("/home/root/.yafsmeta", manifest({ reviewer: "prompt" }));
-  yafs.exec("plugin activate .yafsmeta");
+  await activateDesired(yafs, manifest({ reviewer: "prompt" }));
   expect(() => agentPersonaPath(yafs.mounts, "agents/nope")).toThrow(
     "No such persona: agents/nope",
   );

@@ -16,11 +16,15 @@ async function responds(state: { host: string; port: number }) {
     if (await probe(state)) {
       return true;
     }
-    if (i < 2) {
-      await delay(150);
-    }
+    await delayUnlessLast(i);
   }
   return false;
+}
+
+async function delayUnlessLast(attempt: number) {
+  if (attempt < 2) {
+    await delay(150);
+  }
 }
 
 async function probe(state: { host: string; port: number }) {
@@ -45,13 +49,19 @@ export async function waitUntil(
   check: () => Promise<unknown> | unknown,
   message: string,
 ) {
+  if (!(await pollUntil(check))) {
+    throw new Error(message);
+  }
+}
+
+async function pollUntil(check: () => Promise<unknown> | unknown) {
   for (let count = 0; count < 30; count++) {
     if (await check()) {
-      return;
+      return true;
     }
     await delay(100);
   }
-  throw new Error(message);
+  return false;
 }
 
 function processAlive(pid: number) {

@@ -17,9 +17,10 @@ function activeEntry(record: PreparedMountRecord) {
 }
 
 function quarantined(record: PreparedMountRecord) {
-  if (record.provider !== "agent") {
-    return false;
-  }
+  return record.provider === "agent" && invalidAgentConfig(record);
+}
+
+function invalidAgentConfig(record: PreparedMountRecord) {
   try {
     agentConfig(record.config);
     return false;

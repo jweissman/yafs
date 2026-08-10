@@ -79,47 +79,19 @@ export function persistenceFailure(
   return failure(id, "persistence_error", message);
 }
 
-export function attachLines(socket: Socket, onLine: (line: string) => void) {
-  let buffer = "";
-  socket.on("data", (chunk) => {
-    buffer += chunk;
-    consumeLines(
-      socket,
-      onLine,
-      () => buffer,
-      (value) => (buffer = value),
-    );
-  });
-}
-
-function consumeLines(
-  socket: Socket,
-  onLine: (line: string) => void,
-  current: () => string,
-  update: (value: string) => void,
-) {
-  if (current().length > 1_048_576) {
-    return socket.destroy();
-  }
-  splitLines(current(), update).forEach(onLine);
-}
-
-function splitLines(buffer: string, update: (value: string) => void) {
-  const lines = buffer.split("\n");
-  update(lines.pop() || "");
-  return lines.filter(Boolean);
-}
+export { attachLines } from "./SocketLines";
 
 function verifyRequest(request: Request) {
   if (!Number.isInteger(request.id) || !validPayload(request)) {
     throw new Error("Expected request");
   }
+  assertVersion(request);
+}
+
+function assertVersion(request: Request) {
   if (request.version !== PROTOCOL_VERSION) {
-    throw new RequestError(
-      request.id,
-      "unsupported_version",
-      `Unsupported protocol version: ${request.version}`,
-    );
+    const message = `Unsupported protocol version: ${request.version}`;
+    throw new RequestError(request.id, "unsupported_version", message);
   }
 }
 

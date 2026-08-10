@@ -73,11 +73,11 @@ async function guardedAsync(
   plan: () => Promise<ExecutionPlan>,
 ): Promise<ExecutionPlan> {
   yafs.operationQueue.reset();
-  try {
-    return await plan();
-  } catch (error) {
-    return { result: failure(yafs, error), operations: [] };
-  }
+  return plan().catch((error) => failed(yafs, error));
+}
+
+function failed(yafs: Yafs, error: unknown): ExecutionPlan {
+  return { result: failure(yafs, error), operations: [] };
 }
 
 async function cachePlan(
@@ -86,10 +86,8 @@ async function cachePlan(
 ): Promise<ExecutionPlan> {
   const stdout = await cacheRequest(yafsContext(yafs), request);
   yafs.operationQueue.validate();
-  return {
-    result: success(yafs, stdout),
-    operations: yafs.operationQueue.all(),
-  };
+  const result = success(yafs, stdout);
+  return { result, operations: yafs.operationQueue.all() };
 }
 
 function plannedWrite(

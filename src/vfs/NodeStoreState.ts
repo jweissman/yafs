@@ -27,6 +27,10 @@ export class NodeStoreState {
   ) {
     const node = this.node(name, dir, parent, at);
     this.index(node);
+    return this.attached(parent, node);
+  }
+
+  private attached(parent: FSNode, node: FSNode) {
     this.attach(parent, node);
     return node;
   }

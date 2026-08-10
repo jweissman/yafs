@@ -1,15 +1,16 @@
 import { expect, test } from "bun:test";
 
 import Yafs from "../src";
+import { activateDesired } from "./desired_mount_helpers";
 
-test("mount planning rejects duplicate and overlapping active paths", () => {
+test("mount planning rejects duplicate and overlapping active paths", async () => {
   const yafs = new Yafs();
-  yafs.store.write("/home/root/.yafsmeta", multipleFixtureManifest());
-  expect(yafs.exec("plugin activate .yafsmeta first")).toBe("first active");
-  expect(yafs.execute("plugin activate .yafsmeta second").stderr).toBe(
+  const manifest = multipleFixtureManifest();
+  await activateDesired(yafs, manifest, "first");
+  await expect(activateDesired(yafs, manifest, "second")).rejects.toThrow(
     "Overlapping mount: /home/root/fixture/nested",
   );
-  expect(yafs.execute("plugin activate .yafsmeta duplicate").stderr).toBe(
+  await expect(activateDesired(yafs, manifest, "duplicate")).rejects.toThrow(
     "Mount path already exists: /home/root/fixture",
   );
 });

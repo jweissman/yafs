@@ -25,10 +25,20 @@ export function evaluateWord(
   if (word.kind === "literal" || word.kind === "variable") {
     return simpleWord(word, evaluators);
   }
-  if (word.kind === "compound") {
-    return word.parts.map((part) => evaluateWord(part, evaluators)).join("");
-  }
-  return expansion(word, evaluators);
+  return complexWord(word, evaluators);
+}
+
+function complexWord(
+  word: Exclude<Word, { kind: "literal" | "variable" }>,
+  evaluators: Evaluators<string>,
+): string {
+  return word.kind === "compound"
+    ? compound(word.parts, evaluators)
+    : expansion(word, evaluators);
+}
+
+function compound(parts: Word[], evaluators: Evaluators<string>) {
+  return parts.map((part) => evaluateWord(part, evaluators)).join("");
 }
 
 export async function evaluateWordAsync(
@@ -38,6 +48,13 @@ export async function evaluateWordAsync(
   if (word.kind === "literal" || word.kind === "variable") {
     return simpleWord(word, evaluators);
   }
+  return complexWordAsync(word, evaluators);
+}
+
+async function complexWordAsync(
+  word: Exclude<Word, { kind: "literal" | "variable" }>,
+  evaluators: Evaluators<Promise<string>>,
+): Promise<string> {
   return word.kind === "compound"
     ? compoundAsync(word.parts, evaluators)
     : substitutionOrExpression(word, evaluators);

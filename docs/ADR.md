@@ -37,8 +37,9 @@ provenance remain inspectable through the tree.**
    provider-backed; inspection explains which source supplied it.
 2. **Composition is kernel behavior.** Links and unions are not plugins. A
    provider uses them; it cannot redefine their semantics.
-3. **The shell is a client, not the control plane.** Every shell action should
-   have an RPC equivalent with a result, error code, and session state.
+3. **The shell is a client, not the control plane.** Every Yash operation is a
+   typed workspace operation with a result, error code, and session state; RPC,
+   MCP, web, and SDK adapters must not reconstruct it by shell-string parsing.
 4. **No ambient authority.** Browsing cannot clone a repository, start an
    agent, fetch the network, execute a process, or reveal a secret.
 5. **Readable state beats opaque state.** Runs, cache entries, refresh status,
@@ -461,11 +462,11 @@ mounts:
     capabilities: []
 ```
 
-`mount activate .yafsmeta` against a running `yafsd`, then repeated
-`cat demo/output.txt` from an ordinary `yash` session, shows the file grow in
-place — proof against the real product surface, not a proxy for it. Wire in
-a real LM Studio endpoint only once this settles what a durable, watchable
-stream should actually look like.
+Selecting this with `yafsd --config` and running `plugins apply` against the
+running daemon, then repeated `cat demo/output.txt` from an ordinary `yash`
+session, shows the file grow in place — proof against the real product
+surface, not a proxy for it. Wire in a real LM Studio endpoint only once this
+settles what a durable, watchable stream should actually look like.
 
 ### Trace capture and reification
 
@@ -885,13 +886,23 @@ bind mount or Docker daemon capability.
 Yash should feel excellent interactively, but it should not imitate every
 historical shell behavior.
 
+The reusable surface beneath Yash is a workspace-bound typed command service,
+not a global `Yash.executes` object. Its calls carry a session identity,
+authority, cancellation scope, typed input, typed result, and declared effect.
+Yash parses and renders that service; MCP, web, SDK, and in-browser adapters
+call it directly. This prevents path quoting and terminal-text parsing from
+becoming an accidental cross-client API. Provider pseudobinaries are adapters
+over declared provider actions through the same service, never an alternative
+authorization path. The staged contract and gates are in
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md).
+
 | Need                     | Contract                                                                                                                          |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | Interactive use          | Prompt templates, local persisted history, up/down, Ctrl-R, and virtual-path completion belong in Yash.                           |
 | Automation               | Versioned RPC returns typed output/error/session information; terminal text is not the API.                                       |
 | Familiar commands        | Start with `pwd`, `cd`, `ls`, `cat`, `mkdir`, `echo`, links, inspection, and explicit mount commands.                             |
-| Small language           | Add quoting, variables, arithmetic expansion, command substitution, redirection, pipes, and exit status in documented increments. |
-| Explicit incompatibility | No POSIX-script promise, job control, signals/traps, aliases, globbing, or ambient host executable lookup.                        |
+| Small language           | Add only documented increments; expansion contexts run read operations only, and scripts use typed values rather than word splitting. |
+| Explicit incompatibility | No POSIX-script promise, job control, signals/traps, aliases, globbing-by-word-expansion, or ambient host executable lookup.        |
 
 `PROMPT` is a client template over server-provided state, for example
 `{user}@{server}:{cwd} [{revision}]$`. The server reports state; it does not
@@ -1183,22 +1194,39 @@ instance is one external, declarative configuration that publishes a VFS
 projection and may accept typed actions. A mount remains the kernel's internal
 snapshot attachment mechanism, while a union remains the user-visible pure VFS
 composition operation. Operator vocabulary is `plugins status|plan|apply` for
-the daemon-selected desired configuration and `plugin
-validate|activate|refresh|deactivate` for direct lifecycle control. The
-`mount`/`mounts` (singular) command has been removed; `mounts` (plural,
-read-only VFS composition introspection) and `union` are unaffected — they
-were never lifecycle verbs.
+the daemon-selected desired configuration, and `plugin deactivate` for
+directly detaching an active instance — the sole surviving lifecycle verb on
+`plugin` (singular). There is no in-VFS way to declare or activate a plugin
+instance; a `yafs.plugins.yaml` selected by `yafsd --config` is the only
+mechanism that can grant a capability. The `mount`/`mounts` (singular)
+command has been removed; `mounts` (plural, read-only VFS composition
+introspection) and `union` are unaffected — they were never lifecycle verbs.
 
-**Removal policy — the `mount` command, done; the YAML alias, still open:**
-the `mount` (singular) lifecycle command has been removed, with `plugin`
-`validate|activate|refresh|deactivate` as its sole replacement — no
-compatibility alias was kept, and `COMMANDS.md` no longer documents it. This
-is narrower than full removal: the legacy `mounts:`/`provider:` manifest YAML
-keys (as opposed to the `mount` command verb) are a **separate, still
-unscheduled** follow-up — `ManifestPlugins.ts` continues to accept both the
-legacy and `plugins:`/`plugin:` forms, and existing `.yafsmeta` files keep
-working unchanged. Don't read the command removal as implying the YAML alias
-is also gone.
+**Removal policy — the `mount` command and in-VFS plugin configuration, both
+done; the YAML key alias, still open:** the `mount` (singular) lifecycle
+command was removed first, with `plugin validate|activate|refresh|deactivate`
+as its interim replacement. That replacement itself has since been removed:
+`plugin validate|activate|refresh MANIFEST [ID]`, which read a manifest *out
+of the VFS* and activated it, was a security gap — it converged on the exact
+same `ProviderRegistry.assertGranted` capability check as host-side
+`yafs.plugins.yaml`, with no session or authorization concept anywhere in the
+codebase to distinguish them. Concretely: any connected session able to write
+a file into its own workspace could grant itself real external capabilities
+(a GitHub token, a Slack token, an LLM credential) the daemon happened to
+hold. `plugin activate`/`validate`/`refresh` now fail immediately with a
+message pointing at `yafs.plugins.yaml` and `plugins apply`; only `plugin
+deactivate ID` remains, since it grants no capability and reads no manifest.
+No compatibility alias was kept for either removal, and tests do not use
+`.yafsmeta` either — test setup that needs an active mount without a real
+daemon drives the identical capability-checked code path in-process via a
+white-box helper (`test/desired_mount_helpers.ts`), supplying an
+already-parsed manifest directly rather than writing one into a VFS. This is
+narrower than full removal of the legacy manifest *shape*: the legacy
+`mounts:`/`provider:` manifest YAML keys (as opposed to either command verb)
+are a **separate, still unscheduled** follow-up — `ManifestPlugins.ts`
+continues to accept both the legacy and `plugins:`/`plugin:` forms in
+host-side YAML. Don't read either command removal as implying the YAML key
+alias is also gone.
 
 The canonical external YAML uses `plugins:` with `plugin:` per instance. It is
 deployment input, selected by `yafsd --config`, and can be version-controlled;

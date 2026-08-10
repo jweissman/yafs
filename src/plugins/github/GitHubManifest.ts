@@ -12,11 +12,8 @@ function validated(config: Record<string, unknown>): GitHubConfig {
   if (!valid(config.repository, config.query, max)) {
     throw new Error("Invalid github config");
   }
-  return {
-    repository: config.repository as string,
-    query: config.query as string,
-    max: max as number,
-  };
+  const { repository, query } = config;
+  return { repository, query, max } as GitHubConfig;
 }
 
 function valid(repositoryValue: unknown, query: unknown, max: unknown) {

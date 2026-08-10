@@ -17,17 +17,35 @@ export function servicesFor(
   return { providers, persistence, snapshots };
 }
 
+export type PrepareRequest = {
+  record: MountRecord;
+  current: PreparedMountRecord | undefined;
+  actor: string;
+};
+
 export function prepareRecord(
   services: PrepareServices,
-  record: MountRecord,
-  current: PreparedMountRecord | undefined,
-  actor: string,
+  request: PrepareRequest,
 ) {
-  const { providers, persistence, snapshots } = services;
-  const prepared = providers.prepare(record, snapshots, current);
+  const prepared = preparedOrPromise(services, request);
   return prepared instanceof Promise
-    ? prepared.catch((error) => fetchFailed(persistence, record, actor, error))
+    ? recovered(prepared, services.persistence, request)
     : prepared;
+}
+
+function preparedOrPromise(services: PrepareServices, request: PrepareRequest) {
+  const { providers, snapshots } = services;
+  return providers.prepare(request.record, snapshots, request.current);
+}
+
+function recovered(
+  prepared: Promise<PreparedMountRecord>,
+  persistence: MountPersistence,
+  request: PrepareRequest,
+) {
+  const onError = (error: unknown) =>
+    fetchFailed(persistence, request.record, request.actor, error);
+  return prepared.catch(onError);
 }
 
 function fetchFailed(
@@ -36,10 +54,8 @@ function fetchFailed(
   actor: string,
   error: unknown,
 ): never {
-  persistence.audit(record, actor, "fetch", {
-    outcome: "failed",
-    detail: detail(error),
-  });
+  const outcome = { outcome: "failed", detail: detail(error) };
+  persistence.audit(record, actor, "fetch", outcome);
   throw error;
 }
 

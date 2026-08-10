@@ -8,8 +8,12 @@ export function slackPluginPath(
   const record = mounts
     .mounts()
     .find((item) => item.id === id && item.provider === "slack");
+  return required(record, id).path;
+}
+
+function required(record: { path: AbsolutePath } | undefined, id: string) {
   if (!record) {
     throw new Error(`No such slack plugin: ${id}`);
   }
-  return record.path;
+  return record;
 }

@@ -8,6 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { validate } from "./DaemonStateValidation";
 
 export type DaemonState = {
   version: 1;
@@ -99,39 +100,6 @@ async function replace(path: string, temporary: string, contents: string) {
   await writeFile(temporary, contents);
   await rename(temporary, path);
   await syncDirectory(path);
-}
-
-function validate(value: unknown): DaemonState {
-  if (!value || typeof value !== "object") {
-    throw new Error("Invalid daemon state");
-  }
-  const state = value as DaemonState;
-  return validState(state) ? state : invalidState();
-}
-
-function invalidState(): never {
-  throw new Error("Invalid daemon state");
-}
-
-function validState(state: DaemonState) {
-  return validAddress(state) && validIdentity(state);
-}
-
-function validAddress(state: DaemonState) {
-  return (
-    state.version === 1 &&
-    typeof state.host === "string" &&
-    Number.isInteger(state.port)
-  );
-}
-
-function validIdentity(state: DaemonState) {
-  return (
-    Number.isInteger(state.pid) &&
-    typeof state.startedAt === "string" &&
-    typeof state.instanceId === "string" &&
-    (state.configPath === undefined || typeof state.configPath === "string")
-  );
 }
 
 function absentState(error: unknown): undefined {

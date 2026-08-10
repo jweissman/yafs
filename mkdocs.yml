@@ -5,6 +5,7 @@ theme:
 nav:
   - Overview: index.md
   - Yash command reference: COMMANDS.md
+  - Yash language roadmap: LANGUAGE-ROADMAP.md
   - M5 validation: M5-VALIDATION.md
   - M6 validation: M6-VALIDATION.md
   - M6.3 validation: M6.3-VALIDATION.md

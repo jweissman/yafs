@@ -128,10 +128,6 @@ function searchSummary(
   item: { number: number; title: string; updated_at: string },
   headSha: string,
 ) {
-  return {
-    number: item.number,
-    title: item.title,
-    updatedAt: item.updated_at,
-    headSha,
-  };
+  const { number, title, updated_at: updatedAt } = item;
+  return { number, title, updatedAt, headSha };
 }

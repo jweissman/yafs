@@ -1,15 +1,18 @@
 import { expect, test } from "bun:test";
 
 import Yafs from "../src";
+import { parseManifest } from "../src/mounts/Manifest";
 
-test("plugin lifecycle commands require their expected arguments", () => {
+const REJECTED =
+  "plugin no longer accepts validate|activate|refresh; declare instances " +
+  "in a host-side yafs.plugins.yaml and use `plugins apply` (see `plugins " +
+  "describe`)";
+
+test("plugin no longer accepts validate/activate/refresh, and deactivate still requires an id", () => {
   const yafs = new Yafs();
-  expect(yafs.execute("plugin activate").stderr).toBe(
-    "plugin requires a manifest path",
-  );
-  expect(yafs.execute("plugin refresh").stderr).toBe(
-    "plugin refresh requires a manifest path",
-  );
+  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(REJECTED);
+  expect(yafs.execute("plugin activate .yafsmeta").stderr).toBe(REJECTED);
+  expect(yafs.execute("plugin refresh .yafsmeta").stderr).toBe(REJECTED);
   expect(yafs.execute("plugin deactivate").stderr).toBe(
     "plugin deactivate requires an id",
   );
@@ -34,12 +37,7 @@ test("plugins with no subcommand describes every plugin, and an unknown action i
 });
 
 test("a manifest cannot declare both plugins and mounts", () => {
-  const yafs = new Yafs();
-  yafs.store.write(
-    "/home/root/.yafsmeta",
-    "{version: 1, plugins: [], mounts: []}",
-  );
-  expect(yafs.execute("plugin validate .yafsmeta").stderr).toBe(
+  expect(() => parseManifest("{version: 1, plugins: [], mounts: []}")).toThrow(
     "Use plugins, not both plugins and mounts",
   );
 });

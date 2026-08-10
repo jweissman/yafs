@@ -66,10 +66,13 @@ path from acquiring network or secret authority.
 
 ## Configuration model
 
-`.yafsmeta` is restricted YAML, not arbitrary plugin code. It is schema
+A plugin manifest is restricted YAML, not arbitrary plugin code. It is schema
 validated, versioned, rejects unknown fields, duplicate keys, tags, aliases,
-and anchors, and requests capabilities rather than granting them. It describes
-a workspace declaration; it is not the daemon's deployment configuration.
+and anchors, and requests capabilities rather than granting them. There is no
+in-VFS way to declare or activate one — `yafs.plugins.yaml`, selected by
+`yafsd --config`, is the sole deployment configuration and the sole
+capability-granting mechanism (see `docs/ADR.md`'s "Capabilities,
+distribution, and adapters" removal policy).
 
 ```yaml
 version: 1
@@ -90,7 +93,7 @@ This mounts a GitHub collection, not PR 482. Its provider projects matching PRs
 under `source/pulls/<number>/`; a PR number is a virtual child path, not mount
 configuration. Its kernel-owned, daemon-executed refresh policy publishes a new complete
 collection snapshot; it never updates individual PR paths in place. The operator
-may request `mount refresh .yafsmeta github-acme-widget` explicitly. A declared
+may request `plugins refresh github-acme-widget` explicitly. A declared
 interval is daemon-scheduled through that same refresh publication path; it is
 never silently inferred from the manifest.
 

@@ -1,6 +1,3 @@
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, test } from "bun:test";
 
 import {
@@ -10,8 +7,8 @@ import {
   waitForStatus,
 } from "./agent_test_helpers";
 import { agentCommands } from "../src/plugins/agent/AgentCommands";
-import { YafsServer } from "../src/protocol/server";
-import { YashClient } from "../src/protocol/client";
+import { parseManifest } from "../src/mounts/Manifest";
+import { startedHostConfigServer } from "./desired_mount_helpers";
 
 test("agent command exposes one mutating command definition", () => {
   expect(agentCommands()).toMatchObject([{ name: "agent", access: "mutate" }]);
@@ -21,10 +18,10 @@ test("agent pseudobinaries send, inspect, and cancel a run without ctl JSON", as
   const model = controlledModel();
   const { client, server } = await startedAgentServer(model);
   await expect(client.exec("agent nope")).rejects.toThrow("agent expects");
-  await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  await client.exec("plugins apply");
   const accepted = await client.exec('agent send agents/reviewer "check this"');
   expect(accepted).toMatch(
+    // eslint-disable-next-line @stylistic/max-len -- unsplittable regex literal
     /^accepted: agents\/reviewer -> \/home\/root\/agents\/reviewer\/runs\/[\w-]+$/,
   );
   const run = accepted.split(" -> ")[1];
@@ -48,22 +45,21 @@ test("agent pseudobinaries send, inspect, and cancel a run without ctl JSON", as
 });
 
 async function startedAgentServer(model: ReturnType<typeof controlledModel>) {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-command-")),
-    modelFor: () => model.client,
-  });
-  const client = await YashClient.connect(server.address());
+  const { server, client } = await startedHostConfigServer(
+    "yafs-agent-command-",
+    manifest({ reviewer: "prompt" }),
+    { modelFor: () => model.client },
+  );
   return { client, server };
 }
 
 test("agent send resolves a bare persona name from anywhere, not just its own directory", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-cwd-")),
-    modelFor: () => fakeMessageModel([]),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const { server, client } = await startedHostConfigServer(
+    "yafs-agent-cwd-",
+    manifest({ reviewer: "prompt" }),
+    { modelFor: () => fakeMessageModel([]) },
+  );
+  await client.exec("plugins apply");
   await client.exec("mkdir elsewhere");
   await client.exec("cd elsewhere");
   const accepted = await client.exec('agent send reviewer "hi"');
@@ -78,18 +74,16 @@ test("agent send resolves a bare persona name from anywhere, not just its own di
 });
 
 test("agent send rejects an ambiguous bare persona name shared by two plugins", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-ambiguous-")),
-    modelFor: () => fakeMessageModel([]),
-  });
-  const client = await YashClient.connect(server.address());
-  await client.exec(`printf '${manifest({ reviewer: "prompt" })}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
   const second = manifest({ reviewer: "prompt" })
     .replace("id: reviewer", "id: second")
     .replace("path: agents", "path: agents2");
-  await client.exec(`printf '${second}' > .yafsmeta2`);
-  await client.exec("plugin activate .yafsmeta2 second");
+  const combined = combinedManifests(manifest({ reviewer: "prompt" }), second);
+  const { server, client } = await startedHostConfigServer(
+    "yafs-agent-ambiguous-",
+    combined,
+    { modelFor: () => fakeMessageModel([]) },
+  );
+  await client.exec("plugins apply");
   await expect(client.exec('agent send reviewer "hi"')).rejects.toThrow(
     "Ambiguous persona reviewer",
   );
@@ -100,15 +94,29 @@ test("agent send rejects an ambiguous bare persona name shared by two plugins", 
   await server.close();
 });
 
+function combinedManifests(first: string, second: string) {
+  const mounts = [
+    ...parseManifest(first).manifest.mounts,
+    ...parseManifest(second).manifest.mounts,
+  ];
+  return JSON.stringify({ version: 1, mounts });
+}
+
 test("agent personas lists every configured persona across active agent mounts", async () => {
-  const server = await YafsServer.start({
-    dataDir: await mkdtemp(join(tmpdir(), "yafs-agent-personas-")),
-    modelFor: () => fakeMessageModel([]),
-  });
-  const client = await YashClient.connect(server.address());
-  expect(JSON.parse(await client.exec("agent personas"))).toEqual([]);
-  await client.exec(`printf '${multiPersonaManifest()}' > .yafsmeta`);
-  await client.exec("plugin activate .yafsmeta");
+  const bareServer = await startedHostConfigServer(
+    "yafs-agent-personas-empty-",
+    "{version: 1, mounts: []}",
+  );
+  expect(JSON.parse(await bareServer.client.exec("agent personas"))).toEqual(
+    [],
+  );
+  await bareServer.client.close();
+  await bareServer.server.close();
+  const { server, client } = await startedHostConfigServer(
+    "yafs-agent-personas-",
+    multiPersonaManifest(),
+  );
+  await client.exec("plugins apply");
   expect(JSON.parse(await client.exec("agent personas"))).toEqual([
     { mountPath: "/home/root/agents", persona: "alpha" },
     { mountPath: "/home/root/agents", persona: "beta" },

@@ -5,12 +5,19 @@ export function carryForward(
   current: PreparedMountRecord | undefined,
   owned: (path: string) => boolean,
 ): [string, string][] {
-  if (!current) {
-    return fresh;
-  }
   const merged = new Map(fresh);
-  applyOwned(merged, current.snapshot.entries, owned);
+  mergeCurrent(merged, current, owned);
   return [...merged];
+}
+
+function mergeCurrent(
+  merged: Map<string, string>,
+  current: PreparedMountRecord | undefined,
+  owned: (path: string) => boolean,
+) {
+  if (current) {
+    applyOwned(merged, current.snapshot.entries, owned);
+  }
 }
 
 function applyOwned(

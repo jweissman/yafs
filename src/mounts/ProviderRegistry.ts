@@ -62,10 +62,7 @@ function providerDefinitions(
   authenticatedGithub?: GitHubCollectionSource,
   slack?: SlackCollectionSource,
 ): Plugin[] {
-  return [
-    new FixturePlugin(),
-    new AgentPlugin(),
-    new GitHubPlugin({ github, authenticatedGithub }),
-    new SlackPlugin(slack),
-  ];
+  const githubPlugin = new GitHubPlugin({ github, authenticatedGithub });
+  const builtins = [new FixturePlugin(), new AgentPlugin()];
+  return [...builtins, githubPlugin, new SlackPlugin(slack)];
 }
