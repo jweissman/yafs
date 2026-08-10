@@ -69,14 +69,16 @@ async function start(configPath = settings.configPath) {
   if (await managedState(statePaths.state)) {
     return report("running");
   }
-  const child = await launch(configPath);
-  await waitForState(child, statePaths);
+  const launched = await launch(configPath);
+  await waitForState(launched.child, statePaths, launched.logOffset);
   report("started");
 }
 
 async function launch(configPath?: string) {
   await mkdir(statePaths.directory, { recursive: true });
-  return detach(await open(statePaths.log, "a"), configPath);
+  const log = await open(statePaths.log, "a");
+  const logOffset = (await log.stat()).size;
+  return { child: detach(log, configPath), logOffset };
 }
 
 function detach(log: Awaited<ReturnType<typeof open>>, configPath?: string) {

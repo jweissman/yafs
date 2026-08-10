@@ -1,5 +1,6 @@
 import type { ExecutionResult } from "../types/ExecutionResult";
 import { CacheRequest } from "../cache/CacheRequest";
+import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 export type Response = { version: number; id: number; result: ExecutionResult };
 export type ProtocolFailure = {
@@ -10,7 +11,8 @@ export type ProtocolFailure = {
 export type Payload =
   | { command: string }
   | { write: { path: string; content: string } }
-  | { cache: CacheRequest };
+  | { cache: CacheRequest }
+  | { operation: WorkspaceOperation };
 
 export type ResultResolver = (result: ExecutionResult) => void;
 export type ErrorResolver = (error: Error) => void;

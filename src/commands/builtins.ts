@@ -7,6 +7,7 @@ import { traceCommands } from "./TraceCommands";
 import { cacheCommands } from "./CacheCommands";
 import { pluginCommands } from "./PluginCommands";
 import { pluginKinds } from "../mounts/PluginKinds";
+import { workspaceLiteracyCommands } from "./WorkspaceLiteracyCommands";
 
 export function commands(): BuiltinCommand[] {
   return [...coreCommands(), ...pluginFamilyCommands()];
@@ -18,6 +19,7 @@ function coreCommands(): BuiltinCommand[] {
     ...filesystemCommands(),
     ...textCommands(),
     ...inspectionCommands(),
+    ...workspaceLiteracyCommands(),
   ];
 }
 

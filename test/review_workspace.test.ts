@@ -19,8 +19,8 @@ test("two review sessions share one GitHub revision and leave separate durable t
   await alice.exec("plugins apply");
   await alice.exec("mkdir notes");
   await alice.exec("mkdir notes/42");
-  await alice.exec("trace reviews/pulls/42 notes/42/alice");
-  await bob.exec("trace /home/root/reviews/pulls/42 /home/root/notes/42/bob");
+  await alice.exec("capture reviews/pulls/42 notes/42/alice");
+  await bob.exec("capture /home/root/reviews/pulls/42 /home/root/notes/42/bob");
   const aliceTrace = JSON.parse(
     await alice.exec("cat notes/42/alice/trace.json"),
   );

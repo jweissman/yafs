@@ -5,6 +5,7 @@ import { Word } from "./lang/Word";
 import { yafsContext } from "./YafsContext";
 import { evaluateWord, evaluateWordAsync } from "./lang/evaluate";
 import { variable } from "./YafsValues";
+import { assertReadOnlyCommand } from "./commands/ReadOnlySource";
 
 export class YafsCommandRuntime {
   constructor(private readonly yafs: Yafs) {}
@@ -64,6 +65,7 @@ export class YafsCommandRuntime {
   }
 
   private substitute(command: Command): string {
+    assertReadOnlyCommand(command);
     const state = this.state();
     try {
       return this.handle(command).replace(/\n+$/, "");
@@ -73,6 +75,7 @@ export class YafsCommandRuntime {
   }
 
   private async substituteAsync(command: Command): Promise<string> {
+    assertReadOnlyCommand(command);
     const state = this.state();
     try {
       return (await this.handleAsync(command)).replace(/\n+$/, "");

@@ -18,6 +18,7 @@ import {
   planExecutionAsync,
   planWrite,
 } from "./YafsExecution";
+import { planOperation, planOperationAsync } from "./YafsOperationPlan";
 import { YafsCommandRuntime } from "./YafsCommandRuntime";
 import { BlobStore } from "./protocol/BlobStore";
 import { TraceService } from "./traces/TraceService";
@@ -25,6 +26,8 @@ import { DesiredMounts } from "./mounts/DesiredMounts";
 import { CacheService } from "./cache/CacheService";
 import { requiredArg } from "./YafsValues";
 import { initializeYafs } from "./YafsInitialization";
+import { WorkspaceOperations } from "./operations/WorkspaceOperations";
+import { yafsContext } from "./YafsContext";
 
 export type YafsOptions = {
   store?: NodeStore;
@@ -52,6 +55,7 @@ export default class Yafs {
   cache: CacheService;
   desired?: DesiredMounts;
   commands = new YafsCommandRuntime(this);
+  operations = new WorkspaceOperations(() => yafsContext(this));
 
   constructor(options: YafsOptions = {}) {
     initializeYafs(this, options);
@@ -94,6 +98,14 @@ export default class Yafs {
   }
   planCache(request: import("./cache/CacheRequest").CacheRequest) {
     return planCache(this, request);
+  }
+  planOperation(request: import("./operations/WorkspaceOperation").WorkspaceOperation) {
+    return planOperation(this, request);
+  }
+  planOperationAsync(
+    request: import("./operations/WorkspaceOperation").WorkspaceOperation,
+  ) {
+    return planOperationAsync(this, request);
   }
 
   handle(command: import("./types/Command").Command): string {

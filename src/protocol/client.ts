@@ -7,6 +7,7 @@ import { completionTarget } from "./CompletionTarget";
 import { LineBuffer } from "./LineBuffer";
 import { Payload, Response } from "./ClientProtocol";
 import { PendingRequests } from "./PendingRequests";
+import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 type Address = { host: string; port: number };
 
@@ -47,6 +48,9 @@ export class YashClient {
 
   execute(command: string): Promise<ExecutionResult> {
     return this.send({ command });
+  }
+  operation(request: WorkspaceOperation): Promise<ExecutionResult> {
+    return this.send({ operation: request });
   }
 
   writeFile(path: string, content: string): Promise<ExecutionResult> {

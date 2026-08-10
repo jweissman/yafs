@@ -121,9 +121,11 @@ is a separate shell construct. [POSIX Shell Command Language](https://pubs.openg
 
 Today’s parser builds arithmetic and command-substitution AST nodes before
 execution. `$((...))` evaluates integer arithmetic; bare `$(...)` executes a
-nested Yafs command only during word expansion, captures stdout without trailing
-newlines, and discards nested session/VFS mutations. It also works as a part
-of a double-quoted word. Pipes remain later grammar work.
+nested **read-only** Yafs command only during word expansion and captures
+stdout without trailing newlines. A session, mutation, control, or provider
+action is rejected before it runs; queue restoration is not treated as a
+security boundary. It also works as a part of a double-quoted word. Pipes
+remain later grammar work.
 
 The eventual parser should build this shape before execution:
 
@@ -624,7 +626,7 @@ agent provider before adding a provider marketplace or another controller.
 desired configuration (`yafsd --config` only as a deployment override),
 `plugins status|plan|apply [--prune]`, lifecycle-bound agent `ctl` registration,
 durable agent acceptance/cancellation/restart interruption, and a
-trace → reify → context-bound review run are implemented and regression-tested.
+capture → restore → context-bound review run are implemented and regression-tested.
 The remaining delivery decision is whether to promote the built-in action
 schema into a stable package-facing ABI; it is intentionally not implied by
 the current provider object.

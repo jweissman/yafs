@@ -1,5 +1,6 @@
 import { BuiltinCommand } from "./BuiltinCommand";
 import { CommandContext } from "./CommandContext";
+import { grep } from "../operations/WorkspaceGrep";
 
 class GrepCommand implements BuiltinCommand {
   readonly name = "grep";
@@ -7,8 +8,8 @@ class GrepCommand implements BuiltinCommand {
   readonly access = "read" as const;
   execute(context: CommandContext, args: string[]) {
     const query = this.arguments(args);
-    return query.paths
-      .flatMap((path) => this.matches(context, query, path))
+    return grep(context, query.pattern, query.paths)
+      .map((match) => `${this.prefix(query, match.line - 1)}${match.text}`)
       .join("\n");
   }
   private arguments(args: string[]) {
@@ -18,23 +19,6 @@ class GrepCommand implements BuiltinCommand {
       throw new Error("grep requires a pattern and path");
     }
     return { numbered, pattern: values[0], paths: values.slice(1) };
-  }
-  private matches(
-    context: CommandContext,
-    query: { numbered: boolean; pattern: string },
-    path: string,
-  ) {
-    const fileLines = lines(context.read(context.resolve(path)));
-    return fileLines.flatMap((line, index) => this.matched(query, line, index));
-  }
-  private matched(
-    query: { numbered: boolean; pattern: string },
-    line: string,
-    index: number,
-  ) {
-    return line.includes(query.pattern)
-      ? [`${this.prefix(query, index)}${line}`]
-      : [];
   }
   private prefix(query: { numbered: boolean }, index: number) {
     return query.numbered ? `${index + 1}:` : "";

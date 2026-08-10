@@ -1,6 +1,7 @@
 import Yafs from "../index";
 import type { ExecutionResult } from "../types/ExecutionResult";
 import { completionTarget } from "./CompletionTarget";
+import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 export class LocalYashClient {
   private readonly yafs = new Yafs();
@@ -9,6 +10,13 @@ export class LocalYashClient {
 
   async execute(command: string): Promise<ExecutionResult> {
     return this.yafs.executeAsync(command);
+  }
+  async operation(request: WorkspaceOperation): Promise<ExecutionResult> {
+    const plan = await this.yafs.planOperationAsync(request);
+    if (!plan.result.error) {
+      this.yafs.apply(plan.operations);
+    }
+    return plan.result;
   }
   async writeFile(path: string, content: string): Promise<ExecutionResult> {
     return this.yafs.executeWrite(path, content);

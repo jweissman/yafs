@@ -23,12 +23,12 @@ export class ProviderRegistry {
     );
   }
 
-  assertGranted(record: { provider: string; capabilities: string[] }) {
+  assertGranted(record: Pick<MountRecord, "id" | "provider" | "capabilities">) {
     const denied = record.capabilities.filter(
       (capability) => !this.allowed(record.provider, capability),
     );
     if (denied.length) {
-      throw new Error(`Capabilities are not granted: ${denied.join(", ")}`);
+      throw new Error(this.capabilityError(record, denied));
     }
   }
 
@@ -38,6 +38,15 @@ export class ProviderRegistry {
 
   private allowed(provider: string, capability: string) {
     return this.definition(provider).capabilities().includes(capability);
+  }
+
+  private capabilityError(
+    record: Pick<MountRecord, "id" | "provider" | "capabilities">,
+    denied: string[],
+  ) {
+    return this.definition(record.provider)
+      .unavailableCapability(record, denied[0])
+      || `Capabilities are not granted: ${denied.join(", ")}`;
   }
 
   prepare(

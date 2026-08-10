@@ -17,13 +17,13 @@ test("a durable trace survives restart, retains its blobs, and reifies without i
   await client.exec("mkdir source");
   await client.exec("echo captured > source/a.txt");
   await client.exec("mkdir artifacts");
-  await client.exec("trace source artifacts/one");
+  await client.exec("capture source artifacts/one");
   await client.close();
   await server.close();
   const restarted = await YafsServer.start({ dataDir: directory });
   const restored = await YashClient.connect(restarted.address());
   expect(await restored.exec("blobs gc")).toBe('{"reclaimed":[]}');
-  await restored.exec("reify artifacts/one restored");
+  await restored.exec("restore artifacts/one restored");
   expect(await restored.exec("cat restored/a.txt")).toBe("captured");
   await restored.close();
   await restarted.close();
@@ -37,7 +37,7 @@ test("a daemon reifies a missing pinned GitHub trace only through its provider h
   );
   await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
-  await client.exec("trace reviews/pulls/42 artifacts/one");
+  await client.exec("capture reviews/pulls/42 artifacts/one");
   const trace = JSON.parse(await client.exec("cat artifacts/one/trace.json"));
   await client.close();
   await server.close();
@@ -47,7 +47,7 @@ test("a daemon reifies a missing pinned GitHub trace only through its provider h
     traceReifier: reifier(),
   });
   const restored = await YashClient.connect(restarted.address());
-  await restored.exec("reify artifacts/one restored");
+  await restored.exec("restore artifacts/one restored");
   expect(await restored.exec("cat restored/diff.patch")).toBe("diff --git");
   await restored.close();
   await restarted.close();
@@ -62,7 +62,7 @@ test("a daemon reifies a missing pinned GitHub trace by refetching the pull thro
     traceReifier: reifier,
   });
   const restored = await YashClient.connect(restarted.address());
-  await restored.exec("reify artifacts/one restored");
+  await restored.exec("restore artifacts/one restored");
   expect(await restored.exec("cat restored/diff.patch")).toBe("diff --git");
   expect(
     JSON.parse(await restored.exec("cat restored/metadata.json")),
@@ -82,7 +82,7 @@ async function capturedGitHubTrace() {
   );
   await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
-  await client.exec("trace reviews/pulls/42 artifacts/one");
+  await client.exec("capture reviews/pulls/42 artifacts/one");
   const trace = JSON.parse(await client.exec("cat artifacts/one/trace.json"));
   await client.close();
   await server.close();

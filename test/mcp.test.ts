@@ -10,6 +10,7 @@ test("MCP exposes a narrow read and inspection bridge over Yafs", async () => {
   const server = new McpServer(client);
   await assertDiscovery(server);
   await assertReads(server);
+  await assertLiteracy(server);
   await assertQueryIsReadOnly(server);
   await assertProtocolEdgeCases(server);
   await client.close();
@@ -26,9 +27,26 @@ async function assertDiscovery(server: McpServer) {
         expect.objectContaining({ name: "yafs.read" }),
         expect.objectContaining({ name: "yafs.inspect" }),
         expect.objectContaining({ name: "yafs.query" }),
+        expect.objectContaining({ name: "yafs.grep" }),
+        expect.objectContaining({ name: "yafs.diff" }),
+        expect.objectContaining({ name: "yafs.capture" }),
+        expect.objectContaining({ name: "yafs.restore" }),
       ]),
     },
   });
+}
+
+async function assertLiteracy(server: McpServer) {
+  expect(await toolText(server, 20, "yafs.tree", { path: "/home/root/work" })).toContain("brief.md");
+  expect(await toolText(server, 21, "yafs.find", { path: "/home/root", pattern: "*.md" })).toContain("brief.md");
+  expect(await toolText(server, 22, "yafs.test", { path: "/home/root/work", predicate: "-d" })).toContain("true");
+  expect(await toolText(server, 23, "yafs.grep", { pattern: "concise", paths: ["/home/root/work/brief.md"] })).toContain('"line":1');
+  expect(await toolText(server, 24, "yafs.grep", {
+    pattern: "concise", paths: ["/home/root/work/brief.md"], limit: 0,
+  })).toContain("Result limit exceeded");
+  expect(await toolText(server, 25, "yafs.diff", {
+    left: "/home/root/work/brief.md", right: "/home/root/work/brief.md",
+  })).toContain('"changes":[]');
 }
 
 async function assertReads(server: McpServer) {

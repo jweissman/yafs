@@ -7,6 +7,7 @@ import {
   listPersonas,
 } from "./plugins/agent/AgentPersonaLookup";
 import { slackPluginPath } from "./plugins/slack/SlackPluginLookup";
+import { missingDesiredMounts } from "./mounts/MissingDesiredMounts";
 
 export function mountContext(
   manager: MountManager,
@@ -79,17 +80,6 @@ function desiredMutations(
   return {
     applyDesired: (prune = false) => desired.apply(mutations, prune),
     refreshDesired: (id: string) => desired.refreshOne(id, mutations),
-  };
-}
-
-function missingDesiredMounts() {
-  const missing = () =>
-    Promise.reject(new Error("No daemon mount configuration"));
-  return {
-    desiredStatus: () => Promise.resolve({ configured: false }),
-    desiredPlan: () => Promise.resolve([]),
-    applyDesired: missing,
-    refreshDesired: missing,
   };
 }
 

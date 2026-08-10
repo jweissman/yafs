@@ -1,14 +1,13 @@
 import { readFile } from "node:fs/promises";
-
 import { AbsolutePath } from "../core/AbsolutePath";
 import { parseManifest } from "./Manifest";
 import { MountManager } from "./MountManager";
 import { Change, DesiredMountChanges } from "./DesiredMountChanges";
 import { activeEntries } from "./DesiredMountEntries";
 import { applyChange, Mutations, Target } from "./DesiredMountPublish";
+import { noPluginConfiguration, unconfiguredPluginRemedy } from "./PluginConfiguration";
 
 type DesiredMountsOptions = { path?: string; root?: AbsolutePath };
-
 export class DesiredMounts {
   private readonly path?: string;
   private readonly root: AbsolutePath;
@@ -70,7 +69,7 @@ export class DesiredMounts {
   private async required() {
     const loaded = await this.loaded();
     if (!loaded) {
-      throw new Error("No daemon mount configuration");
+      throw new Error(noPluginConfiguration());
     }
     return loaded;
   }
@@ -95,6 +94,7 @@ export class DesiredMounts {
       configured: Boolean(loaded),
       changes: loaded ? this.changesFor(loaded) : [],
       active: activeEntries(this.mounts),
+      ...(loaded ? {} : { remedy: unconfiguredPluginRemedy() }),
     };
   }
 }

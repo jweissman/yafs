@@ -119,8 +119,8 @@ async function plannedAsync(yafs: Yafs, input: string): Promise<ExecutionPlan> {
   return { result, operations: yafs.operationQueue.all() };
 }
 
-function success(yafs: Yafs, stdout: string): ExecutionResult {
-  return { stdout, stderr: "", status: 0, session: session(yafs) };
+function success(yafs: Yafs, stdout: string, value?: ExecutionResult["value"]): ExecutionResult {
+  return { stdout, stderr: "", status: 0, value, session: session(yafs) };
 }
 
 function failure(yafs: Yafs, error: unknown): ExecutionResult {

@@ -12,8 +12,8 @@ test("a review run consumes a reified trace and preserves the exact diff context
   );
   await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
-  await client.exec("trace source artifacts/review-42");
-  await client.exec("reify artifacts/review-42 restored-42");
+  await client.exec("capture source artifacts/review-42");
+  await client.exec("restore artifacts/review-42 restored-42");
   await client.exec(
     'agent send agents/reviewer --context restored-42/diff.patch "Review PR 42"',
   );

@@ -15,6 +15,9 @@ test("a yash client talks to a persistent server", async () => {
   const client = await YashClient.connect(server.address());
   expect(await client.exec("mkdir notes")).toBe("");
   expect(await client.exec("touch notes/note.md")).toBe("");
+  expect((await client.operation({ name: "list", path: "notes" })).value).toEqual({
+    kind: "list", path: "/home/root/notes", entries: ["note.md"],
+  });
   await client.close();
   await server.close();
   const restarted = await YafsServer.start({ walPath });

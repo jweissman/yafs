@@ -175,6 +175,25 @@ Mounting a view never grants action authority. M5 implements a GitHub view and
 mount lifecycle actions only; provider actions and remote writes remain later
 work with their own intent/outcome protocol.
 
+## L1 workspace literacy
+
+**Decision:** the next language increment is a bounded typed inspection and
+evidence vocabulary, not a POSIX command expansion. `tree`, `find`, literal
+`grep`, `diff`, `test`, `capture`, and `restore` each have one workspace
+operation with typed input/output and explicit result limits; Yash, MCP, web,
+and SDK surfaces adapt that operation rather than each defining command
+semantics. `find` may own a deliberately small filename `*` matcher, but
+shell glob expansion remains a later language decision. Command substitutions
+and future predicates execute only `read` operations before any work starts.
+
+`capture`/`restore` are the user-facing names for the already-proven durable
+artifact mechanism. The trace manifest, content-addressed blobs, provenance,
+and immutable provider-reference reifier remain the implementation model;
+there is no change to their retention or recovery guarantees. The rename is
+intended to make the operator's lifecycle legible—capture current evidence,
+then restore an independent local copy—without preserving two permanent
+command vocabularies.
+
 ## Actions and durable traces
 
 Two mechanisms make the view/action split concrete enough to build against.

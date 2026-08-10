@@ -10,12 +10,12 @@ import { ProviderRegistry } from "../src/mounts/ProviderRegistry";
 import { NodeStore } from "../src/vfs/NodeStore";
 import { activateDesired, refreshDesired } from "./desired_mount_helpers";
 
-test("trace captures a provider subtree and reify preserves it after refresh", async () => {
+test("capture preserves a provider subtree across refresh and restore", async () => {
   const pulls: GitHubPull[] = [pull()];
   const yafs = configuredYafs(pulls);
   await activateDesired(yafs, manifest());
   yafs.exec("mkdir notes");
-  await yafs.executeAsync("trace reviews/pulls/42 notes/42");
+  await yafs.executeAsync("capture reviews/pulls/42 notes/42");
   const trace = JSON.parse(yafs.exec("cat notes/42/trace.json"));
   expect(trace).toMatchObject({
     sourcePath: "/home/root/reviews/pulls/42",
@@ -29,21 +29,23 @@ test("trace captures a provider subtree and reify preserves it after refresh", a
   });
   pulls.length = 0;
   await refreshDesired(yafs, manifest());
-  await yafs.executeAsync("reify notes/42 restored");
+  await yafs.executeAsync("restore notes/42 restored");
   expect(yafs.exec("cat restored/diff.patch")).toBe("diff --git");
 });
 
-test("trace creates a durable artifact only for a directory and reify rejects existing output", async () => {
+test("capture only accepts directories and restore rejects existing output", async () => {
   const yafs = new Yafs();
   yafs.exec("mkdir notes");
   yafs.exec("echo text > source.txt");
   expect(
-    (await yafs.executeAsync("trace source.txt notes/source")).stderr,
+    (await yafs.executeAsync("capture source.txt notes/source")).stderr,
   ).toContain("must be a directory");
-  await yafs.executeAsync("trace notes notes/copy");
-  expect((await yafs.executeAsync("reify notes/copy notes")).stderr).toContain(
+  await yafs.executeAsync("capture notes notes/copy");
+  expect((await yafs.executeAsync("restore notes/copy notes")).stderr).toContain(
     "already exists",
   );
+  expect((await yafs.executeAsync("capture --limit 0 notes notes/limited")).stderr)
+    .toContain("Result limit exceeded");
 });
 
 test("blobs gc is an explicit control command", async () => {
@@ -57,22 +59,24 @@ test("a failed trace plan leaves blobs unretained for explicit collection", asyn
   yafs.exec("mkdir source");
   yafs.exec("echo captured > source/a.txt");
   expect(
-    (await yafs.executeAsync("trace source missing/artifact")).error,
+    (await yafs.executeAsync("capture source missing/artifact")).error,
   ).toBeDefined();
   expect(
     JSON.parse((await yafs.executeAsync("blobs gc")).stdout).reclaimed,
   ).toHaveLength(1);
 });
 
-test("a trace inside command substitution discards its queued retention effect", async () => {
+test("command substitution rejects trace before it can retain blobs", async () => {
   const yafs = new Yafs();
   yafs.exec("mkdir source");
   yafs.exec("echo captured > source/a.txt");
-  await yafs.executeAsync("echo $(trace source artifact)");
+  expect((await yafs.executeAsync("echo $(trace source artifact)")).stderr).toContain(
+    "not read-only",
+  );
   expect(yafs.store.get("/home/root/artifact", false)).toBeUndefined();
   expect(
     JSON.parse((await yafs.executeAsync("blobs gc")).stdout).reclaimed,
-  ).toHaveLength(1);
+  ).toHaveLength(0);
 });
 
 function configuredYafs(pulls: GitHubPull[]) {

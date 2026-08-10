@@ -5,6 +5,24 @@ import { TraceEntry, TraceFilesystem } from "./TraceTypes";
 
 type Source = { blobs: BlobStore; files: TraceFilesystem };
 
+export function assertEntryLimit(
+  files: TraceFilesystem, path: AbsolutePath, limit: number,
+) {
+  if (entryCount(files, path) > limit) {
+    throw new Error("Result limit exceeded");
+  }
+}
+
+function entryCount(files: TraceFilesystem, path: AbsolutePath): number {
+  return files.type(path) === "file" ? 1 : childCount(files, path);
+}
+
+function childCount(files: TraceFilesystem, path: AbsolutePath) {
+  return files.list(path).reduce((count, name) => {
+    return count + entryCount(files, PathResolver.resolve(name, path));
+  }, 0);
+}
+
 export async function collectEntries(
   blobs: BlobStore,
   files: TraceFilesystem,

@@ -1,70 +1,38 @@
-import { AbsolutePath } from "../core/AbsolutePath";
-import { Provenance } from "../mounts/types";
-import { traceFilesystem } from "../traces/TraceContextFilesystem";
+import { capture, restore as restoreArtifact } from "../traces/EvidenceOperations";
 import { BuiltinCommand } from "./BuiltinCommand";
 import { CommandContext } from "./CommandContext";
 
 export function traceCommands(): BuiltinCommand[] {
-  return [traceCommand(), reifyCommand(), blobCommand()];
+  return [captureCommand(), restoreCommand(), blobCommand()];
 }
 
-function traceCommand(): BuiltinCommand {
+function captureCommand(): BuiltinCommand {
   return {
-    name: "trace",
-    synopsis: "trace SOURCE ARTIFACT_DIRECTORY",
+    name: "capture",
+    synopsis: "capture [--limit COUNT] SOURCE ARTIFACT_DIRECTORY",
     access: "mutate",
-    execute: (context, args) => trace(context, args),
+    execute: (context, args) => captureCommandRun(context, args),
   };
 }
-async function trace(context: CommandContext, args: string[]) {
-  const source = path(context, args, 0, "trace");
-  const artifact = path(context, args, 1, "trace");
-  if (context.exists(artifact)) {
-    throw new Error(`Trace destination already exists: ${artifact}`);
-  }
-  return capture(context, source, artifact);
-}
-async function capture(
-  context: CommandContext,
-  source: AbsolutePath,
-  artifact: AbsolutePath,
-) {
-  const captured = await captureTrace(context, source);
-  captured.resourceReference = context.resourceReference(source);
-  publish(context, artifact, captured);
+async function captureCommandRun(context: CommandContext, args: string[]) {
+  const options = captureOptions(args);
+  const source = path(context, args, options.offset, "capture");
+  const artifact = path(context, args, options.offset + 1, "capture");
+  await capture(context, source, artifact, options.limit);
   return "";
 }
-function captureTrace(context: CommandContext, source: AbsolutePath) {
-  return context.traces.capture(
-    traceFilesystem(context),
-    source,
-    providerOrigin(context, source),
-    context.clock.now().toISOString(),
-  );
-}
-function publish(
-  context: CommandContext,
-  artifact: AbsolutePath,
-  captured: import("../traces/TraceService").Trace,
-) {
-  context.afterCommit(() => context.traces.retain(captured, owner(artifact)));
-  context.mkdir(artifact);
-  context.write(manifest(artifact), JSON.stringify(captured));
-}
-function reifyCommand(): BuiltinCommand {
+function restoreCommand(): BuiltinCommand {
   return {
-    name: "reify",
-    synopsis: "reify ARTIFACT_DIRECTORY DESTINATION",
+    name: "restore",
+    synopsis: "restore ARTIFACT_DIRECTORY DESTINATION",
     access: "mutate",
-    execute: (context, args) => reify(context, args),
+    execute: (context, args) => restore(context, args),
   };
 }
-async function reify(context: CommandContext, args: string[]) {
-  const artifact = path(context, args, 0, "reify");
-  const destination = path(context, args, 1, "reify");
-  const captured = context.traces.parse(context.read(manifest(artifact)));
-  const files = traceFilesystem(context);
-  await context.traces.materialize(files, captured, destination);
+async function restore(context: CommandContext, args: string[]) {
+  const artifact = path(context, args, 0, "restore");
+  const destination = path(context, args, 1, "restore");
+  await restoreArtifact(context, artifact, destination);
   return "";
 }
 function blobCommand(): BuiltinCommand {
@@ -89,15 +57,14 @@ function path(
 ) {
   return context.resolve(context.required(command, args, index));
 }
-function providerOrigin(
-  context: CommandContext,
-  path: AbsolutePath,
-): Provenance | undefined {
-  return context.provenance(path).find((origin) => origin.kind === "provider");
-}
-function manifest(path: AbsolutePath) {
-  return `${path}/trace.json` as AbsolutePath;
-}
-function owner(path: AbsolutePath) {
-  return `trace:${path}`;
+
+function captureOptions(args: string[]) {
+  if (args[0] !== "--limit") {
+    return { offset: 0, limit: undefined };
+  }
+  const count = args[1];
+  if (!/^\d+$/.test(count || "")) {
+    throw new Error("capture requires --limit COUNT");
+  }
+  return { offset: 2, limit: Number(count) };
 }

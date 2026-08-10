@@ -5,11 +5,11 @@ import { builtinCommands } from "./registry";
 
 export function readOnlySource(source: string) {
   const command = new Interpreter().parse(source);
-  assertReadOnly(command);
+  assertReadOnlyCommand(command);
   return source;
 }
 
-function assertReadOnly(command: Command) {
+export function assertReadOnlyCommand(command: Command) {
   if (command.redirect || access(command.name) !== "read") {
     throw new Error(`Command is not read-only: ${command.name}`);
   }
@@ -25,6 +25,6 @@ function assertWord(word: Word) {
     word.parts.forEach(assertWord);
   }
   if (word.kind === "substitution") {
-    assertReadOnly(word.command);
+    assertReadOnlyCommand(word.command);
   }
 }

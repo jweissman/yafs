@@ -7,6 +7,7 @@ import { Trace, TraceFilesystem, TraceReifier } from "./TraceTypes";
 import { writeEntry } from "./TraceMaterializer";
 import { assertEntry } from "./TraceEntryValidation";
 import { collectEntries } from "./TraceCapture";
+import { assertEntryLimit } from "./TraceCapture";
 
 export type {
   TraceEntry,
@@ -26,8 +27,17 @@ export class TraceService {
     source: AbsolutePath,
     origin?: Provenance,
     capturedAt = new Date().toISOString(),
+    limit = 10000,
   ): Promise<Trace> {
-    this.assertDirectory(files, source);
+    this.assertCapturable(files, source, limit);
+    return this.captureEntries(files, source, origin, capturedAt);
+  }
+
+  private async captureEntries(
+    files: TraceFilesystem, source: AbsolutePath,
+    origin: Provenance | undefined,
+    capturedAt: string,
+  ) {
     const entries = await collectEntries(this.blobs, files, source, "");
     return this.trace({ sourcePath: source, capturedAt, origin, entries });
   }
@@ -36,6 +46,13 @@ export class TraceService {
     if (files.type(source) !== "directory") {
       throw new Error("Trace source must be a directory");
     }
+  }
+
+  private assertCapturable(
+    files: TraceFilesystem, source: AbsolutePath, limit: number,
+  ) {
+    this.assertDirectory(files, source);
+    assertEntryLimit(files, source, limit);
   }
 
   private trace(fields: Omit<Trace, "kind" | "version">): Trace {

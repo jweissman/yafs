@@ -11,12 +11,15 @@ import { CtlDispatch } from "./CtlDispatch";
 import { BackgroundDrivers, syncAll } from "./BackgroundDrivers";
 import {
   attachLines,
+  CommandRequest,
   isCacheRequest,
+  isOperationRequest,
   isWriteRequest,
   persistenceFailure,
   requestOrReject,
   respond,
   Request,
+  WriteRequest,
 } from "./Framing";
 
 type Services = {
@@ -111,6 +114,13 @@ export class ServerConnection {
     if (isCacheRequest(request)) {
       return session.planCache(request.cache);
     }
+    if (isOperationRequest(request)) {
+      return session.planOperationAsync(request.operation);
+    }
+    return this.planCommand(session, request as CommandRequest | WriteRequest);
+  }
+
+  private planCommand(session: Yafs, request: CommandRequest | WriteRequest) {
     return isWriteRequest(request)
       ? session.planWrite(request.write.path, request.write.content)
       : session.planAsync(request.command);

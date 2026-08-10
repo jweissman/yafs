@@ -20,8 +20,8 @@ source collection and an agent persona, then run:
 
 ```sh
 mkdir artifacts
-trace source artifacts/review-42
-reify artifacts/review-42 restored-42
+capture source artifacts/review-42
+restore artifacts/review-42 restored-42
 cache put --ttl 30m review-42-status pending
 agent send agents/reviewer --context restored-42/diff.patch "Review this change."
 ```

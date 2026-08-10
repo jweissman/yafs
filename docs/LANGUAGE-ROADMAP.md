@@ -115,7 +115,7 @@ are outside this language contract.
 
 | Gate | Outcome | Acceptance checkpoint | Dependency |
 | --- | --- | --- | --- |
-| L0 — typed command boundary | One typed command/action service serves Yash, MCP, web, and SDK adapters. | A typed `list`/`read`/`inspect` call and its Yash and MCP adapters yield the same typed result/error; substitutions reject every non-read operation before execution. | Complete the daemon-owned capability cleanup; precedes wider MCP writes. |
+| L0 — typed workspace boundary | One typed workspace-operation service serves Yash, MCP, web, and SDK adapters. | A typed `list`/`read`/`inspect` call and its Yash and MCP adapters yield the same typed result/error; substitutions reject every non-read operation before execution. | Complete the daemon-owned capability cleanup; precedes wider MCP writes. |
 | L1 — workspace literacy | Exploration and evidence vocabulary are useful without host tools. | Deterministic `tree`, bounded `find`, literal `grep`, `diff`, and `test`; user-facing `capture`/`restore` create and inspect a durable artifact. | Can run before M7. |
 | L2 — bounded scripts | Operators can write small, reviewable local workflows. | `yash run FILE -- ARGS…`, sequence/block AST, local parameters/variables, `if`/`else`, source locations, and dry-run plans for local writes. | Requires L0 effect enforcement. |
 | L3 — path iteration | Scripts can operate on many virtual paths without word splitting. | A typed path-list/glob expression and bounded `for` iteration handle spaces and empty matches unambiguously. | Add only after L2 use proves it. |
@@ -147,12 +147,24 @@ grammar. It should proceed in these small, testable slices:
 6. Add an adapter-parity test matrix: equivalent Yash, typed, and MCP calls
    return the same value, structured error, provenance, and access denial.
 
-L0 is complete only when a future web or browser adapter can call `list`,
-`read`, and `inspect` in-process without constructing Yash text, and when a
-non-read command inside `$()` demonstrably has no opportunity to allocate
-blobs, enqueue work, or contact a provider.
+The typed workspace boundary is complete when a future web or browser adapter
+can call `list`, `read`, and `inspect` in-process without constructing Yash
+text, and when a non-read command inside `$()` demonstrably has no opportunity
+to allocate blobs, enqueue work, or contact a provider.
 
-The next L0 review should settle only implementation-facing details: operation
+### Implemented L0 slice
+
+The initial vertical slice supplies `WorkspaceOperations` with typed `list`,
+`read`, and `inspect` requests/results. Local and loopback clients carry those
+requests without shell parsing; fixed MCP tools use them directly while
+`yafs.query` remains the constrained text compatibility surface. Recursive
+read-only validation rejects a mutating substitution before its command can
+run. This completes the typed workspace boundary. It deliberately does not
+convert the whole builtin catalog into typed operations; that broader
+command/action catalog remains a separate architecture decision rather than an
+implied L0 deliverable.
+
+The follow-on catalog decision should settle only implementation-facing details:
 identifier/versioning, structured error envelope, schema representation,
 session serialization, and how the existing builtin registry adapts. It should
 not settle script syntax, pipeline framing, or a public HTTP API.
@@ -176,6 +188,33 @@ limits. `grep` is literal by default; any future regular-expression mode is
 opt-in and bounded. `test` has a small documented predicate set rather than
 shell-expression compatibility. `diff` compares Yafs paths with deterministic
 text output.
+
+### L1 operation contract
+
+L1 is a finite inspection vocabulary, not a first pass at POSIX utilities.
+Every item below has one typed operation, a Yash renderer, and a fixed MCP
+tool. The operation validates its inputs and limits; adapters do not reparse
+or reinterpret them.
+
+| Operation | Typed input | Structured result | Fixed bounds and semantics |
+| --- | --- | --- | --- |
+| `tree` | `path`, optional `depth`, optional `limit` | sorted entries with path and node type | Default depth 3; maximum depth 10; at most 1,000 entries; does not follow final symlinks while walking. |
+| `find` | `path`, optional simple `pattern`, optional node `type`, optional `limit` | sorted matching paths | `pattern` permits only `*` as an in-operation filename wildcard—not shell expansion. The walk examines at most 1,000 entries, then the requested result limit applies to matches. |
+| `grep` | literal `pattern`, `paths`, optional `limit` | matching path/line/text records | UTF-8 files only; no regex mode; paths remain separate values; at most 10,000 matches. Line records always carry their line number; Yash decides whether to render it. |
+| `diff` | `left`, `right`, optional `limit` | deterministic change records | Compare UTF-8 files, or recursively compare two directories in sorted path order; at most 10,000 rendered change lines. |
+| `test` | one explicit path predicate and path | boolean result | Initial predicates are `-e`, `-f`, `-d`, and `-L`; no shell expression language, negation, or boolean chaining. |
+| `capture` | source directory, destination artifact directory, optional `limit` | artifact descriptor | Preflights at most 10,000 UTF-8 files before storing exact bytes by digest and recording provider provenance/reference. |
+| `restore` | artifact directory and absent local destination | restored descriptor | Materializes at most 10,000 recorded bytes or immutable provider references; never falls back to a current provider path. |
+
+`capture` and `restore` replace the user vocabulary `trace` and `reify` when
+their adapters land. The durable trace manifest/type and blob mechanics remain
+internal implementation terms. There will be no permanent dual command
+spelling: migration updates scripts, validation guides, and MCP names together.
+
+The default/maximum limits above are part of the operation contract, not a
+terminal-output preference. A limit hit is a structured `result_limit` error;
+the command renderer must not silently truncate and make a partial result look
+complete.
 
 The north-star command set also needs typed structured operations rather than
 terminal-only equivalents: `paths` yields a path list, `capture` yields an

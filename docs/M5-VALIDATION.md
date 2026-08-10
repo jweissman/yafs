@@ -43,13 +43,13 @@ plugins status
 plugins plan
 cat reviews/pulls/42/diff.patch
 mkdir notes; mkdir notes/42
-trace reviews/pulls/42 notes/42/alice
+capture reviews/pulls/42 notes/42/alice
 inspect reviews/pulls/42/diff.patch
 cat notes/42/alice/trace.json
 # after changing the desired configuration, inspect and publish its refresh:
 plugins plan
 plugins apply
-reify notes/42/alice restored-42
+restore notes/42/alice restored-42
 cat restored-42/diff.patch
 ```
 

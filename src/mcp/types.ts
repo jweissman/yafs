@@ -1,4 +1,5 @@
 import { ExecutionResult } from "../types/ExecutionResult";
+import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 export type McpId = number | string | null;
 export type McpRequest = {
@@ -14,4 +15,7 @@ export type McpResponse = {
   error?: McpError;
 };
 export type McpError = { code: number; message: string };
-export type McpClient = { execute(command: string): Promise<ExecutionResult> };
+export type McpClient = {
+  execute(command: string): Promise<ExecutionResult>;
+  operation(request: WorkspaceOperation): Promise<ExecutionResult>;
+};

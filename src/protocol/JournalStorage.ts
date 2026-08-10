@@ -21,8 +21,12 @@ async function writeLockFile(path: string) {
 }
 
 async function recoverStaleLock(path: string, error: NodeJS.ErrnoException) {
-  if (error.code !== "EEXIST" || !(await stale(path))) {
+  if (error.code !== "EEXIST") {
     throw error;
+  }
+  const pid = await lockPid(path);
+  if (live(pid)) {
+    throw new Error(`WAL lock is held by live PID ${pid}: ${path}`);
   }
   await unlink(path);
 }
@@ -72,12 +76,15 @@ async function syncDirectory(path: string) {
   await directory.close();
 }
 
-async function stale(path: string): Promise<boolean> {
-  const pid = Number((await readFile(path, "utf8")).trim());
+async function lockPid(path: string) {
+  return Number((await readFile(path, "utf8")).trim());
+}
+
+function live(pid: number) {
   try {
     process.kill(pid, 0);
-    return false;
-  } catch {
     return true;
+  } catch {
+    return false;
   }
 }

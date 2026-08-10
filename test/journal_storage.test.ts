@@ -12,3 +12,13 @@ test("acquireLock recovers a lock left behind by a process that is no longer run
   await acquireLock(path);
   expect((await readFile(path, "utf8")).trim()).toBe(String(process.pid));
 });
+
+test("acquireLock identifies a live owner without replacing its WAL lock", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "yafs-lock-"));
+  const path = join(directory, "journal.lock");
+  await writeFile(path, `${process.pid}\n`);
+  await expect(acquireLock(path)).rejects.toThrow(
+    `WAL lock is held by live PID ${process.pid}`,
+  );
+  expect((await readFile(path, "utf8")).trim()).toBe(String(process.pid));
+});

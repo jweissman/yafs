@@ -25,7 +25,9 @@ test("command substitution builds a nested AST and captures deferred output", ()
     },
   });
   expect(yafs.exec('echo "value=$(echo hello)"')).toBe("value=hello");
-  expect(yafs.exec("echo $(touch transient)")).toBe("");
+  expect(yafs.execute("echo $(touch transient)").error?.message).toContain(
+    "not read-only",
+  );
   expect(yafs.execute("stat transient").error?.code).toBe("not_found");
   expect(yafs.execute("echo $(false)").error?.code).toBe("command_error");
 });
@@ -33,7 +35,7 @@ test("command substitution builds a nested AST and captures deferred output", ()
 test("asynchronous execution preserves deferred substitution isolation", async () => {
   const yafs = new Yafs();
   const result = await yafs.executeAsync("echo $(touch transient)");
-  expect(result.stdout).toBe("");
+  expect(result.error?.message).toContain("not read-only");
   expect((await yafs.executeAsync("stat transient")).error?.code).toBe(
     "not_found",
   );

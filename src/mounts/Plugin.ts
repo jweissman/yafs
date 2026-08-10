@@ -53,6 +53,12 @@ export abstract class Plugin {
   actions(): PluginActionDefinition[] {
     return [];
   }
+  unavailableCapability(
+    _record: Pick<MountRecord, "id">,
+    _capability: string,
+  ): string | undefined {
+    return undefined;
+  }
   exposures(): PluginExposureDefinition[] {
     return [];
   }

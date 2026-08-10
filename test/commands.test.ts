@@ -34,18 +34,25 @@ test("plugins desired-state commands report unconfigured instead of throwing whe
     JSON.parse(
       await yafs.executeAsync("plugins status").then((result) => result.stdout),
     ),
-  ).toEqual({ configured: false });
+  ).toEqual({
+    configured: false,
+    remedy: "Restart yafsd with --config PATH or set YAFS_CONFIG, then run plugins apply.",
+  });
   expect(
     JSON.parse(
       await yafs.executeAsync("plugins plan").then((result) => result.stdout),
     ),
   ).toEqual([]);
   expect((await yafs.executeAsync("plugins apply")).error?.message).toBe(
-    "No daemon mount configuration",
+    "No daemon plugin configuration. Restart yafsd with --config PATH or set " +
+      "YAFS_CONFIG, then run plugins apply.",
   );
   expect(
     (await yafs.executeAsync("plugins refresh review")).error?.message,
-  ).toBe("No daemon mount configuration");
+  ).toBe(
+    "No daemon plugin configuration. Restart yafsd with --config PATH or set " +
+      "YAFS_CONFIG, then run plugins apply.",
+  );
 });
 
 test("read-only text commands query virtual files without host processes", () => {

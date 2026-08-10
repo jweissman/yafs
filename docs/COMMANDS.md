@@ -16,8 +16,10 @@ echo $(cat note.md)               # capture a nested Yash command's output
 ```
 
 Single quotes preserve their contents. Double quotes allow variables and
-command substitution. Command substitution executes in a nested snapshot: it
-can read the current workspace, but its session and VFS mutations are discarded.
+command substitution. Command substitution can execute only commands declared
+`read`; a session change, mutation, control action, or provider action is
+rejected before it starts. This prevents an expansion from allocating durable
+content or triggering work and then merely hiding its queued VFS mutation.
 
 There are no pipelines, command separators, loops, globbing, aliases, job
 control, host executable lookup, or shell `eval`.
@@ -254,8 +256,8 @@ not yet abort an already-issued HTTP request.
 
 | Command | Access | Meaning |
 | --- | --- | --- |
-| `trace SOURCE ARTIFACT_DIRECTORY` | mutate | Capture a directory’s current UTF-8 Yafs files into content-addressed blobs, then durably write `ARTIFACT_DIRECTORY/trace.json`. Provider-backed sources include provenance and an immutable resource reference when their provider supplies one. |
-| `reify ARTIFACT_DIRECTORY DESTINATION` | mutate | Reconstruct a trace at a new, absent local directory. It reads local blobs first; a daemon-installed provider reifier may restore a missing blob only from the recorded immutable reference. It never reads the current mount path as fallback. |
+| `capture [--limit COUNT] SOURCE ARTIFACT_DIRECTORY` | mutate | Preflight a bounded directory snapshot, then capture its current UTF-8 Yafs files into content-addressed blobs and durably write `ARTIFACT_DIRECTORY/trace.json`. Provider-backed sources include provenance and an immutable resource reference when their provider supplies one. |
+| `restore ARTIFACT_DIRECTORY DESTINATION` | mutate | Reconstruct a captured artifact at a new, absent local directory. It reads local blobs first; a daemon-installed provider reifier may restore a missing blob only from the recorded immutable reference. It never reads the current mount path as fallback. |
 | `blobs gc` | control | Explicitly reclaim zero-reference blobs. On `yafsd`, this runs in the serialized request queue after startup has rebuilt trace retention from durable manifests. |
 
 Traces currently capture Yafs's UTF-8 text file surface. The blob store itself
@@ -265,11 +267,18 @@ silently emulated by text decoding.
 ## Automation and MCP
 
 The versioned loopback RPC protocol is the automation API; terminal text is not
-the protocol. `yafs-mcp` currently exposes only safe workspace inspection:
+the protocol. `yafs-mcp` exposes typed workspace operations:
 
 - `yafs.list PATH`
 - `yafs.read PATH`
 - `yafs.inspect PATH`
+- `yafs.tree PATH [DEPTH] [LIMIT]`
+- `yafs.find PATH [PATTERN] [TYPE] [LIMIT]`
+- `yafs.grep PATTERN PATHS [LIMIT]`
+- `yafs.diff LEFT RIGHT [LIMIT]`
+- `yafs.test PREDICATE PATH`
+- `yafs.capture SOURCE ARTIFACT_DIRECTORY [LIMIT]`
+- `yafs.restore ARTIFACT_DIRECTORY DESTINATION`
 
 `yafs.query SOURCE` evaluates one **read-only** Yash command for an agent or
 script. It parses the source first and rejects redirects, session changes,
@@ -278,11 +287,17 @@ substitution — so an MCP agent cannot trigger a `ctl` action today; only a
 `yash` session or a raw structured write can. A broader operator execution
 tool must remain distinct from host-process execution.
 
+`tree`, `find`, literal `grep`, `diff`, and explicit-predicate `test` are
+bounded operations, rather than a general POSIX compatibility layer.
+`capture` and `restore` are local durable-evidence operations, not provider
+control actions. `yafs.query SOURCE` remains a constrained read-only text
+compatibility tool; it is not a general execution API.
+
 ## Deliberately not implemented
 
-Pipes, loops, conditionals, `find`, recursive removal of a non-empty tree
-(`rmdir` only removes an empty directory), `mv`/`cp`, host execution, and an
-MCP tool for writing (including `ctl`) are not available yet. Provider
-actions themselves are implemented (`ctl`, one shipped action on `agent`
-mounts) — GitHub-specific actions like commenting on a PR are not; see
+Pipes, loops, conditionals, recursive removal of a non-empty tree (`rmdir`
+only removes an empty directory), `mv`/`cp`, host execution, and a general MCP
+write/control tool (including `ctl`) are not available yet. Provider actions
+themselves are implemented (`ctl`, one shipped action on `agent` mounts) —
+GitHub-specific actions like commenting on a PR are not; see
 "Provider actions" above.

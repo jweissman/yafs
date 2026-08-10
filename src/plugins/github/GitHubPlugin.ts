@@ -30,6 +30,10 @@ export class GitHubPlugin extends Plugin {
     return githubConfig(value);
   }
 
+  unavailableCapability(record: Pick<MountRecord, "id">, capability: string) {
+    return capability === "secret.github-token" ? tokenUnavailable(record) : undefined;
+  }
+
   async prepare(record: MountRecord, snapshots: SnapshotMaterializer) {
     const source = this.requiredSource(record);
     const captured = await source.snapshot(record.config as GitHubConfig);
@@ -45,7 +49,7 @@ export class GitHubPlugin extends Plugin {
       ? this.sources.authenticatedGithub
       : this.sources.github;
     if (!source) {
-      throw new Error("GitHub provider is not configured");
+      throw new Error(configurationError(record));
     }
     return source;
   }
@@ -57,4 +61,16 @@ export class GitHubPlugin extends Plugin {
       fetchedAt: snapshot.fetchedAt,
     };
   }
+}
+
+function configurationError(record: MountRecord) {
+  return record.capabilities.includes("secret.github-token")
+    ? tokenUnavailable(record)
+    : `GitHub plugin '${record.id}' has no GitHub source configured.`;
+}
+
+function tokenUnavailable(record: Pick<MountRecord, "id">) {
+  return `GitHub plugin '${record.id}' requires secret.github-token, but ` +
+    "YAFS_GITHUB_TOKEN was unavailable when yafsd started. Add it to the " +
+    "daemon environment, or remove the grant for a public collection.";
 }

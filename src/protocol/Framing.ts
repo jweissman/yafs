@@ -3,6 +3,8 @@ import { type Socket } from "node:net";
 import { type ExecutionResult } from "../types/ExecutionResult";
 import { PROTOCOL_VERSION } from "./version";
 import { CacheRequest, validCacheRequest } from "../cache/CacheRequest";
+import { WorkspaceOperation } from "../operations/WorkspaceOperation";
+import { validOperation } from "./OperationRequest";
 
 export type CommandRequest = { version: number; id: number; command: string };
 export type WriteRequest = {
@@ -15,7 +17,16 @@ export type CacheProtocolRequest = {
   id: number;
   cache: CacheRequest;
 };
-export type Request = CommandRequest | WriteRequest | CacheProtocolRequest;
+export type OperationProtocolRequest = {
+  version: number;
+  id: number;
+  operation: WorkspaceOperation;
+};
+export type Request =
+  | CommandRequest
+  | WriteRequest
+  | CacheProtocolRequest
+  | OperationProtocolRequest;
 export type Response = { version: number; id: number; result: ExecutionResult };
 export type ProtocolFailure = {
   version: number;
@@ -36,6 +47,11 @@ export function isCacheRequest(
   request: Request,
 ): request is CacheProtocolRequest {
   return "cache" in request;
+}
+export function isOperationRequest(
+  request: Request,
+): request is OperationProtocolRequest {
+  return "operation" in request;
 }
 
 export function requestFailure(error: unknown): ProtocolFailure | undefined {
@@ -98,10 +114,11 @@ function assertVersion(request: Request) {
 function validPayload(request: Request) {
   const write = (request as Partial<WriteRequest>).write;
   const cache = (request as Partial<CacheProtocolRequest>).cache;
+  const operation = (request as Partial<OperationProtocolRequest>).operation;
   return (
     typeof (request as Partial<CommandRequest>).command === "string" ||
     Boolean(write && validWrite(write)) ||
-    validCacheRequest(cache)
+    validCacheRequest(cache) || validOperation(operation)
   );
 }
 

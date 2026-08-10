@@ -1,15 +1,21 @@
 import { McpClient } from "./types";
 import { readOnlySource } from "../commands/ReadOnlySource";
+import { WorkspaceOperation } from "../operations/WorkspaceOperation";
+import { literacyOperation, literacyTools } from "./LiteracyTools";
+import { evidenceOperation, evidenceTools } from "./EvidenceTools";
 
 type Arguments = Record<string, unknown>;
-const commands: Record<string, string> = {
-  "yafs.list": "ls",
-  "yafs.read": "cat",
-  "yafs.inspect": "inspect",
+const operations: Record<string, PathOperationName> = {
+  "yafs.list": "list", "yafs.read": "read", "yafs.inspect": "inspect",
 };
 
+type PathOperationName = "list" | "read" | "inspect";
+
 export function tools() {
-  return [listTool(), readTool(), inspectTool(), queryTool()];
+  return [
+    listTool(), readTool(), inspectTool(), ...literacyTools(),
+    ...evidenceTools(), queryTool(),
+  ];
 }
 
 export async function callTool(
@@ -21,7 +27,7 @@ export async function callTool(
 }
 
 async function attemptTool(client: McpClient, name: string, input: unknown) {
-  return result(await execute(client, command(name, argumentsFor(input))));
+  return result(await run(client, operation(name, argumentsFor(input))));
 }
 
 function listTool() {
@@ -65,20 +71,22 @@ function schema(properties: Record<string, unknown>, required: string[]) {
   return { type: "object", additionalProperties: false, properties, required };
 }
 
-function command(name: string, input: Arguments) {
-  return name === "yafs.query" ? queryCommand(input) : pathCommand(name, input);
+function operation(name: string, input: Arguments) {
+  return name === "yafs.query" ? queryCommand(input)
+    : literacyOperation(name, input)
+      || evidenceOperation(name, input) || pathOperation(name, input);
 }
 
 function queryCommand(input: Arguments) {
   return readOnlySource(sourceArgument(input));
 }
 
-function pathCommand(name: string, input: Arguments) {
-  const command = commands[name];
-  if (!command) {
+function pathOperation(name: string, input: Arguments): WorkspaceOperation {
+  const operation = operations[name];
+  if (!operation) {
     throw new Error(`Unknown tool: ${name}`);
   }
-  return `${command} ${pathArgument(input)}`;
+  return { name: operation, path: pathArgument(input) };
 }
 
 function sourceArgument(input: Arguments) {
@@ -103,8 +111,10 @@ function pathArgument(input: Arguments) {
   return path;
 }
 
-async function execute(client: McpClient, command: string) {
-  const output = await client.execute(command);
+async function run(client: McpClient, command: string | WorkspaceOperation) {
+  const output = typeof command === "string"
+    ? await client.execute(command)
+    : await client.operation(command);
   if (output.error) {
     throw new Error(output.error.message);
   }

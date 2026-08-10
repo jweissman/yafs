@@ -122,6 +122,7 @@ test("a daemon does not discover desired configuration inside its data directory
     configured: false,
     changes: [],
     active: [],
+    remedy: "Restart yafsd with --config PATH or set YAFS_CONFIG, then run plugins apply.",
   });
   await client.close();
   await server.close();

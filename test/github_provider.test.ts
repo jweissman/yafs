@@ -61,6 +61,24 @@ test("a declared secret grant selects an authenticated provider source", async (
   expect(yafs.exec("cat reviews/pulls/42/diff.patch")).toBe("private");
 });
 
+test("a missing token names the plugin, grant, and daemon setting", async () => {
+  const yafs = configuredYafs(new ProviderRegistry(fakeSource()));
+  const manifest = githubManifest().replace(
+    "[network.github-api]",
+    "[network.github-api, secret.github-token]",
+  );
+  await expect(activateDesired(yafs, manifest)).rejects.toThrow(
+    "GitHub plugin 'review' requires secret.github-token, but YAFS_GITHUB_TOKEN",
+  );
+});
+
+test("a missing public source identifies the configured GitHub plugin", async () => {
+  const yafs = configuredYafs(new ProviderRegistry());
+  await expect(activateDesired(yafs, githubManifest())).rejects.toThrow(
+    "GitHub plugin 'review' has no GitHub source configured.",
+  );
+});
+
 function configuredYafs(providers: ProviderRegistry) {
   const store = new NodeStore();
   return new Yafs({
