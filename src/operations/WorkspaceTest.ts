@@ -22,5 +22,9 @@ function typed(context: CommandContext, path: AbsolutePath, p: TestPredicate) {
 }
 
 function expectedType(predicate: TestPredicate): NodeType {
-  return predicate === "-f" ? "file" : predicate === "-d" ? "directory" : "symlink";
+  return predicate === "-f"
+    ? "file"
+    : predicate === "-d"
+      ? "directory"
+      : "symlink";
 }

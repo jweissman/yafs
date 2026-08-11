@@ -1,11 +1,4 @@
-import {
-  mkdir,
-  open,
-  readdir,
-  readFile,
-  rename,
-  unlink,
-} from "node:fs/promises";
+import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
   sha256,
@@ -14,8 +7,8 @@ import {
   validDigest,
   validShard,
   missing,
-  syncDirectory,
 } from "./BlobDigest";
+import { writeBlob } from "./BlobWrite";
 
 export type BlobStore = {
   put(bytes: Uint8Array): Promise<string>;
@@ -38,7 +31,7 @@ class LocalBlobStore implements BlobStore {
     const digest = sha256(bytes);
     const path = this.path(digest);
     if (!(await this.exists(path))) {
-      await this.write(path, bytes);
+      await writeBlob(this.directory, path, bytes);
     }
     return digest;
   }
@@ -70,29 +63,6 @@ class LocalBlobStore implements BlobStore {
     return { reclaimed };
   }
 
-  private async write(path: string, bytes: Uint8Array) {
-    const temporary = this.temporary(path);
-    await this.prepare(path);
-    await this.writeTemporary(temporary, bytes);
-    return this.replace(temporary, path);
-  }
-  private temporary(path: string) {
-    return `${path}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
-  }
-  private prepare(path: string) {
-    const shard = join(this.directory, path.slice(-64, -62));
-    return mkdir(shard, { recursive: true });
-  }
-  private async replace(temporary: string, path: string) {
-    await rename(temporary, path);
-    return syncDirectory(path);
-  }
-  private async writeTemporary(path: string, bytes: Uint8Array) {
-    const file = await open(path, "w");
-    await file.write(bytes);
-    await file.sync();
-    await file.close();
-  }
   private path(digest: string) {
     assertDigest(digest);
     return join(this.directory, digest.slice(0, 2), digest);

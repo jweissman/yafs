@@ -59,7 +59,7 @@ export class SlackInboundPoller {
     const cursor = this.cursors.get(record.id) || {};
     const fetched = await client.history(config.channel, config.max ?? 50);
     const fresh = newMessages(botUserId, cursor, fetched);
-    await this.route(record, config, fresh);
+    await this.route(record, config, botUserId, fresh);
     this.cursors.set(record.id, advanceCursor(cursor, fresh));
   }
 
@@ -83,20 +83,23 @@ export class SlackInboundPoller {
   private async route(
     record: PreparedMountRecord,
     config: InboundConfig,
+    botUserId: string,
     messages: SlackMessage[],
   ) {
-    const options = this.routeOptions(record, config);
+    const options = this.routeOptions(record, config, botUserId);
     const chatId = channelChatId(record.id, config.channel);
     await routeAll(options, chatId, messages);
   }
 
-  private routeOptions(record: PreparedMountRecord, config: InboundConfig) {
-    return {
-      mounts: this.mounts,
-      dispatchCtl: this.dispatchCtl,
-      persona: config.persona,
-      slackCtlPath: `${record.path}/ctl` as AbsolutePath,
-    };
+  private routeOptions(
+    record: PreparedMountRecord,
+    config: InboundConfig,
+    botUserId: string,
+  ) {
+    const slackCtlPath = `${record.path}/ctl` as AbsolutePath;
+    const { mounts, dispatchCtl } = this;
+    const persona = config.persona;
+    return { mounts, dispatchCtl, persona, slackCtlPath, botUserId };
   }
 }
 

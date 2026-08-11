@@ -43,7 +43,8 @@ function publishPrepared(
   mutations: Mutations,
   record: PreparedMountRecord,
 ) {
-  const publish = change.action === "activate" ? mutations.mount : mutations.refresh;
+  const publish =
+    change.action === "activate" ? mutations.mount : mutations.refresh;
   publish(record);
 }
 

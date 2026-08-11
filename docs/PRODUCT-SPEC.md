@@ -121,7 +121,7 @@ not at a virtual path: it is the operator's deployment input and remains
 present even if the virtual workspace is reset. `yafsd start --config FILE` is
 an explicit override for a container image, service manager, or development
 environment. Normal clients use the daemon's selected configuration through
-`mounts plan`, `mounts apply`, and `mounts status`.
+`plugins plan`, `plugins apply`, and `plugins status`.
 
 Planning is read-only and reports additions, changed declarations, and—only
 when requested—removals. Applying is idempotent. It refreshes a declaration
@@ -270,12 +270,15 @@ MCP and FUSE are adapters, not providers:
 - GitHub writes, provider writes, and distributed transactions.
 - Arbitrary third-party provider code and a package marketplace.
 - Autonomous multi-agent orchestration and host-process execution.
+- Recursive-MCP tool-calling (an agent persona calling back into Yafs
+  operations mid-run) — blocked on a per-actor path-scoping primitive that
+  does not exist yet; see the ADR's "Path-scoping primitive" section.
 - Public MCP, SSH, FUSE write support, and multi-user authorization.
 - Streaming shell pipelines and a general binary CLI.
 
-## M5 entry checklist
+## M5 checklist — delivered
 
-Before writing `github`, implement and test:
+M5 (the GitHub provider) implemented and tested:
 
 1. a daemon-held named network grant and secret-reference policy;
 2. Unicode-NFC path normalization at provider boundaries;
@@ -283,15 +286,18 @@ Before writing `github`, implement and test:
 4. a bounded response contract for PR metadata and diffs; and
 5. explicit and persisted daemon-scheduled collection refresh, including
    coalescing, failure retention, and audit, with no GitHub write authority;
-6. durable source bindings for local review artifacts; and
+6. durable source bindings for local review artifacts, later extended to
+   `capture`/`restore`; and
 7. a synchronous resolver over published snapshots, with node-level
    provenance and read-only enforcement.
 
-Before or alongside the review demo, a local-only MCP adapter can dogfood the
-same structured API. It currently offers `yafs.list`, `yafs.read`, and
-`yafs.inspect`; a local-note write requires a structured mutation API and is
-not implemented through shell-string escaping. The adapter is a separate client
-process, not a provider, an embedded kernel API, or a shell-execution endpoint.
+The local-only MCP adapter (`yafs-mcp`) dogfoods the same structured API. Its
+tools are the L0/L1 workspace operations (`yafs.list`/`yafs.read`/
+`yafs.inspect`/`yafs.query`/`yafs.tree`/`yafs.find`/`yafs.test`/`yafs.diff`/
+`yafs.grep`) plus `yafs.capture`/`yafs.restore`; a local-note write would
+require a structured mutation API and is not implemented through
+shell-string escaping. The adapter is a separate client process, not a
+provider, an embedded kernel API, or a shell-execution endpoint.
 
 ## Documentation ownership
 

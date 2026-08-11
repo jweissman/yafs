@@ -961,6 +961,18 @@ durable pending record. This is the M6.4 durable-outbound-action gap the
 roadmap already names, and it is a real prerequisite for trusting this bridge
 under failure conditions, not just a style complaint.
 
+**Update: this bridge is a spike, not the kept architecture.** Review
+after this milestone landed correctly named what it discovered:
+`SlackInboundRouting.ts` directly imports `AgentPersonaLookup` and builds an
+agent ctl request, `SlackConfig`'s `persona:` field means the Slack plugin
+owns agent-routing policy, and the poller reads agent-run files and writes
+Slack's ctl directly — real cross-plugin coupling the demo needed to prove
+the shape, not a boundary worth keeping. `docs/FEATURE-ROADMAP.md`'s M6.5
+(provider-neutral typed inbound event source) and M7.1 (a deliberately tiny,
+daemon-owned workflow binding that owns the cross-plugin composition
+instead of either plugin knowing about the other) are the scoped, not-yet-
+started replacement. Both wait on M6.4 closing first.
+
 ### Path-scoping primitive — a named, deferred prerequisite
 
 No session- or actor-scoped path authorization exists anywhere in the

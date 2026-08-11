@@ -6,7 +6,13 @@ export type WorkspaceOperation =
   | { name: "read"; path: string }
   | { name: "inspect"; path: string }
   | { name: "tree"; path: string; depth?: number; limit?: number }
-  | { name: "find"; path: string; pattern?: string; type?: NodeType; limit?: number }
+  | {
+      name: "find";
+      path: string;
+      pattern?: string;
+      type?: NodeType;
+      limit?: number;
+    }
   | { name: "test"; path: string; predicate: TestPredicate }
   | { name: "diff"; left: string; right: string; limit?: number }
   | { name: "capture"; source: string; artifact: string; limit?: number }

@@ -7,6 +7,7 @@ import {
   resolvePersonaTarget,
 } from "../agent/AgentPersonaLookup";
 import { SlackMessage } from "./SlackApiClient";
+import { stripMention } from "./SlackInboundSchedule";
 
 export type DispatchCtl = (
   path: AbsolutePath,
@@ -23,6 +24,7 @@ export type RouteOptions = {
   dispatchCtl: DispatchCtl;
   persona: string;
   slackCtlPath: AbsolutePath;
+  botUserId: string;
 };
 
 type RunLookup = { mounts: MountManager; target: PersonaTarget; runId: string };
@@ -54,12 +56,13 @@ function dispatch(
   message: SlackMessage,
   runId: string,
 ) {
-  const body = { message: content(message), chatId, runId };
+  const body = { message: content(options.botUserId, message), chatId, runId };
   return options.dispatchCtl(ctlPath(personaPath), JSON.stringify(body));
 }
 
-function content(message: SlackMessage): string {
-  return `${message.user ?? "unknown"}: ${message.text}`;
+function content(botUserId: string, message: SlackMessage): string {
+  const text = stripMention(botUserId, message.text);
+  return `${message.user ?? "unknown"}: ${text}`;
 }
 
 function ctlPath(personaPath: AbsolutePath): AbsolutePath {

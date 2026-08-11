@@ -2,9 +2,9 @@ import { type Socket } from "node:net";
 
 import { type ExecutionResult } from "../types/ExecutionResult";
 import { PROTOCOL_VERSION } from "./version";
-import { CacheRequest, validCacheRequest } from "../cache/CacheRequest";
+import { CacheRequest } from "../cache/CacheRequest";
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
-import { validOperation } from "./OperationRequest";
+import { RequestError, verifyRequest } from "./FramingValidation";
 
 export type CommandRequest = { version: number; id: number; command: string };
 export type WriteRequest = {
@@ -97,45 +97,6 @@ export function persistenceFailure(
 
 export { attachLines } from "./SocketLines";
 
-function verifyRequest(request: Request) {
-  if (!Number.isInteger(request.id) || !validPayload(request)) {
-    throw new Error("Expected request");
-  }
-  assertVersion(request);
-}
-
-function assertVersion(request: Request) {
-  if (request.version !== PROTOCOL_VERSION) {
-    const message = `Unsupported protocol version: ${request.version}`;
-    throw new RequestError(request.id, "unsupported_version", message);
-  }
-}
-
-function validPayload(request: Request) {
-  const write = (request as Partial<WriteRequest>).write;
-  const cache = (request as Partial<CacheProtocolRequest>).cache;
-  const operation = (request as Partial<OperationProtocolRequest>).operation;
-  return (
-    typeof (request as Partial<CommandRequest>).command === "string" ||
-    Boolean(write && validWrite(write)) ||
-    validCacheRequest(cache) || validOperation(operation)
-  );
-}
-
-function validWrite(write: WriteRequest["write"]) {
-  return typeof write.path === "string" && typeof write.content === "string";
-}
-
 function failure(id: number, code: string, message: string): ProtocolFailure {
   return { version: PROTOCOL_VERSION, id, error: { code, message } };
-}
-
-class RequestError extends Error {
-  constructor(
-    readonly id: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
 }

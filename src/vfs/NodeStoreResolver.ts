@@ -15,7 +15,12 @@ export class NodeStoreResolver {
       : this.traverse(path, follow, depth);
   }
   private traverse(path: AbsolutePath, follow: boolean, depth: number) {
-    return this.find(this.state.origin, path.slice(1).split("/"), follow, depth);
+    return this.find(
+      this.state.origin,
+      path.slice(1).split("/"),
+      follow,
+      depth,
+    );
   }
 
   child(node: FSNode, name: string): FSNode | undefined {

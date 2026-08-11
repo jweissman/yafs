@@ -721,11 +721,24 @@ section for the exact shape). Restart marks an in-flight reply interrupted.
 The channel has no MCP-tool or recursive-agent authority.
 
 This milestone also added a one-way Slack bridge: a channel configured with
-`persona:` in its `yafs.plugins.yaml` entry routes new, non-bot messages to
-that persona (one run per message, one continuous history per channel) and
-posts the reply back through the ordinary `slack send` path. It has no
-implicit host-process or network authority beyond that single hop — see the
-ADR for what it explicitly does not yet close (M6.4's outbound durability).
+`persona:` in its `yafs.plugins.yaml` entry routes new, non-bot messages
+that explicitly `<@mention>` the bot to that persona (one run per message,
+one continuous history per channel) and posts the reply back through the
+ordinary `slack send` path. It has no implicit host-process or network
+authority beyond that single hop — see the ADR for what it explicitly does
+not yet close (M6.4's outbound durability).
+
+**Treat this bridge as a spike, not the architecture to keep.** Review
+correctly identified what it discovered: `SlackInboundRouting.ts` directly
+imports `AgentPersonaLookup` and constructs an agent ctl request, the Slack
+plugin's own config carries `persona:` (a routing policy a provider plugin
+shouldn't own), and the poller reads agent-run files and writes Slack's ctl
+directly — real cross-plugin coupling, not an architectural decision worth
+defending. It proved the end-to-end shape (`Slack message → agent run →
+durable response → Slack reply`) is the right demo. M6.5 and M7.1 below are
+the seam it found: a provider-neutral typed event source, and a small
+workflow-binding layer that owns the cross-plugin composition instead of
+either plugin knowing about the other.
 
 M7 remains deliberately staged. What shipped is explicit-invocation only; the
 next decision — earned only by repeated use — covers subscriptions, automatic
@@ -736,6 +749,61 @@ stopped it — see [AGENT-CHAT-VALIDATION.md](AGENT-CHAT-VALIDATION.md) and
 [SLACK-VALIDATION.md](SLACK-VALIDATION.md). The detailed data and lifecycle
 decisions live in the ADR's “M7 decision: local conversation channels”
 section.
+
+### M6.5 — Provider-neutral inbound event source *(scoped, not started)*
+
+Checkpoint: a provider that receives external messages (starting with
+Slack) publishes a typed incoming-message envelope — stable remote ID,
+channel, sender, timestamp, text, and provenance — plus a durable
+cursor/deduplication record, and nothing more. It does not select a
+persona, does not know `agent` exists, and does not wait for a run to
+finish. `SlackConfig`'s `persona:` field goes away; a Slack mount's job is
+only "publish what arrived on this channel, once each."
+
+Today's in-memory cursor (lost on daemon restart, documented as a known v1
+gap in `SLACK-VALIDATION.md`) becomes a real requirement here, not an
+accepted shortcut: a provider-neutral event source needs durable
+delivery state to honestly claim "once each." This milestone is where that
+gets fixed, not M6.4 (which is about the *outbound* leg).
+
+### M7.1 — Deliberately tiny workflow binding *(scoped, not started)*
+
+Checkpoint: a host-side deployment configuration binds one narrowly
+filtered event source to one reviewed workflow:
+
+```text
+Slack mention in #reviews
+  → invoke reviewer with message as typed input
+  → await that run
+  → propose/send its reply through the M6.4 outbox
+```
+
+The workflow owns the cross-plugin composition that `SlackInboundRouting.ts`
+owns today; providers own only their upstream integration and typed
+actions. This is deliberately not L2: a Yash script can express a bounded
+local procedure with typed arguments (`yash run`, reviewed and captured),
+but it should not become an event daemon that decides when it runs. A
+workflow binding is the opposite half of that boundary — a daemon-owned
+trigger configuration, a durable workflow run, and an explicit
+effect/approval/retry policy — kept as a separate contract on purpose so
+neither "an agent writes a script" nor "a Slack message supplies an
+argument" ever implies "and now it can make itself run" or "and now that
+text is interpolated into shell source." See
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md)'s L2 scoping section for the
+matching script-side half of this boundary.
+
+**Sequencing and initial demo scope:** M6.5 and M7.1 both depend on M6.4
+closing first (per M6.4's own "why this gates M7" note) — building an
+approval-gated workflow binding on top of a still-fire-and-forget outbound
+write would mean the approval means nothing. Once all three are done, the
+narrow initial trigger should be: one configured channel, explicit
+`@mention` only (already true of the M7 spike), a bounded message size, one
+configured workflow/persona, no recursive replies, durable inbound
+deduplication (from M6.5), and human approval before the Slack reply is
+actually sent, until M6.4's durability has itself been proven in practice —
+not just implemented. The legible version of the demo is "mention the
+reviewer, inspect its captured context and proposed reply, approve
+delivery," not an autonomous bot loop.
 
 ### M8 — Remote/multi-user service *(decision gate)*
 

@@ -4,7 +4,10 @@ import { DiffChange } from "./WorkspaceOperation";
 import { WorkspaceWalker } from "./WorkspaceWalker";
 
 export function diff(
-  context: CommandContext, left: string, right: string, limit = 10000,
+  context: CommandContext,
+  left: string,
+  right: string,
+  limit = 10000,
 ): DiffChange[] {
   const leftPath = context.resolve(left);
   const rightPath = context.resolve(right);
@@ -12,45 +15,58 @@ export function diff(
 }
 
 function changes(
-  context: CommandContext, left: AbsolutePath, right: AbsolutePath,
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
   limit: number,
 ) {
-  return context.type(left) === "directory" && context.type(right) === "directory"
+  return context.type(left) === "directory" &&
+    context.type(right) === "directory"
     ? directoryChanges(context, left, right, limit)
     : fileChanges(context, left, right);
 }
 
 function fileChanges(
-  context: CommandContext, left: AbsolutePath, right: AbsolutePath,
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
 ): DiffChange[] {
   return context.read(left) === context.read(right)
-    ? [] : [{ path: ".", kind: "changed" as const }];
+    ? []
+    : [{ path: ".", kind: "changed" as const }];
 }
 
 function directoryChanges(
-  context: CommandContext, left: AbsolutePath, right: AbsolutePath,
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
   limit: number,
 ): DiffChange[] {
-  const paths = [...files(context, left), ...files(context, right)];
-  return bounded(compare(context, left, right, [...new Set(paths)].sort()),
-    limit);
+  const found = [...files(context, left), ...files(context, right)];
+  const sorted = [...new Set(found)].sort();
+  return bounded(compare(context, left, right, sorted), limit);
 }
 
 function files(context: CommandContext, path: AbsolutePath) {
-  return new WorkspaceWalker(context, 10, 10000).all(path)
+  return new WorkspaceWalker(context, 10, 10000)
+    .all(path)
     .filter((entry) => entry.type === "file")
     .map((entry) => relative(path, entry.path));
 }
 
 function compare(
-  context: CommandContext, left: AbsolutePath, right: AbsolutePath,
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
   paths: string[],
 ): DiffChange[] {
   return paths.flatMap((path) => change(context, left, right, path));
 }
 
 function change(
-  context: CommandContext, left: AbsolutePath, right: AbsolutePath,
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
   path: string,
 ): DiffChange[] {
   const kind = missing(context, left, right, path);
@@ -58,7 +74,9 @@ function change(
 }
 
 function missing(
-  context: CommandContext, left: AbsolutePath, right: AbsolutePath,
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
   path: string,
 ) {
   if (!context.exists(join(left, path))) {
@@ -68,17 +86,22 @@ function missing(
 }
 
 function missingRight(
-  context: CommandContext, right: AbsolutePath, path: string,
+  context: CommandContext,
+  right: AbsolutePath,
+  path: string,
 ) {
-  return context.exists(join(right, path)) ? undefined : "removed" as const;
+  return context.exists(join(right, path)) ? undefined : ("removed" as const);
 }
 
 function changed(
-  context: CommandContext, left: AbsolutePath, right: AbsolutePath,
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
   path: string,
 ) {
   return context.read(join(left, path)) === context.read(join(right, path))
-    ? [] : [{ path, kind: "changed" as const }];
+    ? []
+    : [{ path, kind: "changed" as const }];
 }
 
 function bounded(changes: DiffChange[], limit: number) {

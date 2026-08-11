@@ -34,7 +34,8 @@ export class TraceService {
   }
 
   private async captureEntries(
-    files: TraceFilesystem, source: AbsolutePath,
+    files: TraceFilesystem,
+    source: AbsolutePath,
     origin: Provenance | undefined,
     capturedAt: string,
   ) {
@@ -49,7 +50,9 @@ export class TraceService {
   }
 
   private assertCapturable(
-    files: TraceFilesystem, source: AbsolutePath, limit: number,
+    files: TraceFilesystem,
+    source: AbsolutePath,
+    limit: number,
   ) {
     this.assertDirectory(files, source);
     assertEntryLimit(files, source, limit);
@@ -112,7 +115,6 @@ export class TraceService {
       throw new Error("Invalid trace manifest");
     }
   }
-
 }
 
 export function digest(bytes: Uint8Array) {

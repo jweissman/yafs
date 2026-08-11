@@ -6,15 +6,21 @@ import { evidenceOperation, evidenceTools } from "./EvidenceTools";
 
 type Arguments = Record<string, unknown>;
 const operations: Record<string, PathOperationName> = {
-  "yafs.list": "list", "yafs.read": "read", "yafs.inspect": "inspect",
+  "yafs.list": "list",
+  "yafs.read": "read",
+  "yafs.inspect": "inspect",
 };
 
 type PathOperationName = "list" | "read" | "inspect";
 
 export function tools() {
   return [
-    listTool(), readTool(), inspectTool(), ...literacyTools(),
-    ...evidenceTools(), queryTool(),
+    listTool(),
+    readTool(),
+    inspectTool(),
+    ...literacyTools(),
+    ...evidenceTools(),
+    queryTool(),
   ];
 }
 
@@ -72,9 +78,11 @@ function schema(properties: Record<string, unknown>, required: string[]) {
 }
 
 function operation(name: string, input: Arguments) {
-  return name === "yafs.query" ? queryCommand(input)
-    : literacyOperation(name, input)
-      || evidenceOperation(name, input) || pathOperation(name, input);
+  return name === "yafs.query"
+    ? queryCommand(input)
+    : literacyOperation(name, input) ||
+        evidenceOperation(name, input) ||
+        pathOperation(name, input);
 }
 
 function queryCommand(input: Arguments) {
@@ -112,9 +120,10 @@ function pathArgument(input: Arguments) {
 }
 
 async function run(client: McpClient, command: string | WorkspaceOperation) {
-  const output = typeof command === "string"
-    ? await client.execute(command)
-    : await client.operation(command);
+  const output =
+    typeof command === "string"
+      ? await client.execute(command)
+      : await client.operation(command);
   if (output.error) {
     throw new Error(output.error.message);
   }

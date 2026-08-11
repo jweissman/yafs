@@ -9,6 +9,7 @@ import { NodeStoreWritability } from "./NodeStoreWritability";
 import { canonicalUnionLayers } from "./UnionLayers";
 import { VfsOperation } from "./VfsOperation";
 import { applyOperation } from "./NodeStoreApply";
+import { removeChild, removeTreeChild } from "./NodeStoreRemove";
 
 export class NodeStoreMutation {
   private readonly guard = nodeStoreWriteGuard;
@@ -49,32 +50,14 @@ export class NodeStoreMutation {
   remove(path: AbsolutePath) {
     this.assertWritable(path);
     const { parent, name } = this.parent(path);
-    this.removeChild(parent, name, path);
-  }
-  private removeChild(parent: FSNode, name: string, path: AbsolutePath) {
-    const index =
-      parent.children?.findIndex((child) => child.name === name) ?? -1;
-    if (index < 0) {
-      throw new Error(`No such file: ${path}`);
-    }
-    this.assertFile(parent.children![index], path);
-    parent.children!.splice(index, 1);
-  }
-  private assertFile(node: FSNode, path: AbsolutePath) {
-    if (node.dir) {
-      throw new Error(`Is a directory: ${path}`);
-    }
+    removeChild(parent, name, path);
   }
   rmdir(path: AbsolutePath) {
     this.rmdirOp.run(path);
   }
   removeTree(path: AbsolutePath) {
     const { parent, name } = this.parent(path);
-    const index =
-      parent.children?.findIndex((child) => child.name === name) ?? -1;
-    if (index >= 0) {
-      parent.children!.splice(index, 1);
-    }
+    removeTreeChild(parent, name);
   }
   setProviderOrigin(
     path: AbsolutePath,

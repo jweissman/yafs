@@ -1,4 +1,7 @@
-import { capture, restore as restoreArtifact } from "../traces/EvidenceOperations";
+import {
+  capture,
+  restore as restoreArtifact,
+} from "../traces/EvidenceOperations";
 import { BuiltinCommand } from "./BuiltinCommand";
 import { CommandContext } from "./CommandContext";
 

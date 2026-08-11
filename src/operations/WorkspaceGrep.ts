@@ -25,4 +25,6 @@ function matches(context: CommandContext, pattern: string, value: string) {
   });
 }
 
-function lines(value: string) { return value === "" ? [] : value.split("\n"); }
+function lines(value: string) {
+  return value === "" ? [] : value.split("\n");
+}

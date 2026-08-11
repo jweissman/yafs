@@ -119,7 +119,11 @@ async function plannedAsync(yafs: Yafs, input: string): Promise<ExecutionPlan> {
   return { result, operations: yafs.operationQueue.all() };
 }
 
-function success(yafs: Yafs, stdout: string, value?: ExecutionResult["value"]): ExecutionResult {
+function success(
+  yafs: Yafs,
+  stdout: string,
+  value?: ExecutionResult["value"],
+): ExecutionResult {
   return { stdout, stderr: "", status: 0, value, session: session(yafs) };
 }
 

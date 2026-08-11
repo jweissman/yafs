@@ -1,5 +1,10 @@
 import { BlobStore } from "../protocol/BlobStore";
-import { assertEntry, assertKey, assertSize, assertTtl } from "./CacheValidation";
+import {
+  assertEntry,
+  assertKey,
+  assertSize,
+  assertTtl,
+} from "./CacheValidation";
 
 export type CacheEntry = {
   kind: "yafs-cache-entry";

@@ -35,7 +35,6 @@ function finish(controller: ReadableStreamDefaultController<Uint8Array>) {
   controller.close();
 }
 
-
 function event(content: string) {
   const payload = JSON.stringify({ choices: [{ delta: { content } }] });
   return `data: ${payload}\n\n`;

@@ -11,16 +11,12 @@ import { CtlDispatch } from "./CtlDispatch";
 import { BackgroundDrivers, syncAll } from "./BackgroundDrivers";
 import {
   attachLines,
-  CommandRequest,
-  isCacheRequest,
-  isOperationRequest,
-  isWriteRequest,
   persistenceFailure,
   requestOrReject,
   respond,
   Request,
-  WriteRequest,
 } from "./Framing";
+import { planRequest } from "./ServerRequestPlanning";
 
 type Services = {
   store: NodeStore;
@@ -105,25 +101,9 @@ export class ServerConnection {
     request: Request,
     socket: Socket,
   ) {
-    const plan = await this.plan(session, request);
+    const plan = await planRequest(session, request);
     await this.commit(session, await this.ctl.intercept(plan.operations));
     respond(socket, { version: 1, id: request.id, result: plan.result });
-  }
-
-  private plan(session: Yafs, request: Request) {
-    if (isCacheRequest(request)) {
-      return session.planCache(request.cache);
-    }
-    if (isOperationRequest(request)) {
-      return session.planOperationAsync(request.operation);
-    }
-    return this.planCommand(session, request as CommandRequest | WriteRequest);
-  }
-
-  private planCommand(session: Yafs, request: CommandRequest | WriteRequest) {
-    return isWriteRequest(request)
-      ? session.planWrite(request.write.path, request.write.content)
-      : session.planAsync(request.command);
   }
 
   async commit(session: Yafs, operations: VfsOperation[]) {

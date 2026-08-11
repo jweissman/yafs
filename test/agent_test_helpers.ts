@@ -59,7 +59,9 @@ async function pollRunId(state: PollState): Promise<string | undefined> {
 }
 
 async function firstRunId(state: PollState) {
-  const listing = await state.client.exec(`ls ${state.runsDir}`).catch(() => "");
+  const listing = await state.client
+    .exec(`ls ${state.runsDir}`)
+    .catch(() => "");
   return listing?.split("\n")[0];
 }
 

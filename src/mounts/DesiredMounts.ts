@@ -5,7 +5,10 @@ import { MountManager } from "./MountManager";
 import { Change, DesiredMountChanges } from "./DesiredMountChanges";
 import { activeEntries } from "./DesiredMountEntries";
 import { applyChange, Mutations, Target } from "./DesiredMountPublish";
-import { noPluginConfiguration, unconfiguredPluginRemedy } from "./PluginConfiguration";
+import {
+  noPluginConfiguration,
+  unconfiguredPluginRemedy,
+} from "./PluginConfiguration";
 
 type DesiredMountsOptions = { path?: string; root?: AbsolutePath };
 export class DesiredMounts {

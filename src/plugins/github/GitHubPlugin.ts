@@ -31,7 +31,9 @@ export class GitHubPlugin extends Plugin {
   }
 
   unavailableCapability(record: Pick<MountRecord, "id">, capability: string) {
-    return capability === "secret.github-token" ? tokenUnavailable(record) : undefined;
+    return capability === "secret.github-token"
+      ? tokenUnavailable(record)
+      : undefined;
   }
 
   async prepare(record: MountRecord, snapshots: SnapshotMaterializer) {
@@ -70,7 +72,9 @@ function configurationError(record: MountRecord) {
 }
 
 function tokenUnavailable(record: Pick<MountRecord, "id">) {
-  return `GitHub plugin '${record.id}' requires secret.github-token, but ` +
+  return (
+    `GitHub plugin '${record.id}' requires secret.github-token, but ` +
     "YAFS_GITHUB_TOKEN was unavailable when yafsd started. Add it to the " +
-    "daemon environment, or remove the grant for a public collection.";
+    "daemon environment, or remove the grant for a public collection."
+  );
 }

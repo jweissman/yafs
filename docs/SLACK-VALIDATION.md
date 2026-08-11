@@ -122,11 +122,72 @@ should fail with `Capabilities are not granted: network.slack-api,
 secret.slack-token` — the mount never activates without both, so there's no
 window where a `slack send` could reach `SlackDirectoryDriver` ungated.
 
-## Known gap this doc deliberately does not re-litigate
+## 4. Inbound bridge: a real Slack message reaches a persona and a reply comes back
+
+Requires an `agents` mount alongside `updates`, and `persona:` added to the
+Slack config to opt that channel into inbound polling:
+
+```yaml
+version: 1
+plugins:
+  - id: agents
+    path: agents
+    plugin: agent
+    config:
+      personas:
+        reviewer:
+          prompt: "You are a terse, careful code reviewer."
+    capabilities: [chat.completion]
+  - id: updates
+    plugin: slack
+    path: updates
+    config: { channel: C0123456789, max: 25, persona: reviewer }
+    capabilities: [network.slack-api, secret.slack-token]
+```
+
+```sh
+plugins apply
+```
+
+From the real Slack channel (not `slack send` — an actual message typed by a
+human or posted via another tool, so the inbound poller has something new to
+find), post a message addressed to the bot, then watch for the reply to
+land in the same channel within a few poll intervals (default 3s):
+
+```text
+cat agents/reviewer/chats/*/messages.ndjson
+```
+
+should show a `user` turn whose content is prefixed with the Slack sender's
+user ID (`"U0123456: <your message>"`) followed by an `assistant` turn with
+the reply — and the reply should also now be visible in the real Slack
+channel, posted through the ordinary `slack send` ctl path (confirm this by
+checking `cat updates/messages.ndjson` picks it up, same as §1).
+
+Post a second message in the same channel and confirm it appends to the
+*same* `chats/<chatId>/messages.ndjson` rather than starting a new one — the
+bridge keys one continuous conversation per channel, not per message.
+
+Finally, confirm the bot does not reply to itself: after its own reply
+posts, no new run should start from that post. If it did, you'd see runaway
+back-and-forth replies in the channel; seeing exactly one reply per human
+message, with no follow-on reply to the bot's own text, confirms the
+identity filter (`SlackApiClient.identity`) is working.
+
+## Known gaps this doc deliberately does not re-litigate
 
 `slack send` posts to the real Slack API via fire-and-forget before any
 durable record of the attempt exists (confirmed in `SlackDirectoryDriver.ts`
 — `void this.attempt(...)`). §2 above proves the *outcome* is always visible
 after the fact; it does not prove a crash between the API call and that
 outcome can't lose the record or double-post on retry. That's tracked as
-M6.4 in `FEATURE-ROADMAP.md`, not something to fix while validating.
+M6.4 in `FEATURE-ROADMAP.md`, not something to fix while validating. §4's
+reply leg posts through this exact same undurable path — the inbound bridge
+does not close this gap, it inherits it; see the ADR's revised "M7 decision"
+section for why this was still shipped ahead of M6.4 closing.
+
+The inbound poller's last-seen cursor is in-memory only: restarting `yafsd`
+re-delivers the last `max` messages on that channel as if new, which can
+produce a duplicate reply to an already-answered message. Not fixed this
+milestone; a real fix needs a durable cursor, which is the same class of
+work as M6.4.

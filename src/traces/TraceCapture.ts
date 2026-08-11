@@ -6,7 +6,9 @@ import { TraceEntry, TraceFilesystem } from "./TraceTypes";
 type Source = { blobs: BlobStore; files: TraceFilesystem };
 
 export function assertEntryLimit(
-  files: TraceFilesystem, path: AbsolutePath, limit: number,
+  files: TraceFilesystem,
+  path: AbsolutePath,
+  limit: number,
 ) {
   if (entryCount(files, path) > limit) {
     throw new Error("Result limit exceeded");

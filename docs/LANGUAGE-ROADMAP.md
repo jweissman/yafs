@@ -125,6 +125,24 @@ L0 and L1 are the only language gates proposed before the supervised-agent
 experiment. L2–L4 are evidence-gated, not a commitment to turn Yash into Bash
 or Nushell.
 
+**L2 evidence (M7 Slack bridge):** `src/plugins/slack/SlackInboundRouting.ts`
+hand-writes exactly the shape L2 exists to replace — dispatch one command,
+poll for its terminal state, conditionally run a second command — as
+TypeScript orchestration between two plugins rather than a reviewable local
+script. This is concrete evidence the L2 bar may now be met, not merely
+hypothetical demand. Starting L2 for real requires solving a problem this
+bridge sidesteps by construction: safely passing an untrusted value (Slack
+message text) as a script argument without string-interpolating it into a
+parsed command line, which is a real injection surface with no existing
+mitigation. A trigger/event model (what starts a script run) and bounding
+rules also remain undesigned. Treat this note as the opening of the L2
+evidence case, not as L2 having started. That gap is now scoped — not
+implemented — in "L2 scoping" under
+[Script and pipeline boundaries](#script-and-pipeline-boundaries) below: the
+value-passing problem turns out to be nearly solved already by the grammar's
+existing `$variable` support, which is the single most load-bearing finding
+of that section.
+
 ## L0 delivery strategy
 
 L0 is a boundary migration, not a rewrite of every builtin or a new script
@@ -168,6 +186,15 @@ The follow-on catalog decision should settle only implementation-facing details:
 identifier/versioning, structured error envelope, schema representation,
 session serialization, and how the existing builtin registry adapts. It should
 not settle script syntax, pipeline framing, or a public HTTP API.
+
+### Implemented L1 slice
+
+`tree`, `find`, `grep`, `diff`, and `test` are implemented as typed
+`WorkspaceOperations`, each with a Yash renderer and a fixed MCP tool
+(`yafs.tree`/`yafs.find`/`yafs.grep`/`yafs.diff`/`yafs.test`), matching the L1
+operation contract below exactly — bounds, error shapes, and all. `capture`/
+`restore` are implemented and have replaced `trace`/`reify` as the only user
+vocabulary. This completes L1; the paving-stones row above is met.
 
 ## Command policy
 
@@ -278,6 +305,86 @@ if test -f "$1/diff.patch" {
   echo "no diff available"
 }
 ```
+
+### L2 scoping (design, not implementation)
+
+This is grounded in the current grammar/interpreter, not aspirational — every
+fact below is a direct file:line reading of `src/lang/`, done to answer three
+questions before any L2 code is written: how does a script safely receive an
+untrusted value, what starts a script run, and what can a script do.
+
+**Safe value-passing is nearly already built.** The grammar already has a
+variable form — `variable = "$" identifier` in `Yash.ohm` — and it is wired
+end to end: `WordAst.ts` produces `{ kind: "variable", name }`,
+`evaluate.ts`'s `evaluateWord` resolves it via an injected
+`evaluators.variable(name): string`, and `YafsCommandRuntime.ts` supplies
+that evaluator today for exactly two session variables, `$USER` and `$PWD`
+(`src/YafsValues.ts`). Critically, resolution happens as a **value
+substitution after parsing**, not by re-parsing interpolated text — a
+`"$MESSAGE"` word is evaluated by looking up the string and using it as-is,
+never by splicing it into source and calling `Interpreter.parse()` again.
+That is exactly the primitive this session's Slack bridge needed and didn't
+have: L2 should extend `variable()` with a script-scoped binding table (a
+plain `Record<string, string>` resolved before falling through to session
+variables), so a script parameter — a Slack message body, a chat ID, an
+arbitrary string — is bound as a **value**, never string-interpolated into
+parsed source. This closes the injection risk identified in the L2-evidence
+note above by construction, not by escaping. One real grammar gap: `$1`-style
+positional parameters (used in this doc's own `if test -f "$1/diff.patch"`
+example above) don't parse today, because `identifier = letter (letter |
+digit)*` requires a leading letter. Closing it is a small, mechanical Ohm
+addition (`variable = "$" (identifier | digit+)`), not a redesign.
+
+**Trigger model: L2 defines the script language, not a new eventing system.**
+A script run should be started exactly the same ways commands already start
+today — an explicit interactive `yash run FILE -- ARGS`, or a driver
+supplying a parameter-binding table where a `PluginDriver` today hand-writes
+TypeScript orchestration (this session's `SlackInboundRouting.ts` is the
+concrete example: replace its dispatch/poll/reply sequence with a script
+body, with the poller's job reduced to "supply `$PERSONA`/`$CHAT_ID`/
+`$SENDER`/`$TEXT`/`$CHANNEL` and run the script"). No new scheduling,
+subscription, or autonomous-trigger primitive is in scope — that is
+explicitly the "second decision, earned only by repeated use" the M7 ADR
+section already reserves, and building it here would be the same
+autonomous-loop overreach already declined this session.
+
+**Sandboxing reuses `CommandAccess`, it doesn't invent a new effect system.**
+`docs/LANGUAGE-ROADMAP.md` has referred to `session`/`local-write`/`control`/
+`external-action` "effect" categories as a future design; those do not exist
+in code. What exists and already works is `CommandAccess = "read" | "session"
+| "mutate" | "control"` (`src/commands/BuiltinCommand.ts`) plus
+`assertReadOnlyCommand` (`src/commands/ReadOnlySource.ts`), which recursively
+rejects any non-`"read"` command inside `$()` substitution today, including
+inside nested substitutions. L2's bounding rule should be the same check,
+applied to a whole script body instead of one substitution: a script run
+triggered by a human inherits that human's full authority (a human can
+already run any command directly, so this adds no new restriction); a script
+run triggered by an automated driver should be checked against an explicit
+allow-list of `CommandAccess` levels (and, later, specific command names)
+declared where the trigger is configured — turning this session's hand-built
+"the poller can only ever write two specific ctl paths" property into a
+declared policy instead of a TypeScript implementation detail.
+
+**Worked example**, illustrating the target shape without claiming today's
+grammar parses it (it doesn't yet — block bodies, `if`/`else`, and
+newline-separated sequencing inside `{ }` are still needed; `Command` is
+currently the sole top-level parse rule, with no `Program = Command*` root):
+
+```sh
+agent send $PERSONA --chat $CHAT_ID "$SENDER: $TEXT"
+if test -f runs/$RUN_ID/response.md {
+  slack send $CHANNEL "$(cat runs/$RUN_ID/response.md)"
+}
+```
+
+**Explicitly not decided here:** the concrete block/sequencing grammar (needs
+its own Ohm-review pass); whether script files live in the VFS (inspectable
+like any file) or are host-config-only, which is the same "capability grant
+must not be a plain VFS write" question the `.yafsmeta` removal already
+settled once this session, applied to a new surface, and deserving the same
+deliberate answer rather than a default; and how a driver's allow-list is
+declared (a new manifest field, most likely, but not designed here). This
+section is a scoping document, not a green light to implement.
 
 L3 iteration must consume a typed path list, never `for x in $(ls ...)`.
 L4 pipelines need a real stream contract: text versus bytes, backpressure,

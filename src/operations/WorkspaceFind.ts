@@ -19,18 +19,30 @@ export function boundedPaths(paths: AbsolutePath[], limit?: number) {
 }
 
 function matches(entry: TreeEntry, pattern?: string, type?: NodeType) {
-  return (!type || entry.type === type)
-    && (!pattern || wildcard(name(entry.path), pattern));
+  return (
+    (!type || entry.type === type) &&
+    (!pattern || wildcard(name(entry.path), pattern))
+  );
 }
 
 function wildcard(value: string, pattern: string) {
   const parts = pattern.split("*");
-  return begins(value, parts[0]) && ends(value, parts.at(-1) || "") && contains(value, parts);
+  return (
+    begins(value, parts[0]) &&
+    ends(value, parts.at(-1) || "") &&
+    contains(value, parts)
+  );
 }
 
-function begins(value: string, part: string) { return value.startsWith(part); }
-function ends(value: string, part: string) { return value.endsWith(part); }
+function begins(value: string, part: string) {
+  return value.startsWith(part);
+}
+function ends(value: string, part: string) {
+  return value.endsWith(part);
+}
 function contains(value: string, parts: string[]) {
   return parts.slice(1, -1).every((part) => value.includes(part));
 }
-function name(path: AbsolutePath) { return path.split("/").at(-1) || ""; }
+function name(path: AbsolutePath) {
+  return path.split("/").at(-1) || "";
+}

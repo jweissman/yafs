@@ -99,7 +99,9 @@ export default class Yafs {
   planCache(request: import("./cache/CacheRequest").CacheRequest) {
     return planCache(this, request);
   }
-  planOperation(request: import("./operations/WorkspaceOperation").WorkspaceOperation) {
+  planOperation(
+    request: import("./operations/WorkspaceOperation").WorkspaceOperation,
+  ) {
     return planOperation(this, request);
   }
   planOperationAsync(

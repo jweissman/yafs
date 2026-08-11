@@ -3,9 +3,11 @@
 `src/yash/chat.ts`, `chatSession.ts`, `chatPoll.ts`, and `chatTypes.ts` have
 no automated test coverage — they're pure client-side yash modules, and
 (like `edit.ts` before them) nothing in `test/` imports them, so `bun test
---coverage` never even sees them. This is the manual runbook that stands in
-for automated coverage on this layer, matching `docs/M6-VALIDATION.md`'s
-role for the agent persona feature it built on.
+--coverage` never even sees them. (`chatArgs.ts`'s pure `--context`/`--chat`
+flag parser is the one exception, unit-tested in `test/chat_args.test.ts`
+since it has no I/O to make interactive-only.) This is the manual runbook
+that stands in for automated coverage on the rest of this layer, matching
+`docs/M6-VALIDATION.md`'s role for the agent persona feature it built on.
 
 Everything below runs inside an interactive `yash` session (`bun run yash`)
 — `agent chat` refuses to start under `yash -c` or a non-TTY pipe, by
@@ -181,3 +183,71 @@ must print `agent chat requires an interactive terminal` (via `runChat`'s
 never be answered from a closed pipe. What happens immediately after (yash
 exiting on the subsequent EOF vs. erroring) isn't the point of this check —
 just confirm the TTY guard message itself appears and nothing hangs.
+
+## 6. `--context PATH` attaches once, at the first turn only
+
+Requires a GitHub mount alongside `agents` (same `source` convention
+`docs/M6-VALIDATION.md` uses):
+
+```yaml
+  - id: source
+    path: source
+    plugin: github
+    config: { repository: "org/repo", query: "is:pr is:open", max: 10 }
+    capabilities: [network.github-api, secret.github-token]
+```
+
+```text
+yash:/home/root$ agent chat reviewer --context source/pulls/482/diff.patch
+Chatting with reviewer. Type "exit" to leave.
+you> summarize this diff
+<reply should reference the diff's actual content>
+you> what would you check next
+<second reply should NOT re-quote the diff verbatim the way the first did —
+confirms context was attached once, not resent every turn>
+you> exit
+```
+
+`cat agents/reviewer/runs/<first runId>/context.md` should contain the
+diff's content; the second run's directory should have no `context.md` at
+all.
+
+## 7. `--chat CHATID` resumes an existing thread
+
+Reuse a `chatId` from §1 (or start one with `agent send --chat`) instead of
+letting `agent chat` mint a fresh one:
+
+```text
+yash:/home/root$ ls agents/reviewer/chats
+<existing-chat-id>
+yash:/home/root$ agent chat reviewer --chat <existing-chat-id>
+Chatting with reviewer. Type "exit" to leave.
+you> what did I just ask you
+<reply should reference the prior turns from that chatId, not start cold>
+you> exit
+```
+
+`cat agents/reviewer/chats/<existing-chat-id>/messages.ndjson` should show
+the new turns appended after the old ones, not a new file and not a reset
+history.
+
+## 8. Reply quality against a real task, not just plumbing
+
+Sections 1–7 confirm the mechanism works; this section confirms the result
+is actually useful, which is the point of building this at all. Using the
+same `source/pulls/482/diff.patch` context from §6, ask a specific,
+checkable question rather than a generic one:
+
+```text
+yash:/home/root$ agent chat reviewer --context source/pulls/482/diff.patch
+you> what's the single riskiest change in this diff and why
+<reply should name a specific file/line or logical change from the real
+diff, not a generic "review your code carefully" non-answer>
+you> exit
+```
+
+Judge this against the actual PR, not the transcript alone: open the same
+PR in a browser and check whether the model's answer holds up. A vague or
+hallucinated answer here is a real finding about the persona's prompt or the
+model, not a plumbing bug — record it as such rather than treating this
+runbook as passed on mechanism alone.

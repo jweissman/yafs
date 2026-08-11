@@ -6,7 +6,9 @@ import { startupError } from "./DaemonStartupError";
 
 type StatePaths = { state: string; log: string };
 type Attempt = {
-  child: ChildProcess; statePaths: StatePaths; logOffset: number;
+  child: ChildProcess;
+  statePaths: StatePaths;
+  logOffset: number;
 };
 
 export async function waitForState(
@@ -42,13 +44,16 @@ async function tick(attempt: Attempt) {
 
 async function startupFailure(attempt: Attempt) {
   const line = await errorLine(attempt);
-  return new Error(line || `yafsd failed to start; see ${attempt.statePaths.log}`);
+  return new Error(
+    line || `yafsd failed to start; see ${attempt.statePaths.log}`,
+  );
 }
 
 async function errorLine(attempt: Attempt) {
   try {
     return startupError(
-      await readFile(attempt.statePaths.log, "utf8"), attempt.logOffset,
+      await readFile(attempt.statePaths.log, "utf8"),
+      attempt.logOffset,
     );
   } catch {
     return undefined;

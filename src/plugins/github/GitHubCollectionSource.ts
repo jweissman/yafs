@@ -64,7 +64,8 @@ export class GitHubCollectionSource {
     pull: GitHubPull,
   ): GitHubResourceReference {
     const { number, headSha } = pull;
-    return { kind: "github-pr", repository: config.repository, number, headSha };
+    const { repository } = config;
+    return { kind: "github-pr", repository, number, headSha };
   }
   private revision(pulls: GitHubPull[]) {
     return `github:${createHash("sha256").update(JSON.stringify(pulls)).digest("hex").slice(0, 12)}`;

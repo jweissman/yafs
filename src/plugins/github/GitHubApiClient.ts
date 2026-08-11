@@ -6,6 +6,7 @@ import {
 import { GitHubConfig } from "../../mounts/types";
 import { GitHubSettings } from "./GitHubSettings";
 import { failureDetail, timedOut } from "./GitHubApiFailure";
+import { searchSummary } from "./GitHubApiSummary";
 
 type Fetch = (
   input: RequestInfo | URL,
@@ -122,12 +123,4 @@ export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
         : {}),
     };
   }
-}
-
-function searchSummary(
-  item: { number: number; title: string; updated_at: string },
-  headSha: string,
-) {
-  const { number, title, updated_at: updatedAt } = item;
-  return { number, title, updatedAt, headSha };
 }

@@ -5,7 +5,9 @@ import { traceFilesystem } from "./TraceContextFilesystem";
 import { Trace } from "./TraceService";
 
 export async function capture(
-  context: CommandContext, source: AbsolutePath, artifact: AbsolutePath,
+  context: CommandContext,
+  source: AbsolutePath,
+  artifact: AbsolutePath,
   limit?: number,
 ): Promise<CaptureValue> {
   assertAbsent(context, artifact, "Capture");
@@ -15,14 +17,24 @@ export async function capture(
 }
 
 export async function restore(
-  context: CommandContext, artifact: AbsolutePath, destination: AbsolutePath,
+  context: CommandContext,
+  artifact: AbsolutePath,
+  destination: AbsolutePath,
 ): Promise<RestoreValue> {
+  const trace = await materializeTrace(context, artifact, destination);
+  return restored(artifact, destination, trace);
+}
+
+async function materializeTrace(
+  context: CommandContext,
+  artifact: AbsolutePath,
+  destination: AbsolutePath,
+) {
   const trace = context.traces.parse(context.read(manifest(artifact)));
   assertRestoreLimit(trace);
-  await context.traces.materialize(
-    traceFilesystem(context), trace, destination,
-  );
-  return restored(artifact, destination, trace);
+  const fs = traceFilesystem(context);
+  await context.traces.materialize(fs, trace, destination);
+  return trace;
 }
 
 function assertRestoreLimit(trace: Trace) {
@@ -32,18 +44,30 @@ function assertRestoreLimit(trace: Trace) {
 }
 
 async function traced(
-  context: CommandContext, source: AbsolutePath, limit?: number,
+  context: CommandContext,
+  source: AbsolutePath,
+  limit?: number,
 ) {
-  const trace = await context.traces.capture(
-    traceFilesystem(context), source, providerOrigin(context, source),
-    context.clock.now().toISOString(), limit,
-  );
+  const fs = traceFilesystem(context);
+  const origin = providerOrigin(context, source);
+  const at = context.clock.now().toISOString();
+  const trace = await context.traces.capture(fs, source, origin, at, limit);
+  return withResourceReference(context, source, trace);
+}
+
+function withResourceReference(
+  context: CommandContext,
+  source: AbsolutePath,
+  trace: Trace,
+) {
   trace.resourceReference = context.resourceReference(source);
   return trace;
 }
 
 function publish(
-  context: CommandContext, artifact: AbsolutePath, trace: Trace,
+  context: CommandContext,
+  artifact: AbsolutePath,
+  trace: Trace,
 ) {
   context.afterCommit(() => context.traces.retain(trace, owner(artifact)));
   context.mkdir(artifact);
@@ -52,13 +76,18 @@ function publish(
 
 function captured(source: AbsolutePath, artifact: AbsolutePath, trace: Trace) {
   return {
-    kind: "capture" as const, source, artifact, capturedAt: trace.capturedAt,
+    kind: "capture" as const,
+    source,
+    artifact,
+    capturedAt: trace.capturedAt,
     entries: trace.entries.length,
   };
 }
 
 function assertAbsent(
-  context: CommandContext, path: AbsolutePath, action: string,
+  context: CommandContext,
+  path: AbsolutePath,
+  action: string,
 ) {
   if (context.exists(path)) {
     throw new Error(`${action} destination already exists: ${path}`);
@@ -70,10 +99,12 @@ function providerOrigin(context: CommandContext, path: AbsolutePath) {
 }
 
 function restored(
-  artifact: AbsolutePath, destination: AbsolutePath, trace: Trace,
+  artifact: AbsolutePath,
+  destination: AbsolutePath,
+  trace: Trace,
 ) {
-  return { kind: "restore" as const, artifact, destination,
-    entries: trace.entries.length };
+  const entries = trace.entries.length;
+  return { kind: "restore" as const, artifact, destination, entries };
 }
 
 function manifest(path: AbsolutePath) {

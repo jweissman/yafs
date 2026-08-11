@@ -9,10 +9,11 @@ export function missingDesiredMounts() {
 
 function missingReads() {
   return {
-    desiredStatus: () => Promise.resolve({
-      configured: false,
-      remedy: unconfiguredPluginRemedy(),
-    }),
+    desiredStatus: () =>
+      Promise.resolve({
+        configured: false,
+        remedy: unconfiguredPluginRemedy(),
+      }),
     desiredPlan: () => Promise.resolve([]),
   };
 }
