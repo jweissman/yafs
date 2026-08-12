@@ -1,9 +1,16 @@
+import { randomUUID } from "node:crypto";
+
 import { AbsolutePath } from "../../core/AbsolutePath";
 import { CtlHandler } from "../../protocol/CtlDispatch";
 import { Journal } from "../../protocol/Journal";
 import { MountManager } from "../../mounts/MountManager";
 import { PreparedMountRecord, SlackConfig } from "../../mounts/types";
 import { withError } from "./SlackErrorRecord";
+import { parseSlackAction } from "./SlackAction";
+import { SlackOutboxStore } from "./SlackOutboxStore";
+import { recoverSlackOutbox } from "./SlackOutboxRecovery";
+import { queuedStatus } from "./SlackOutboxStatus";
+import { attemptDelivery, AttemptDeps } from "./SlackOutboxAttempt";
 
 export type SlackPoster = {
   postMessage(channel: string, text: string): Promise<string>;
@@ -16,6 +23,7 @@ type Enqueue = (work: () => Promise<void>) => Promise<void>;
 
 export class SlackDirectoryDriver {
   private registered = new Set<AbsolutePath>();
+  private readonly outbox: SlackOutboxStore;
 
   constructor(
     private readonly mounts: MountManager,
@@ -23,7 +31,9 @@ export class SlackDirectoryDriver {
     private readonly enqueue: Enqueue,
     private readonly ctl: Ctl,
     private readonly clientFor: ClientFor,
-  ) {}
+  ) {
+    this.outbox = new SlackOutboxStore(mounts, journal, enqueue);
+  }
 
   close() {
     this.registered.forEach((path) => this.ctl.unregisterCtl(path));
@@ -37,6 +47,10 @@ export class SlackDirectoryDriver {
       .forEach((record) => this.registerRecord(record, paths));
     this.unregisterUnpaired(paths);
     this.registered = paths;
+  }
+
+  async recover() {
+    return recoverSlackOutbox(this.mounts, this.outbox);
   }
 
   private unregisterUnpaired(paths: Set<AbsolutePath>) {
@@ -62,26 +76,26 @@ export class SlackDirectoryDriver {
     return path;
   }
 
+  // Durable acceptance must complete before this handler returns — the ctl
+  // write is only acknowledged to the caller once `outbox.accept` has run,
+  // so "accepted" genuinely means "durably queued," not "queued in memory."
   private async send(mountId: string, payload: string) {
-    const message = this.message(payload);
-    void this.attempt(mountId, message);
+    const action = parseSlackAction(payload);
+    const id = { mountId, actionId: action.actionId || randomUUID() };
+    const startedAt = new Date().toISOString();
+    await this.outbox.accept(id, action.message, queuedStatus(startedAt));
+    const attempt = { id, message: action.message, startedAt };
+    void attemptDelivery(this.attemptDeps(), attempt);
   }
 
-  private async attempt(mountId: string, message: string) {
-    try {
-      await this.post(mountId, message);
-      await this.commitRefresh(mountId);
-    } catch (error) {
-      await this.commitError(mountId, message, error);
-    }
-  }
-
-  private message(payload: string): string {
-    const message = (JSON.parse(payload) as { message?: unknown }).message;
-    if (typeof message !== "string") {
-      throw new Error(`Invalid slack action: ${payload}`);
-    }
-    return message;
+  private attemptDeps(): AttemptDeps {
+    return {
+      outbox: this.outbox,
+      post: (mountId, message) => this.post(mountId, message),
+      commitRefresh: (mountId) => this.commitRefresh(mountId),
+      commitError: (mountId, message, error) =>
+        this.commitError(mountId, message, error),
+    };
   }
 
   private async post(mountId: string, message: string) {

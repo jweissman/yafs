@@ -12,6 +12,15 @@ export async function capture(
 ): Promise<CaptureValue> {
   assertAbsent(context, artifact, "Capture");
   const trace = await traced(context, source, limit);
+  return publishedCapture(context, source, artifact, trace);
+}
+
+function publishedCapture(
+  context: CommandContext,
+  source: AbsolutePath,
+  artifact: AbsolutePath,
+  trace: Trace,
+): CaptureValue {
   publish(context, artifact, trace);
   return captured(source, artifact, trace);
 }
@@ -30,10 +39,15 @@ async function materializeTrace(
   artifact: AbsolutePath,
   destination: AbsolutePath,
 ) {
-  const trace = context.traces.parse(context.read(manifest(artifact)));
-  assertRestoreLimit(trace);
+  const trace = parsedTrace(context, artifact);
   const fs = traceFilesystem(context);
   await context.traces.materialize(fs, trace, destination);
+  return trace;
+}
+
+function parsedTrace(context: CommandContext, artifact: AbsolutePath) {
+  const trace = context.traces.parse(context.read(manifest(artifact)));
+  assertRestoreLimit(trace);
   return trace;
 }
 
@@ -48,11 +62,19 @@ async function traced(
   source: AbsolutePath,
   limit?: number,
 ) {
+  const trace = await capturedTrace(context, source, limit);
+  return withResourceReference(context, source, trace);
+}
+
+async function capturedTrace(
+  context: CommandContext,
+  source: AbsolutePath,
+  limit?: number,
+) {
   const fs = traceFilesystem(context);
   const origin = providerOrigin(context, source);
   const at = context.clock.now().toISOString();
-  const trace = await context.traces.capture(fs, source, origin, at, limit);
-  return withResourceReference(context, source, trace);
+  return context.traces.capture(fs, source, origin, at, limit);
 }
 
 function withResourceReference(

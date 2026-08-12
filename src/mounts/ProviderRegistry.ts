@@ -44,12 +44,9 @@ export class ProviderRegistry {
     record: Pick<MountRecord, "id" | "provider" | "capabilities">,
     denied: string[],
   ) {
-    return (
-      this.definition(record.provider).unavailableCapability(
-        record,
-        denied[0],
-      ) || `Capabilities are not granted: ${denied.join(", ")}`
-    );
+    const definition = this.definition(record.provider);
+    const fallback = `Capabilities are not granted: ${denied.join(", ")}`;
+    return definition.unavailableCapability(record, denied[0]) || fallback;
   }
 
   prepare(

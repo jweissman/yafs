@@ -43,6 +43,7 @@ test("rm removes files but not directories", () => {
   expect(yafs.execute("cat note").error?.code).toBe("not_found");
   yafs.exec("mkdir docs");
   expect(yafs.execute("rm docs").error?.code).toBe("is_directory");
+  expect(yafs.execute("rm never-existed").error?.code).toBe("not_found");
 });
 
 test("symlinks resolve relative to their parent and report loops", () => {

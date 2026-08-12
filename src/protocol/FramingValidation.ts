@@ -24,15 +24,21 @@ function assertVersion(request: Request) {
 }
 
 function validPayload(request: Request) {
-  const write = (request as Partial<WriteRequest>).write;
-  const cache = (request as Partial<CacheProtocolRequest>).cache;
-  const operation = (request as Partial<OperationProtocolRequest>).operation;
+  const { write, cache, operation } = payloadParts(request);
   return (
     typeof (request as Partial<CommandRequest>).command === "string" ||
     Boolean(write && validWrite(write)) ||
     validCacheRequest(cache) ||
     validOperation(operation)
   );
+}
+
+function payloadParts(request: Request) {
+  return {
+    write: (request as Partial<WriteRequest>).write,
+    cache: (request as Partial<CacheProtocolRequest>).cache,
+    operation: (request as Partial<OperationProtocolRequest>).operation,
+  };
 }
 
 function validWrite(write: WriteRequest["write"]) {

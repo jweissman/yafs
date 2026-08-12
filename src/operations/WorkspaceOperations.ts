@@ -19,26 +19,14 @@ export class WorkspaceOperations {
           : this.readOperation(operation as ReadOperation);
   }
   private grep(operation: Extract<WorkspaceOperation, { name: "grep" }>) {
-    return {
-      kind: "grep" as const,
-      matches: grep(
-        this.context(),
-        operation.pattern,
-        operation.paths,
-        operation.limit,
-      ),
-    };
+    const { pattern, paths, limit } = operation;
+    const matches = grep(this.context(), pattern, paths, limit);
+    return { kind: "grep" as const, matches };
   }
   private diff(operation: Extract<WorkspaceOperation, { name: "diff" }>) {
-    return {
-      kind: "diff" as const,
-      changes: diff(
-        this.context(),
-        operation.left,
-        operation.right,
-        operation.limit,
-      ),
-    };
+    const { left, right, limit } = operation;
+    const changes = diff(this.context(), left, right, limit);
+    return { kind: "diff" as const, changes };
   }
   private readOperation(operation: ReadOperation): WorkspaceValue {
     return operation.name === "list"
@@ -53,10 +41,14 @@ export class WorkspaceOperations {
       ? this.tree(path, operation)
       : operation.name === "find"
         ? this.find(path, operation)
-        : {
-            kind: "test",
-            value: testPath(this.context(), path, operation.predicate),
-          };
+        : this.test(path, operation);
+  }
+  private test(
+    path: import("../core/AbsolutePath").AbsolutePath,
+    operation: Extract<LiteracyOperation, { name: "test" }>,
+  ): WorkspaceValue {
+    const value = testPath(this.context(), path, operation.predicate);
+    return { kind: "test", value };
   }
   private tree(
     path: import("../core/AbsolutePath").AbsolutePath,

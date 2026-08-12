@@ -71,7 +71,7 @@ function ctlPath(personaPath: AbsolutePath): AbsolutePath {
 
 async function postIfReplied(options: RouteOptions, reply: string | undefined) {
   if (reply !== undefined) {
-    const payload = JSON.stringify({ message: reply });
+    const payload = JSON.stringify({ message: reply, actionId: randomUUID() });
     await options.dispatchCtl(options.slackCtlPath, payload);
   }
 }

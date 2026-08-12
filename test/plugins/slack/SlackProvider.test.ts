@@ -79,7 +79,7 @@ function assertRejectsInvalidConfig() {
   expect(() =>
     parseManifest(slackManifest().replace("max: 10", "unknown: 10")),
   ).toThrow(
-    "Unknown slack config field: unknown (expected one of: channel, max, persona)",
+    "Unknown slack config field: unknown (expected one of: channel, max, persona, requireMention)",
   );
   expect(() => parseManifest(slackManifest().replace("C123", "a/b"))).toThrow(
     "Invalid slack channel",

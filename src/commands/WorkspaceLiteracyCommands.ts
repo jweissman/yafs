@@ -21,12 +21,12 @@ function command(
   name: string,
   operation: (args: string[]) => WorkspaceOperation,
 ): BuiltinCommand {
-  return {
-    name,
-    synopsis: name,
-    access: "read",
-    execute: (context, args) => render(invoke(context, operation(args))),
-  };
+  return { name, synopsis: name, access: "read", execute: run(operation) };
+}
+
+function run(operation: (args: string[]) => WorkspaceOperation) {
+  return (context: CommandContext, args: string[]) =>
+    render(invoke(context, operation(args)));
 }
 
 function invoke(context: CommandContext, operation: WorkspaceOperation) {
@@ -92,11 +92,15 @@ function render(value: WorkspaceValue) {
     ? value.entries.map((entry) => entry.path).join("\n")
     : value.kind === "find"
       ? value.paths.join("\n")
-      : value.kind === "test"
-        ? String(value.value)
-        : value.kind === "diff"
-          ? value.changes.map(format).join("\n")
-          : "";
+      : renderRest(value);
+}
+
+function renderRest(value: WorkspaceValue) {
+  return value.kind === "test"
+    ? String(value.value)
+    : value.kind === "diff"
+      ? value.changes.map(format).join("\n")
+      : "";
 }
 
 function format(change: import("../operations/WorkspaceOperation").DiffChange) {
@@ -120,13 +124,10 @@ function number(value: string | undefined) {
   return Number(value);
 }
 
+const NODE_TYPES = ["file", "directory", "symlink"];
+
 function nodeType(value: string | undefined): NodeType | undefined {
-  if (
-    value === undefined ||
-    value === "file" ||
-    value === "directory" ||
-    value === "symlink"
-  ) {
+  if (value === undefined || NODE_TYPES.includes(value)) {
     return value as NodeType | undefined;
   }
   throw new Error("type must be file, directory, or symlink");

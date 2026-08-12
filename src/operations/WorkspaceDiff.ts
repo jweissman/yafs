@@ -20,10 +20,18 @@ function changes(
   right: AbsolutePath,
   limit: number,
 ) {
-  return context.type(left) === "directory" &&
-    context.type(right) === "directory"
+  return bothDirectories(context, left, right)
     ? directoryChanges(context, left, right, limit)
     : fileChanges(context, left, right);
+}
+
+function bothDirectories(
+  context: CommandContext,
+  left: AbsolutePath,
+  right: AbsolutePath,
+) {
+  const leftIsDir = context.type(left) === "directory";
+  return leftIsDir && context.type(right) === "directory";
 }
 
 function fileChanges(
@@ -79,10 +87,9 @@ function missing(
   right: AbsolutePath,
   path: string,
 ) {
-  if (!context.exists(join(left, path))) {
-    return "added" as const;
-  }
-  return missingRight(context, right, path);
+  return context.exists(join(left, path))
+    ? missingRight(context, right, path)
+    : ("added" as const);
 }
 
 function missingRight(

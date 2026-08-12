@@ -10,8 +10,8 @@ test("slack send posts a message and the channel snapshot refreshes to include i
   const state = fakeState([{ user: "U1", text: "first", ts: "1.0" }]);
   const { server, client } = await startServer(state);
   await client.exec("plugins apply");
-  expect(await client.exec("slack send updates second")).toBe(
-    "accepted: updates",
+  expect(await client.exec("slack send updates second")).toMatch(
+    /^accepted: updates -> \/home\/root\/updates\/outbox\/[\w-]+$/,
   );
   await waitForContent(client, "updates/messages.ndjson", (content) =>
     content.includes("second"),

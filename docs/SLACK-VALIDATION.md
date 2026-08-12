@@ -63,11 +63,22 @@ slack send updates "validation pass, ignore this"
 cat updates/messages.ndjson
 ```
 
-Confirm the command returns `accepted: updates` immediately — before you've
-had time to check Slack — then confirm the message actually appears in the
-real channel, and that `messages.ndjson` picks it up on the next read (the
-driver refreshes the snapshot after a successful post; if it hasn't landed
-yet, `plugins refresh updates` forces it).
+Confirm the command returns `accepted: updates -> updates/outbox/<actionId>`
+immediately — before you've had time to check Slack — then confirm the
+message actually appears in the real channel, and that `messages.ndjson`
+picks it up on the next read (the driver refreshes the snapshot after a
+successful post; if it hasn't landed yet, `plugins refresh updates` forces
+it). Also confirm the durable record the accepted path names:
+
+```text
+cat updates/outbox/<actionId>/message.md
+cat updates/outbox/<actionId>/status.json
+```
+
+`message.md` should hold the exact text you sent; `status.json` should show
+`{"state":"succeeded", ...}` with `startedAt`/`completedAt` timestamps once
+the post lands (it's `"running"` in the brief window before that). See §5
+for what this record is for and how to validate it survives a crash.
 
 ## 2. Confirm the failure path is visible, not silent
 
@@ -99,13 +110,17 @@ slack send wrong "this should fail"
 cat wrong-channel/last-error.json
 ```
 
-Confirm the `slack send` command still returns `accepted: wrong` (the write
-is accepted before the API call happens — this is the exact behavior the
-M6.4 roadmap entry exists to change), and that `last-error.json` then appears
+Confirm the `slack send` command still returns
+`accepted: wrong -> wrong-channel/outbox/<actionId>` (the write is durably
+recorded as `queued` before the API call happens — the durable record exists
+first, then the network attempt), and that `last-error.json` then appears
 with the attempted message text, an error detail from the Slack API
-(`channel_not_found` or similar), and a timestamp. This is the whole point of
-checking it: a failed send must be discoverable by reading a file, not by
-noticing a message never arrived.
+(`channel_not_found` or similar), and a timestamp. Also confirm
+`wrong-channel/outbox/<actionId>/status.json` shows `{"state":"failed",
+"error": "..."}` — the same failure, visible two ways: the legacy
+`last-error.json` snapshot and the per-action outbox record. This is the
+whole point of checking it: a failed send must be discoverable by reading a
+file, not by noticing a message never arrived.
 
 ## 3. Confirm the capability gate, not just the happy path
 
@@ -125,7 +140,11 @@ window where a `slack send` could reach `SlackDirectoryDriver` ungated.
 ## 4. Inbound bridge: a real Slack message reaches a persona and a reply comes back
 
 Requires an `agents` mount alongside `updates`, and `persona:` added to the
-Slack config to opt that channel into inbound polling:
+Slack config to opt that channel into inbound polling. By default the
+poller only routes messages that `@mention` the bot — this is a safety
+default for shared/populated channels, not a hardcoded requirement; see
+§4b below for turning it off on a channel you know is effectively 1:1
+with the bot.
 
 ```yaml
 version: 1
@@ -149,24 +168,36 @@ plugins:
 plugins apply
 ```
 
+Wait at least one poll interval (default 3s) before posting anything. The
+mount's first tick after activation only establishes a baseline cursor and
+processes nothing — this is deliberate (see "Known gaps" below): it means
+an old `@mention` already sitting in the channel's history from before the
+bridge was configured is never retroactively picked up.
+
 From the real Slack channel (not `slack send` — an actual message typed by a
 human or posted via another tool, so the inbound poller has something new to
-find), post a message addressed to the bot, then watch for the reply to
-land in the same channel within a few poll intervals (default 3s):
+find), **@mention the bot** in a message (e.g. `@reviewer-bot can you check
+this?` — use Slack's actual autocomplete to insert the mention, not typed
+text, so it resolves to `<@BOTUSERID>`), then watch for the reply to land in
+the same channel within a few poll intervals. Also post a message in the
+same channel *without* mentioning the bot and confirm it is never picked up
+— this is the main behavior this section validates.
 
 ```text
 cat agents/reviewer/chats/*/messages.ndjson
 ```
 
 should show a `user` turn whose content is prefixed with the Slack sender's
-user ID (`"U0123456: <your message>"`) followed by an `assistant` turn with
-the reply — and the reply should also now be visible in the real Slack
-channel, posted through the ordinary `slack send` ctl path (confirm this by
-checking `cat updates/messages.ndjson` picks it up, same as §1).
+user ID (`"U0123456: <your message>"`, with the mention token itself
+stripped out) followed by an `assistant` turn with the reply — and the
+reply should also now be visible in the real Slack channel, posted through
+the ordinary `slack send` ctl path (confirm this by checking `cat
+updates/messages.ndjson` picks it up, same as §1).
 
-Post a second message in the same channel and confirm it appends to the
-*same* `chats/<chatId>/messages.ndjson` rather than starting a new one — the
-bridge keys one continuous conversation per channel, not per message.
+Post a second mentioning message in the same channel and confirm it appends
+to the *same* `chats/<chatId>/messages.ndjson` rather than starting a new
+one — the bridge keys one continuous conversation per channel, not per
+message.
 
 Finally, confirm the bot does not reply to itself: after its own reply
 posts, no new run should start from that post. If it did, you'd see runaway
@@ -174,20 +205,83 @@ back-and-forth replies in the channel; seeing exactly one reply per human
 message, with no follow-on reply to the bot's own text, confirms the
 identity filter (`SlackApiClient.identity`) is working.
 
+## 4b. Turning off the @mention requirement for a 1:1 channel
+
+If a channel is genuinely just you and the bot (a DM-equivalent, not a
+shared team channel), requiring `@mention` on every message is unnecessary
+friction. Add `requireMention: false` to that specific mount's config —
+this is an explicit, per-channel opt-out, not a global default change:
+
+```yaml
+    config:
+      channel: C0123456789
+      max: 25
+      persona: reviewer
+      requireMention: false
+```
+
+```sh
+plugins apply
+```
+
+Post a plain message with no `@mention` and confirm it is now routed and
+replied to, the same as a mentioning message would be in §4. Confirm the
+identity/self-reply filter (§4's last paragraph) still holds — that check
+is independent of `requireMention` and always applies.
+
+**Only turn this off on channels you control the membership of.** The
+reviewer concern this default exists for is real: on a channel with other
+people in it, `requireMention: false` means the bot replies to every
+message anyone posts, not just ones meant for it.
+
+## 5. Durable outbox survives a daemon restart mid-send
+
+This validates M6.4: the write is durably recorded as `queued` before the
+API call happens, so a crash mid-send can't silently lose the record of what
+was attempted. You can exercise this without a real Slack call by pointing
+`slack send` at the `wrong` mount from §2 (any target works — the crash
+happens before the outcome matters) and killing the daemon in the narrow
+window after `accepted:` returns:
+
+```text
+slack send wrong "durability check"
+```
+
+Immediately (same terminal, right after `accepted:` prints):
+
+```sh
+kill -9 <yafsd pid>
+cat <datadir>/wrong-channel/outbox/<actionId>/status.json   # before restart, if you're fast enough
+bun run yafsd -- start --config yafs.plugins.yaml
+bun run yash
+cat wrong-channel/outbox/<actionId>/status.json
+```
+
+If the daemon is killed while the action is still `queued` or `running`,
+recovery on restart (`SlackOutboxRecovery`, run from `recoverAll` at
+startup — the same seam `AgentRunRecovery` uses) marks it `"unknown"`, with
+an error explaining the daemon restarted while the action was in flight.
+This is deliberately **not** `"interrupted"` (what a half-finished agent run
+gets) and not auto-retried: unlike an in-progress model call, a half-sent
+Slack post may already have landed, so retrying risks a double-post and
+silently dropping it risks losing a message the operator thinks went out.
+`"unknown"` means: check Slack directly before deciding what to do. Confirm
+the message never lands twice in the real channel across a few repeats of
+this test with the `updates` mount instead of `wrong`.
+
 ## Known gaps this doc deliberately does not re-litigate
 
-`slack send` posts to the real Slack API via fire-and-forget before any
-durable record of the attempt exists (confirmed in `SlackDirectoryDriver.ts`
-— `void this.attempt(...)`). §2 above proves the *outcome* is always visible
-after the fact; it does not prove a crash between the API call and that
-outcome can't lose the record or double-post on retry. That's tracked as
-M6.4 in `FEATURE-ROADMAP.md`, not something to fix while validating. §4's
-reply leg posts through this exact same undurable path — the inbound bridge
-does not close this gap, it inherits it; see the ADR's revised "M7 decision"
-section for why this was still shipped ahead of M6.4 closing.
-
-The inbound poller's last-seen cursor is in-memory only: restarting `yafsd`
-re-delivers the last `max` messages on that channel as if new, which can
-produce a duplicate reply to an already-answered message. Not fixed this
-milestone; a real fix needs a durable cursor, which is the same class of
-work as M6.4.
+The M6.4 durable outbox (§5) closes the outbound fire-and-forget gap this
+section used to describe — both `slack send` and §4's inbound-bridge reply
+leg now go through it. What §5 does not close: the *inbound* leg. The
+inbound poller's last-seen cursor is in-memory only, but a restart no
+longer re-delivers prior messages as new — a mount's first tick after
+`yafsd` starts only establishes a baseline (the latest message's
+timestamp) and processes nothing, so a restart cannot produce a duplicate
+reply to an already-answered message. What remains a real, smaller gap: if
+`yafsd` restarts in the narrow window after a message arrived but before
+that tick's `route()` call has durably dispatched it to the persona, that
+specific inbound message is silently dropped rather than retried or
+duplicated — silent loss, not duplication. Closing that needs a durable
+cursor and a durable record of in-flight routing, which is the same class
+of work as M6.4/M6.5, not fixed this milestone.

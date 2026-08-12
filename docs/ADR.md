@@ -952,14 +952,15 @@ interleaves them into one agent history, a known v1 simplification) and
 writes the same ctl payload `agent send` would, through the same
 capability-checked path. It has no authority beyond that single hop: it
 cannot call further Yafs operations, chain into other personas, or retry
-beyond one run per message. What it does *not* yet close, flagged by review
-and left as explicit follow-up: `slack send` — both the human-facing command
-and this poller's reply leg — is fire-and-forget from the ctl handler's
-perspective (`SlackDirectoryDriver.send` does not await its own post before
-the write is acknowledged), so a crash mid-flight loses the action with no
-durable pending record. This is the M6.4 durable-outbound-action gap the
-roadmap already names, and it is a real prerequisite for trusting this bridge
-under failure conditions, not just a style complaint.
+beyond one run per message. **Update: the outbound durability gap this
+paragraph originally flagged is closed.** `slack send` and this poller's
+reply leg now accept into a durable per-action outbox
+(`SlackOutboxStore`/`SlackOutboxStatus`/`SlackOutboxRecovery`) before the
+ctl write is acknowledged, transition `queued → running →
+succeeded|failed`, and are swept to `unknown` (not retried, not dropped) by
+`recoverAll` on restart if a post was in flight — this is M6.4, now
+implemented; see `docs/FEATURE-ROADMAP.md`'s M6.4 entry and
+`docs/SLACK-VALIDATION.md` §5.
 
 **Update: this bridge is a spike, not the kept architecture.** Review
 after this milestone landed correctly named what it discovered:
@@ -968,10 +969,10 @@ agent ctl request, `SlackConfig`'s `persona:` field means the Slack plugin
 owns agent-routing policy, and the poller reads agent-run files and writes
 Slack's ctl directly — real cross-plugin coupling the demo needed to prove
 the shape, not a boundary worth keeping. `docs/FEATURE-ROADMAP.md`'s M6.5
-(provider-neutral typed inbound event source) and M7.1 (a deliberately tiny,
-daemon-owned workflow binding that owns the cross-plugin composition
-instead of either plugin knowing about the other) are the scoped, not-yet-
-started replacement. Both wait on M6.4 closing first.
+(bounded agent evidence tools) and its "Later: a provider-neutral
+event/workflow boundary" section (deliberately not a named, scoped
+milestone yet — see that section for why) are what this coupling points
+at, not a committed replacement design.
 
 ### Path-scoping primitive — a named, deferred prerequisite
 

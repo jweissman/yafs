@@ -74,11 +74,9 @@ function restoreValue(
   operation: Extract<EvidenceOperation, { name: "restore" }>,
 ) {
   const context = yafsContext(yafs);
-  return restore(
-    context,
-    yafs.shell.resolve(operation.artifact),
-    yafs.shell.resolve(operation.destination),
-  );
+  const artifact = yafs.shell.resolve(operation.artifact);
+  const destination = yafs.shell.resolve(operation.destination);
+  return restore(context, artifact, destination);
 }
 
 type EvidenceOperation = Extract<

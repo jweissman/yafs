@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   advanceCursor,
+  baselineCursor,
   mentions,
   newMessages,
   stripMention,
@@ -45,6 +46,11 @@ test("returns mentioning messages in ascending ts order regardless of input orde
   ]);
 });
 
+test("requireMention: false admits messages that never mention the bot", () => {
+  const messages = [{ user: "U1", text: "no mention here", ts: "1.0" }];
+  expect(newMessages("BOT", {}, messages, false)).toEqual(messages);
+});
+
 test("mentions and stripMention agree on the same token", () => {
   expect(mentions("BOT", "<@BOT> hi")).toBe(true);
   expect(mentions("BOT", "hi")).toBe(false);
@@ -61,4 +67,17 @@ test("advanceCursor moves to the latest of the new messages", () => {
 
 test("advanceCursor leaves the cursor untouched when nothing is new", () => {
   expect(advanceCursor({ lastTs: "5.0" }, [])).toEqual({ lastTs: "5.0" });
+});
+
+test("baselineCursor points past every message already in the window", () => {
+  const messages = [
+    { user: "U1", text: "<@BOT> old mention", ts: "1.0" },
+    { user: "U2", text: "chatter", ts: "3.0" },
+    { user: "U3", text: "<@BOT> also old", ts: "2.0" },
+  ];
+  expect(baselineCursor(messages)).toEqual({ lastTs: "3.0" });
+});
+
+test("baselineCursor on an empty channel leaves the cursor unset", () => {
+  expect(baselineCursor([])).toEqual({});
 });

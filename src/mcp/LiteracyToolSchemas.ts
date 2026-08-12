@@ -39,6 +39,10 @@ export function grepTool(): Tool {
     paths: { type: "array", items: string() },
     limit: integer(),
   };
+  return grepToolResult(properties);
+}
+
+function grepToolResult(properties: object): Tool {
   return tool("yafs.grep", "Find literal text in virtual files.", {
     properties,
     required: ["pattern", "paths"],

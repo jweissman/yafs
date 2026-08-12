@@ -1,12 +1,24 @@
 import { AbsolutePath } from "../../core/AbsolutePath";
 import { MountManager } from "../../mounts/MountManager";
 import { PreparedMountRecord, SlackConfig } from "../../mounts/types";
-import { advanceCursor, Cursor, newMessages } from "./SlackInboundSchedule";
+import {
+  advanceCursor,
+  baselineCursor,
+  Cursor,
+  newMessages,
+} from "./SlackInboundSchedule";
 import { DispatchCtl, RouteOptions, routeMessage } from "./SlackInboundRouting";
 import { SlackChannelClient, SlackMessage } from "./SlackApiClient";
 
 type InboundConfig = SlackConfig & { persona: string };
 const DEFAULT_POLL_MS = 3000;
+
+type Poll = {
+  record: PreparedMountRecord;
+  config: InboundConfig;
+  client: SlackChannelClient;
+};
+type Msgs = SlackMessage[];
 
 export class SlackInboundPoller {
   private timer?: Timer;
@@ -47,58 +59,54 @@ export class SlackInboundPoller {
   private async pollMount(record: PreparedMountRecord, config: InboundConfig) {
     this.busy.add(record.id);
     try {
-      await this.drain(record, config);
+      await this.drain({ record, config, client: this.clientFor(config) });
     } finally {
       this.busy.delete(record.id);
     }
   }
 
-  private async drain(record: PreparedMountRecord, config: InboundConfig) {
-    const client = this.clientFor(config);
-    const botUserId = await this.identity(record, client);
-    const cursor = this.cursors.get(record.id) || {};
-    const fetched = await client.history(config.channel, config.max ?? 50);
-    const fresh = newMessages(botUserId, cursor, fetched);
-    await this.route(record, config, botUserId, fresh);
-    this.cursors.set(record.id, advanceCursor(cursor, fresh));
+  private history(poll: Poll) {
+    return poll.client.history(poll.config.channel, poll.config.max ?? 50);
   }
 
-  private async identity(
-    record: PreparedMountRecord,
-    client: SlackChannelClient,
-  ) {
-    const cached = this.botUserIds.get(record.id);
-    return cached ?? this.fetchIdentity(record, client);
+  private async drain(poll: Poll) {
+    const cursor = this.cursors.get(poll.record.id);
+    const fetched = await this.history(poll);
+    if (!cursor) {
+      this.cursors.set(poll.record.id, baselineCursor(fetched));
+      return;
+    }
+    await this.drainFetched(poll, cursor, fetched);
   }
 
-  private async fetchIdentity(
-    record: PreparedMountRecord,
-    client: SlackChannelClient,
-  ) {
-    const id = await client.identity();
-    this.botUserIds.set(record.id, id);
+  private async drainFetched(poll: Poll, cursor: Cursor, fetched: Msgs) {
+    const botUserId = await this.identity(poll);
+    const requireMention = poll.config.requireMention ?? true;
+    const fresh = newMessages(botUserId, cursor, fetched, requireMention);
+    await this.route(poll, botUserId, fresh);
+    this.cursors.set(poll.record.id, advanceCursor(cursor, fresh));
+  }
+
+  private async identity(poll: Poll) {
+    const cached = this.botUserIds.get(poll.record.id);
+    if (cached) {
+      return cached;
+    }
+    const id = await poll.client.identity();
+    this.botUserIds.set(poll.record.id, id);
     return id;
   }
 
-  private async route(
-    record: PreparedMountRecord,
-    config: InboundConfig,
-    botUserId: string,
-    messages: SlackMessage[],
-  ) {
-    const options = this.routeOptions(record, config, botUserId);
-    const chatId = channelChatId(record.id, config.channel);
+  private async route(poll: Poll, botUserId: string, messages: SlackMessage[]) {
+    const options = this.routeOptions(poll, botUserId);
+    const chatId = channelChatId(poll.record.id, poll.config.channel);
     await routeAll(options, chatId, messages);
   }
 
-  private routeOptions(
-    record: PreparedMountRecord,
-    config: InboundConfig,
-    botUserId: string,
-  ) {
-    const slackCtlPath = `${record.path}/ctl` as AbsolutePath;
+  private routeOptions(poll: Poll, botUserId: string) {
+    const slackCtlPath = `${poll.record.path}/ctl` as AbsolutePath;
     const { mounts, dispatchCtl } = this;
-    const persona = config.persona;
+    const persona = poll.config.persona;
     return { mounts, dispatchCtl, persona, slackCtlPath, botUserId };
   }
 }
