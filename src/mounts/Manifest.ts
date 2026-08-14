@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { Manifest, ManifestMount } from "./types";
-import { object, only, relative } from "./ManifestValidation";
+import { object, only } from "./ManifestValidation";
 import { declarationsFor, pluginName } from "./ManifestPlugins";
 import { decoded } from "./ManifestYaml";
 import { pluginKinds } from "./PluginKinds";
+import { pathOrAbsent, pluginByName, resolvedPath } from "./ManifestMountPath";
+import { interval } from "./ManifestRefreshInterval";
 
 export function parseManifest(source: string): {
   manifest: Manifest;
@@ -43,30 +45,26 @@ function validateMount(value: unknown): ManifestMount {
 function validatedMount(mount: Record<string, unknown>): ManifestMount {
   const provider = pluginName(mount) as ManifestMount["provider"];
   return {
-    ...mountIdentity(mount, provider),
-    config: config(provider, mount.config),
+    ...identity(mount, provider),
     capabilities: mount.capabilities as string[],
     refreshIntervalMs: interval(mount.refresh),
   };
 }
 
-function mountIdentity(
-  mount: Record<string, unknown>,
-  provider: ManifestMount["provider"],
-) {
-  return { id: mount.id as string, path: mount.path as string, provider };
+type Provider = ManifestMount["provider"];
+
+function identity(mount: Record<string, unknown>, provider: Provider) {
+  const parsedConfig = config(provider, mount.config);
+  return {
+    id: mount.id as string,
+    path: resolvedPath(mount, provider, parsedConfig),
+    provider,
+    config: parsedConfig,
+  };
 }
 
 function config(provider: ManifestMount["provider"], value: unknown) {
   return pluginByName(provider).parseConfig(value);
-}
-
-function pluginByName(name: string) {
-  const plugin = pluginKinds().find((candidate) => candidate.name === name);
-  if (!plugin) {
-    throw new Error(`Unknown provider: ${name}`);
-  }
-  return plugin;
 }
 
 function validateMountFields(mount: Record<string, unknown>) {
@@ -77,7 +75,7 @@ function validateMountFields(mount: Record<string, unknown>) {
 function assertIdentity(mount: Record<string, unknown>) {
   if (
     typeof mount.id !== "string" ||
-    !relative(mount.path) ||
+    !pathOrAbsent(mount.path) ||
     !provider(pluginName(mount))
   ) {
     throw new Error("Invalid .yafsmeta plugin");
@@ -95,24 +93,4 @@ function assertCapabilities(mount: Record<string, unknown>) {
 
 function provider(value: unknown): value is ManifestMount["provider"] {
   return pluginKinds().some((plugin) => plugin.name === value);
-}
-
-function interval(value: unknown) {
-  if (value === undefined) {
-    return undefined;
-  }
-  const refresh = object(value, "refresh");
-  only(refresh, ["interval"], "refresh");
-  return intervalValue(refresh.interval);
-}
-
-function intervalValue(value: unknown) {
-  if (typeof value !== "string") {
-    throw new Error("Invalid refresh interval");
-  }
-  const match = /^(\d+)(m|h)$/.exec(value);
-  if (!match) {
-    throw new Error("Invalid refresh interval");
-  }
-  return Number(match[1]) * (match[2] === "h" ? 60 : 1) * 60_000;
 }

@@ -100,6 +100,18 @@ test("a stalled request times out instead of hanging forever", async () => {
   );
 });
 
+test("a non-timeout network error propagates as-is", async () => {
+  const client = new SlackApiClient(
+    { apiUrl: "https://slack.test/api", token: "xoxb-1" },
+    async () => {
+      throw new Error("ECONNREFUSED");
+    },
+  );
+  await expect(client.postMessage("C123", "hi")).rejects.toThrow(
+    "ECONNREFUSED",
+  );
+});
+
 test("slackSettings requires a token and defaults to the standard endpoint", () => {
   expect(() => slackSettings({})).toThrow("YAFS_SLACK_TOKEN is required");
   const custom = slackSettings({

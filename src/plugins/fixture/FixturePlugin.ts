@@ -26,9 +26,7 @@ export class FixturePlugin extends Plugin {
   }
 
   createDriver(wiring: Wiring): PluginDriver {
-    const { mounts, journal, enqueue, registerCtl, unregisterCtl } = wiring;
-    const ctl = { registerCtl, unregisterCtl };
-    return new FixtureStreamDriver(mounts, journal, enqueue, ctl);
+    return new FixtureStreamDriver(wiring);
   }
 
   prepare(

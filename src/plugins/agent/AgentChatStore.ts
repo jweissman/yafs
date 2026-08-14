@@ -39,7 +39,7 @@ export class AgentChatStore {
     const record = this.record(ref.mountId);
     if (record) {
       const entry = threadEntry(ref.personaName, chatId, responseId);
-      return publishEntries(this.deps(), record, [entry]);
+      return publishEntries(this.deps(), { record, updates: [entry] });
     }
   }
 
@@ -72,7 +72,7 @@ export class AgentChatStore {
   ) {
     const history = [...historyFrom(record, personaName, chatId), message];
     const entry = historyEntry(personaName, chatId, history);
-    return publishEntries(this.deps(), record, [entry]);
+    return publishEntries(this.deps(), { record, updates: [entry] });
   }
 
   private deps(): MountJournal {

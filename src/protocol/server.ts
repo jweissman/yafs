@@ -3,20 +3,16 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { VfsOperation } from "../vfs/VfsOperation";
 import { openServices, listen } from "./ServerServices";
 import { CtlHandler } from "./CtlDispatch";
-import { BackgroundCommit } from "./BackgroundCommit";
-import {
-  BackgroundDrivers,
-  backgroundDrivers,
-  startAll,
-  closeAll,
-  recoverAll,
-} from "./BackgroundDrivers";
+import { commitBackground, serverAddress } from "./ServerIntrospection";
+import { BackgroundDrivers } from "./BackgroundDrivers";
+import { startAll, closeAll, recoverAll } from "./BackgroundDriversLifecycle";
 import { AgentToolServer } from "../plugins/agent/AgentToolServer";
-import { defaultClients, toolServerOptions } from "./ServerClients";
+import { toolServerOptions } from "./ServerClients";
 import { daemonDesiredMounts } from "../mounts/daemonDesiredMounts";
 import { reconcileDesired } from "./ReconcileDesired";
 import { ServerConnection } from "./ServerConnection";
 import { Services, StartOptions } from "./ServerTypes";
+import { driversFor, ServerBindings } from "./ServerWiring";
 
 export type { StartOptions } from "./ServerTypes";
 
@@ -32,24 +28,13 @@ export class YafsServer {
     this.toolServer = new AgentToolServer(services.mounts, options);
   }
   private driversFor(options: StartOptions) {
-    const clients = defaultClients(options, this.toolServer);
-    return backgroundDrivers(this.wiring(), clients, {
-      now: options.now,
-      refreshIntervalMs: options.refreshIntervalMs,
-      slackPollIntervalMs: options.slackPollIntervalMs,
-    });
+    return driversFor(this.bindings(), options);
   }
-  private wiring() {
-    const enqueue = this.connection.enqueueWork.bind(this.connection);
+  private bindings(): ServerBindings {
     return {
-      mounts: this.services.mounts,
-      journal: this.services.journal,
-      enqueue,
-      ...this.ctlWiring(),
-    };
-  }
-  private ctlWiring() {
-    return {
+      services: this.services,
+      connection: this.connection,
+      toolServer: this.toolServer,
       registerCtl: this.registerCtl.bind(this),
       unregisterCtl: this.unregisterCtl.bind(this),
       dispatchCtl: this.dispatchCtl.bind(this),
@@ -83,11 +68,7 @@ export class YafsServer {
     return server;
   }
   address(): { host: string; port: number } {
-    const address = this.server.address();
-    if (!address || typeof address === "string") {
-      throw new Error("Not listening");
-    }
-    return { host: address.address, port: address.port };
+    return serverAddress(this.server);
   }
   agentToolsPort(): number | undefined {
     return this.toolServer.port();
@@ -116,9 +97,8 @@ export class YafsServer {
     return this.background.refreshes.due();
   }
   commitBackground(operations: VfsOperation[]): Promise<void> {
-    const { store, journal } = this.services;
-    return new BackgroundCommit(store, journal, (work) =>
-      this.connection.enqueueWork(work),
-    ).commit(operations);
+    const enqueue = (work: () => Promise<void>) =>
+      this.connection.enqueueWork(work);
+    return commitBackground(this.services, enqueue, operations);
   }
 }

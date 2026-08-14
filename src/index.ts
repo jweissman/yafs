@@ -16,29 +16,23 @@ import {
   planCache,
   planExecution,
   planExecutionAsync,
-  planWrite,
 } from "./YafsExecution";
+import { planWrite } from "./YafsExecutionWrite";
 import { planOperation, planOperationAsync } from "./YafsOperationPlan";
 import { YafsCommandRuntime } from "./YafsCommandRuntime";
 import { BlobStore } from "./protocol/BlobStore";
 import { TraceService } from "./traces/TraceService";
 import { DesiredMounts } from "./mounts/DesiredMounts";
 import { CacheService } from "./cache/CacheService";
-import { requiredArg } from "./YafsValues";
 import { initializeYafs } from "./YafsInitialization";
 import { WorkspaceOperations } from "./operations/WorkspaceOperations";
+import { WorkspaceOperation } from "./operations/WorkspaceOperation";
 import { yafsContext } from "./YafsContext";
+import { VfsOperation } from "./vfs/VfsOperation";
+import { CacheRequest } from "./cache/CacheRequest";
+import { YafsOptions } from "./YafsOptionsType";
 
-export type YafsOptions = {
-  store?: NodeStore;
-  user?: User;
-  clock?: Clock;
-  mounts?: MountManager;
-  blobs?: BlobStore;
-  traces?: TraceService;
-  cache?: CacheService;
-  desired?: DesiredMounts;
-};
+export type { YafsOptions } from "./YafsOptionsType";
 
 export default class Yafs {
   store: NodeStore;
@@ -83,7 +77,7 @@ export default class Yafs {
     return executeWrite(this, path, content);
   }
 
-  apply(operations: import("./vfs/VfsOperation").VfsOperation[]) {
+  apply(operations: VfsOperation[]) {
     this.operationQueue.apply(operations);
   }
 
@@ -96,28 +90,13 @@ export default class Yafs {
   planWrite(path: string, content: string): ExecutionPlan {
     return planWrite(this, path, content);
   }
-  planCache(request: import("./cache/CacheRequest").CacheRequest) {
+  planCache(request: CacheRequest) {
     return planCache(this, request);
   }
-  planOperation(
-    request: import("./operations/WorkspaceOperation").WorkspaceOperation,
-  ) {
+  planOperation(request: WorkspaceOperation) {
     return planOperation(this, request);
   }
-  planOperationAsync(
-    request: import("./operations/WorkspaceOperation").WorkspaceOperation,
-  ) {
+  planOperationAsync(request: WorkspaceOperation) {
     return planOperationAsync(this, request);
-  }
-
-  handle(command: import("./types/Command").Command): string {
-    return this.commands.handle(command);
-  }
-  handleAsync(command: import("./types/Command").Command) {
-    return this.commands.handleAsync(command);
-  }
-
-  requiredArg(command: string, args: string[], index: number): string {
-    return requiredArg(command, args, index);
   }
 }

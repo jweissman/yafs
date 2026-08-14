@@ -108,6 +108,15 @@ configuration syntax may call the operation `compose` if that is clearer.
 
 ### Mount lifecycle commands
 
+> **Superseded.** The `mount` (singular) command described in this section,
+> and the in-VFS `.yafsmeta` declaration it read, were removed as a
+> capability-granting security gap once external providers made it possible
+> to self-grant real capabilities this way. Kept below as the decision
+> record of what the original lifecycle model was; see "Capabilities,
+> distribution, and adapters" further down for the current operator surface
+> (`plugins status|plan|apply|refresh`, `plugin deactivate`) and the full
+> removal rationale.
+
 `mount` is a control-plane builtin, with equivalent structured RPC operations;
 it is not the POSIX host-mount command.
 
@@ -138,10 +147,44 @@ durable content; it never refetches a provider or acquires network authority.
 Explicit, inspectable composition makes remote and local project state
 more useful than either a plain filesystem or a provider-specific UI.
 
-Cache, agent, remote/multi-user, and runtime work are **extension hypotheses**,
-not promised deliverables. They remain in this ADR to constrain the kernel and
-make its intended seams concrete, but each needs a separate go/no-go decision. No later milestone should expand the delivery commitment by existing
-in this document.
+Cache, agent, and durable action delivery (Slack outbox, bounded agent
+tool access) shipped and are no longer hypotheses — see
+[FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)'s "Current status." Remote/
+multi-user service (M8), runtime execution (M9), and federation remain
+**extension hypotheses**, not promised deliverables. They remain in this
+ADR to constrain the kernel and make its intended seams concrete, but each
+needs a separate go/no-go decision. No later milestone should expand the
+delivery commitment by existing in this document.
+
+### Federation
+
+**Status: post-M8 hypothesis, not scoped.** A `/commons/public` — content
+sourced from an external registry ("yashub"), not just `/commons/local` —
+raises questions this project has no answer to yet and should not attempt
+before its preconditions exist:
+
+- **Identity**: whose trust does a published function carry? This has no
+  answer before M8 (remote/multi-user identity) exists at all.
+- **Trust**: a `/commons/public` entry is executable code from an
+  untrusted third party — equivalent in risk to installing an unaudited
+  package, not a read-only view. Mounting a federated view must not imply
+  authority to run what it contains; see "Provider boundary" and the
+  capability-grant model elsewhere in this document, which federation
+  must fit inside, not bypass.
+- **Immutable versions**: a published function must be pinned and
+  content-addressed the same way M5's provider revisions already are —
+  no republishing over an existing version out from under a consumer.
+- **Capability attenuation**: a function that declares it needs
+  `network.github-api` must not silently receive more authority than its
+  manifest declares merely because the installing operator happens to
+  have a broader grant. This needs its own design, not an assumption that
+  today's per-mount capability model generalizes for free.
+
+None of this blocks `/commons/local` (see PRODUCT-SPEC.md's "Long-range
+direction" section, `/commons` subsection), which only needs the function
+bundle/manifest contract and human-reviewed publishing, not identity or
+cross-instance trust. Federation is what's gated here — the local
+registry is not.
 
 ## Namespace execution models and long-term direction
 
@@ -840,14 +883,18 @@ model" above is implemented: `provider: agent`, personas keyed by name under
 one mount's `config`, `chat.completion` checked at invocation, and per-run
 `<persona>/runs/<run-id>/{status.json, request.md, response.md}` — including
 the `running`/`complete`/`failed` status lifecycle this section originally
-sketched as deferred. What remains genuinely deferred is the multi-step case
-this section originally sketched under a different shape (`/work/bug-184/`,
-`transcript.ndjson`) — a *run* with its own lifecycle beyond one exchange:
-durable multi-turn state, a full transcript rather than one request/response
-pair, restart/resume behavior if the daemon goes down mid-run, and — per the
-"recursive tool use" case already named above — an orchestrator loop where
-the model drives its own next `yafs_read`/`yafs_list`/write calls rather than
-producing one reply and stopping. That is M7's actual checkpoint, not a
+sketched as deferred. The bounded slice of "an orchestrator loop where the
+model drives its own next `yafs_read`/`yafs_list` calls rather than
+producing one reply and stopping" is also now built, for the read-only,
+single-persona/mount case — see M6.5 and the sharpened "Path-scoping
+primitive" section below. What remains genuinely deferred is the multi-step
+case this section originally sketched under a different shape
+(`/work/bug-184/`, `transcript.ndjson`) — a *run* with its own lifecycle
+beyond one exchange: durable multi-turn state, a full transcript rather
+than one request/response pair, restart/resume behavior if the daemon goes
+down mid-run, write calls through the tool loop (today's allowlist is
+read-only), and — per the "recursive tool use" case already named
+above — multi-persona orchestration. That is M7's actual checkpoint, not a
 bigger persona directory.
 
 ### M7 decision: local conversation channels before autonomous orchestration
@@ -932,10 +979,11 @@ Resolving the six contracts the original decision left open:
    Cross-referencing a `runId` back to its `chatId` means reading the run's
    own request rather than following a structural foreign key — acceptable
    for today's single-reader workflows.
-6. **First operator validation:** superseded by two standing, repeatable
-   validations instead of a one-time review session —
-   [AGENT-CHAT-VALIDATION.md](AGENT-CHAT-VALIDATION.md) and
-   [SLACK-VALIDATION.md](SLACK-VALIDATION.md).
+6. **First operator validation:** superseded by standing, repeatable
+   automated coverage instead of a one-time manual review session — see
+   `test/e2e/AgentChatTurn.test.ts` and the `test/e2e/SlackInbound*.test.ts`
+   suite, which exercise these flows on every `bun test` run rather than
+   requiring a human to remember to walk through a runbook.
 
 **Revised M7 exit criterion** (matches what is actually checkable today):
 from ordinary files under `agents/<persona>/`, an operator can see who said
@@ -950,17 +998,24 @@ Slack channel exactly like a human operator would — it derives one `chatId`
 per channel (not per thread; a channel with concurrent conversations
 interleaves them into one agent history, a known v1 simplification) and
 writes the same ctl payload `agent send` would, through the same
-capability-checked path. It has no authority beyond that single hop: it
-cannot call further Yafs operations, chain into other personas, or retry
-beyond one run per message. **Update: the outbound durability gap this
-paragraph originally flagged is closed.** `slack send` and this poller's
+capability-checked path. The poller itself has no authority beyond that
+single hop — it does not chain into other personas or retry beyond one run
+per message. **Update: if the target persona is tool-enabled
+(`persona.tools.roots` set), the persona itself now can call further Yafs
+operations within that one run** — M6.5's bounded tool loop, scoped to its
+own mount via `ScopedMcpClient`, runs before the reply is produced. This is
+still one hop from the poller's perspective (one ctl write, one run) and
+still bounded to that persona's own roots; it is not the poller gaining new
+authority. Proven end-to-end by
+`test/e2e/SlackToolEnabledReview.test.ts`. **Update: the outbound
+durability gap this paragraph originally flagged is closed.** `slack send` and this poller's
 reply leg now accept into a durable per-action outbox
 (`SlackOutboxStore`/`SlackOutboxStatus`/`SlackOutboxRecovery`) before the
 ctl write is acknowledged, transition `queued → running →
 succeeded|failed`, and are swept to `unknown` (not retried, not dropped) by
 `recoverAll` on restart if a post was in flight — this is M6.4, now
 implemented; see `docs/FEATURE-ROADMAP.md`'s M6.4 entry and
-`docs/SLACK-VALIDATION.md` §5.
+`test/e2e/SlackOutboxRecovery.test.ts`.
 
 **Update: this bridge is a spike, not the kept architecture.** Review
 after this milestone landed correctly named what it discovered:
@@ -974,30 +1029,61 @@ event/workflow boundary" section (deliberately not a named, scoped
 milestone yet — see that section for why) are what this coupling points
 at, not a committed replacement design.
 
-### Path-scoping primitive — a named, deferred prerequisite
+### Path-scoping primitive — bounded case built, general case still deferred
 
-No session- or actor-scoped path authorization exists anywhere in the
-codebase today: `CommandContext.resolve` is pure path resolution with no ACL,
-so any connected session, or any ctl-triggered handler acting on its behalf,
-can read anywhere in the VFS regardless of which mount, persona, or
-capability context is "asking." `ProviderRegistry.assertGranted` is the real
-authority gate that exists — it governs which *capabilities*
-(`network.slack-api`, `chat.completion`, and so on) a mount holds — but
-nothing scopes which *paths* an actor may read once a capability is granted.
+No *session- or actor-scoped* path authorization exists in `CommandContext`/
+`Yash`/the raw protocol path: `CommandContext.resolve` is pure path
+resolution with no ACL, so any connected session, or any ctl-triggered
+handler acting on its behalf, can read anywhere in the VFS regardless of
+which mount, persona, or capability context is "asking." `ProviderRegistry.
+assertGranted` is the real authority gate that exists — it governs which
+*capabilities* (`network.slack-api`, `chat.completion`, and so on) a mount
+holds — but nothing scopes which *paths* a Yash/protocol session may read
+once a capability is granted, and building that general primitive is still
+deferred.
 
-This is the concrete, load-bearing reason recursive-MCP tool-calling (an
-agent persona calling back into Yafs operations mid-run) stays out of scope:
-without a way to bound a persona's self-initiated reads to its own mount, or
-an explicitly declared set of paths, giving any persona tool-calling
-authority would let it read anything any other mount can read, not just its
-own context. This is narrower than full M8 (remote/multi-user authentication
-and per-user authorization) — it is a single local primitive: an optional
-allow-list or path-prefix scope attached to an actor and checked in
-`CommandContext.resolve` or its equivalent.
+**What is built, and where the scoping actually lives:** M6.5's
+`ScopedMcpClient` (`src/mcp/ScopedMcpClient.ts`) is exactly this primitive,
+but purpose-built for one caller rather than generalized to every actor —
+each `AgentToolServer` MCP session gets a fresh instance carrying an
+allowed-root prefix list (checked via `PathResolver.normalize`, the same
+`..`-traversal-safe resolution the VFS itself uses), a hardcoded read-only
+operation allowlist, and per-session byte/call/time budgets. This is what
+lets a tool-enabled persona recursively drive its own Yafs tool calls
+without reading outside `persona.tools.roots` — the "recursive-MCP
+tool-calling" case named elsewhere in this doc (see "Agent workspace"
+below) — proven end-to-end through Slack by
+`test/e2e/SlackToolEnabledReview.test.ts`.
 
-Not implemented this milestone. Recorded here so recursive-MCP tool-calling's
-deferral has a concrete, checkable unblock condition instead of a vague
-"later," and so it is not silently rediscovered from scratch.
+What remains genuinely out of scope is the *general/unbounded* case: a
+Yash or raw-protocol session (not just an `AgentToolServer` MCP session)
+being root-scoped the same way; write access through a scoped session
+(today's allowlist is read-only operations only); and multi-persona or
+multi-mount chaining in one run (M7 "spaces" — see "Deferred to M7, not
+scoped down" above). Generalizing `ScopedMcpClient`'s prefix-check into a
+reusable primitive attached to any actor and checked in
+`CommandContext.resolve` — narrower than full M8 remote/multi-user
+authentication — is the concrete unblock condition for that remaining gap.
+Recorded here so it has a checkable shape instead of a vague "later," and
+so it is not silently rediscovered from scratch or mistaken for work
+already done.
+
+### `AgentToolServer`'s loopback trust — accepted, not yet enforced further
+
+`AgentToolServer` binds to `127.0.0.1` only and requires no authentication
+token: any local process that can reach the loopback interface and guess or
+discover a session URL (`http://127.0.0.1:<port>/mcp/<mountId>/<personaName>`)
+can open an MCP session scoped to that persona's `tools.roots`, the same as
+LM Studio itself does. **Decision: accepted as local trust, not a gap to
+close now.** This matches the trust model everywhere else in the current
+single-user, single-machine appliance — `yafsd`'s main protocol port has no
+auth either, and anything already running as the local user can read the
+daemon's data directory, its journal, and any secret it holds directly. A
+loopback-only listener adds no new exposure beyond what local-process
+access already grants; the guard that matters (which *paths* an MCP session
+can reach) is `ScopedMcpClient`'s root scoping, not a token. Revisit only if
+`AgentToolServer` ever needs to bind beyond loopback — that would fall
+under M8 (remote/multi-user), not this milestone.
 
 ### Machine/image workspace — later still
 
@@ -1134,6 +1220,14 @@ source of truth; `staged` means it returns a proposal that requires a later,
 explicit commit. Neither mode is implied by merely implementing `write`.
 
 ### Manifest schema
+
+> **Superseded.** `.yafsmeta` (an in-VFS manifest) was the M4-era manifest
+> location; it was removed along with the `mount` command above. The field
+> shape below (`id`/`path`/`provider`/`config`/`capabilities`, strict
+> validation, no custom tags) carries over unchanged to today's host-side
+> `yafs.plugins.yaml`, canonically spelled `plugins:`/`plugin:` — only the
+> file's location and the fact that it's host-side, not VFS-resident,
+> changed. See "Capabilities, distribution, and adapters" below.
 
 `.yafsmeta` is strict YAML, decoded without custom tags or aliases, then
 validated against a versioned schema. Unknown fields are errors, not extension

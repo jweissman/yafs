@@ -1,20 +1,25 @@
 import { Journal } from "./Journal";
 import { MountRefreshScheduler } from "../mounts/MountRefreshScheduler";
 import { MountManager } from "../mounts/MountManager";
+import { Wiring } from "../mounts/Plugin";
 import { PreparedMountRecord } from "../mounts/types";
+
+export type ServerRefreshTiming = { now?: () => number; intervalMs?: number };
 
 export class ServerRefresh {
   private readonly scheduler: MountRefreshScheduler;
+  private readonly mounts: MountManager;
+  private readonly journal: Journal;
+  private readonly enqueue: (work: () => Promise<void>) => Promise<void>;
+  private readonly intervalMs: number;
   private timer?: Timer;
 
-  constructor(
-    private readonly mounts: MountManager,
-    private readonly journal: Journal,
-    private readonly enqueue: (work: () => Promise<void>) => Promise<void>,
-    now?: () => number,
-    private readonly intervalMs = 60_000,
-  ) {
-    this.scheduler = this.buildScheduler(now);
+  constructor(wiring: Wiring, timing: ServerRefreshTiming = {}) {
+    this.mounts = wiring.mounts;
+    this.journal = wiring.journal;
+    this.enqueue = wiring.enqueue;
+    this.intervalMs = timing.intervalMs ?? 60_000;
+    this.scheduler = this.buildScheduler(timing.now);
   }
 
   private buildScheduler(now?: () => number) {
@@ -51,7 +56,7 @@ export class ServerRefresh {
     }
   }
   private async refreshOnce(record: PreparedMountRecord) {
-    const prepared = await this.mounts.prepareRefreshRecord(record, "system");
+    const prepared = await this.mounts.prepareActivation(record, "system");
     await this.journal.commit([
       { type: "refresh", record: prepared, at: new Date().toISOString() },
     ]);

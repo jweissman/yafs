@@ -34,7 +34,7 @@ export class SlackOutboxStore {
     const record = this.record(id.mountId);
     if (record) {
       const deps = { mounts: this.mounts, journal: this.journal };
-      await publishEntries(deps, record, entries);
+      await publishEntries(deps, { record, updates: entries });
     }
   }
 

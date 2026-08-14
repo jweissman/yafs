@@ -3,20 +3,11 @@ import { dirname } from "node:path";
 
 import { MountRecord, PreparedMountRecord } from "./types";
 import { appendSynced, syncDirectory, writeSynced } from "../core/SyncedFileIO";
+import { auditLine, AuditEvent, AuditOutcome } from "./MountPersistenceAudit";
+
+export type { AuditOutcome } from "./MountPersistenceAudit";
 
 type StoredMounts = { version: 1; mounts: PreparedMountRecord[] };
-export type AuditOutcome = {
-  outcome: string;
-  before?: string;
-  after?: string;
-  detail?: string;
-};
-type AuditEvent = {
-  record: MountRecord;
-  actor: string;
-  action: string;
-  outcome: AuditOutcome;
-};
 
 export class MountPersistence {
   private sequence = 0;
@@ -55,44 +46,11 @@ export class MountPersistence {
   private appendAudit(event: AuditEvent) {
     const path = this.auditPath!;
     mkdirSync(dirname(path), { recursive: true });
-    appendSynced(path, this.auditLine(event));
-  }
-
-  private auditLine(event: AuditEvent) {
-    return `${JSON.stringify(this.event(event))}\n`;
+    appendSynced(path, auditLine(event, ++this.sequence));
   }
 
   private parse(path: string) {
     return valid(JSON.parse(readFileSync(path, "utf8")) as StoredMounts);
-  }
-
-  private event(event: AuditEvent) {
-    return {
-      ...this.eventIdentity(event.record, event.actor, ++this.sequence),
-      ...this.eventFields(event),
-    };
-  }
-
-  private eventFields({ record, action, outcome }: AuditEvent) {
-    return {
-      action,
-      relativePath: "",
-      capabilitiesUsed: record.capabilities,
-      outcome: outcome.outcome,
-      ...revisionFields(outcome),
-      detail: outcome.detail,
-    };
-  }
-
-  private eventIdentity(record: MountRecord, actor: string, sequence: number) {
-    return {
-      sequence,
-      at: new Date().toISOString(),
-      actor,
-      mountId: record.id,
-      provider: record.provider,
-      correlationId: record.correlationId,
-    };
   }
 }
 
@@ -104,10 +62,6 @@ function valid(stored: StoredMounts) {
     throw new Error("Mount state requires published snapshots");
   }
   return stored.mounts;
-}
-
-function revisionFields(outcome: AuditOutcome) {
-  return { beforeRevision: outcome.before, afterRevision: outcome.after };
 }
 
 function hasSnapshot(record: PreparedMountRecord) {

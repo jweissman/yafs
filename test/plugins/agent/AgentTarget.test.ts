@@ -36,7 +36,7 @@ async function malformedMounts() {
     statePath,
     JSON.stringify({ version: 1, mounts: [invalidAgent()] }),
   );
-  return new MountManager(new NodeStore(), statePath);
+  return new MountManager(new NodeStore(), { statePath });
 }
 
 function invalidAgent() {

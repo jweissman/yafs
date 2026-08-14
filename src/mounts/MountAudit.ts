@@ -1,25 +1,32 @@
 import { MountPersistence } from "./MountPersistence";
 import { PreparedMountRecord } from "./types";
 
+export type QuarantineInfo = { actor: string; action: string; detail: string };
+
 export function auditQuarantine(
   persistence: MountPersistence,
   record: PreparedMountRecord,
-  actor: string,
-  action: string,
-  detail: string,
+  info: QuarantineInfo,
 ) {
-  persistence.audit(record, actor, action, { outcome: "quarantined", detail });
+  persistence.audit(record, info.actor, info.action, {
+    outcome: "quarantined",
+    detail: info.detail,
+  });
 }
+
+export type RefreshAuditInfo = {
+  record: PreparedMountRecord;
+  actor: string;
+  before: string | undefined;
+  detail?: string;
+};
 
 export function auditRefresh(
   persistence: MountPersistence,
-  record: PreparedMountRecord,
-  actor: string,
-  before: string | undefined,
-  detail?: string,
+  info: RefreshAuditInfo,
 ) {
-  const outcome = refreshOutcome(record, before, detail);
-  persistence.audit(record, actor, "refresh", outcome);
+  const outcome = refreshOutcome(info.record, info.before, info.detail);
+  persistence.audit(info.record, info.actor, "refresh", outcome);
 }
 
 function refreshOutcome(

@@ -1,6 +1,4 @@
-import { AbsolutePath } from "../../core/AbsolutePath";
-import { CtlHandler } from "../../protocol/CtlDispatch";
-import { Journal } from "../../protocol/Journal";
+import { Wiring } from "../../mounts/Plugin";
 import { MountManager } from "../../mounts/MountManager";
 import { AgentRunStore } from "./AgentRunStore";
 import { AgentChatStore } from "./AgentChatStore";
@@ -12,14 +10,12 @@ import { queuedStatus } from "./AgentStatus";
 import { AgentRequest, parseAgentRequest } from "./AgentRequest";
 import { acceptChatTurn } from "./AgentChatTurn";
 import { AgentClients, AgentRunExecutor } from "./AgentRunExecutor";
+import { newRunContext } from "./AgentRunContextFactory";
 
 export type { AgentClients } from "./AgentRunExecutor";
-type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
-type UnregisterCtl = (path: AbsolutePath) => void;
-type Ctl = { registerCtl: RegisterCtl; unregisterCtl: UnregisterCtl };
-type Enqueue = (work: () => Promise<void>) => Promise<void>;
 
 export class AgentDirectoryDriver {
+  private readonly mounts: MountManager;
   private runs: AgentRunStore;
   private chats: AgentChatStore;
   private cancels: AgentRunCancellation;
@@ -27,21 +23,16 @@ export class AgentDirectoryDriver {
   private executor: AgentRunExecutor;
 
   constructor(
-    private readonly mounts: MountManager,
-    journal: Journal,
-    enqueue: Enqueue,
-    ctl: Ctl,
+    private readonly wiring: Wiring,
     clients: AgentClients,
   ) {
-    this.buildStores(journal, enqueue, clients);
-    this.registration = this.buildRegistration(ctl);
+    this.mounts = wiring.mounts;
+    this.buildStores(clients);
+    this.registration = this.buildRegistration();
   }
 
-  private buildStores(
-    journal: Journal,
-    enqueue: Enqueue,
-    clients: AgentClients,
-  ) {
+  private buildStores(clients: AgentClients) {
+    const { journal, enqueue } = this.wiring;
     this.runs = new AgentRunStore(this.mounts, journal, enqueue);
     this.chats = new AgentChatStore(this.mounts, journal, enqueue);
     this.cancels = new AgentRunCancellation(this.mounts, this.runs);
@@ -52,13 +43,13 @@ export class AgentDirectoryDriver {
     return new AgentRunExecutor(this.runs, this.chats, this.cancels, clients);
   }
 
-  private buildRegistration({ registerCtl, unregisterCtl }: Ctl) {
+  private buildRegistration() {
     const invoke = (mountId: string, name: string, payload: string) =>
       this.invoke(mountId, name, payload);
     return new AgentRegistration(
       this.mounts,
-      registerCtl,
-      unregisterCtl,
+      this.wiring.registerCtl,
+      this.wiring.unregisterCtl,
       invoke,
     );
   }
@@ -97,19 +88,9 @@ export class AgentDirectoryDriver {
     personaName: string,
     request: AgentRequest,
   ): Promise<RunContext> {
-    const context = this.newContext(mountId, personaName, request);
+    const context = newRunContext(mountId, personaName, request);
     await this.acceptRun(context, request);
     return context;
-  }
-
-  private newContext(
-    mountId: string,
-    personaName: string,
-    request: AgentRequest,
-  ): RunContext {
-    const startedAt = new Date().toISOString();
-    const runId = request.runId || startedAt.replace(/[:.]/g, "-");
-    return { mountId, personaName, runId, startedAt };
   }
 
   private async acceptRun(context: RunContext, request: AgentRequest) {

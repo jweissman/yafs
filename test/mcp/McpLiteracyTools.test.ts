@@ -17,6 +17,12 @@ test("literacy tools validate individual field types, not just presence", () => 
   invalid("yafs.tree", { path: "/", limit: "five" });
 });
 
+test("yafs.find accepts a valid type filter", () => {
+  expect(
+    literacyOperation("yafs.find", { path: "/", type: "directory" }),
+  ).toMatchObject({ name: "find", path: "/", type: "directory" });
+});
+
 function invalid(name: string, input: Record<string, unknown>) {
   expect(() => literacyOperation(name, input)).toThrow("must be");
 }

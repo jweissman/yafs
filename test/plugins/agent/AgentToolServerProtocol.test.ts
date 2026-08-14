@@ -39,6 +39,33 @@ test("a non-initialize request with no session id is a bad request", async () =>
   server.close();
 });
 
+test("a URL outside the /mcp/:mount/:persona shape 404s", async () => {
+  const yafs = new Yafs();
+  const server = toolServer(yafs);
+  server.start(0);
+  const response = await fetch(`http://127.0.0.1:${server.port()}/not-mcp`);
+  expect(response.status).toBe(404);
+  server.close();
+});
+
+test("a POST with unparseable JSON is a bad request, not a server error", async () => {
+  const yafs = new Yafs();
+  await activateDesired(yafs, manifest(["/home/root/work"]), "agents");
+  const server = toolServer(yafs);
+  server.start(0);
+  const url = server.urlFor("agents", "reviewer");
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: "{not json",
+  });
+  expect(response.status).toBe(400);
+  server.close();
+});
+
 test("a GET with no matching session is a bad request", async () => {
   const yafs = new Yafs();
   const server = toolServer(yafs);

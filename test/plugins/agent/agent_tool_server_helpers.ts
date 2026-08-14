@@ -1,9 +1,23 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
 import Yafs from "../../../src";
 import { AgentToolServer } from "../../../src/plugins/agent/AgentToolServer";
 
 export function toolServer(yafs: Yafs): AgentToolServer {
   const { store, mounts, traces, cache, desired } = yafs;
   return new AgentToolServer(mounts, { store, mounts, traces, cache, desired });
+}
+
+export async function connectedClient(
+  server: AgentToolServer,
+  mountId: string,
+  personaName: string,
+) {
+  const url = server.urlFor(mountId, personaName);
+  const client = new Client({ name: "test-client", version: "1.0.0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(url)));
+  return client;
 }
 
 export function textOf(result: unknown): string | undefined {

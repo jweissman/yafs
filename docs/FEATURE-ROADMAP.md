@@ -3,10 +3,12 @@
 This file tracks implementation sequencing. The product decision, use cases,
 and acceptance-level milestones live in [ADR.md](ADR.md).
 
-The committed delivery horizon ends at durable traces of external artifacts.
-Cache, agents, remote multi-user service, and runtime execution are gated
-extension hypotheses; they are not implied commitments merely because they are
-listed below.
+The committed delivery horizon now extends through M6.5 — local durable
+cache, the agent runtime, bounded agent tool access, and the durable Slack
+bridge are implemented and tested (see "Current status" below), not
+hypotheses. Remote multi-user service (M8), runtime execution (M9), and
+federation remain genuinely gated extension hypotheses; they are not
+implied commitments merely because they are listed below.
 
 Yash has a linked language track in [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md).
 L0 (the typed command boundary) and L1 (workspace literacy) are planned paving
@@ -15,10 +17,12 @@ work is evidence-gated rather than an implicit POSIX-compatibility commitment.
 
 ## Product thesis
 
-Yafs is a virtual filesystem service whose directories can acquire explicit
-provider views. A user can browse, inspect, and compose ordinary-looking
-paths, then preserve the exact external artifacts they acted on. Providers may
-separately expose named, typed actions through Yash and RPC. A provider is a
+See [PRODUCT-SPEC.md](PRODUCT-SPEC.md#purpose) for the full product
+thesis and long-range direction; this file only needs the structural
+summary below to frame sequencing. Yafs is a virtual filesystem service
+whose directories can acquire explicit provider views. A user can browse,
+inspect, and compose ordinary-looking paths. Providers may separately
+expose named, typed actions through Yash and RPC. A provider is a
 composition of a published view, optional resource layout, and optional
 actions; mounting a view never implies authority to invoke an action.
 
@@ -71,12 +75,12 @@ state machine; M7 must define its controller lifecycle before it is promised.
 ```
 
 ```yaml
-# /work/bug-184/.yafsmeta
+# yafs.plugins.yaml — host-side, outside the VFS; see COMMANDS.md
 version: 1
-mounts:
+plugins:
   - id: reviewer
     path: agents/reviewer
-    provider: agent
+    plugin: agent
     config:
       personas:
         reviewer:
@@ -84,7 +88,10 @@ mounts:
     capabilities: [chat.completion]
 ```
 
-From the Yafs REPL, a realistic first interaction could be:
+(In-VFS `.yafsmeta` plugin configuration was removed as a security fix —
+see "Current status" below and the ADR — `yafs.plugins.yaml` selected by
+`yafsd --config` is the only way to grant a capability now.) From the Yafs
+REPL, a realistic first interaction could be:
 
 ```sh
 yafs:/work/bug-184$ agent send agents/reviewer --context context/issue.md "Review the reproduction."
@@ -320,8 +327,8 @@ which is separately tracked, not implied by a milestone checkbox.
   follow-up work. Command substitution is implemented as a deferred nested-
   command AST, including inside double quotes; pipes remain later work.
 - M5 is mechanically complete: the GitHub provider, named network/secret
-  grants, daemon-scheduled and explicit refresh, and `trace`/`capture`/
-  `restore` source bindings are implemented and were exercised against a real
+  grants, daemon-scheduled and explicit refresh, and `capture`/`restore`
+  source bindings are implemented and were exercised against a real
   GitHub Enterprise Cloud repository, including real authentication failure
   modes.
 - M6/M6.2/M6.3 are complete: the agent runtime (durable acceptance, streaming
@@ -340,7 +347,7 @@ which is separately tracked, not implied by a milestone checkbox.
   as `AgentRunStore`, but with `unknown` instead of `interrupted` on
   recovery, since a half-sent Slack post may already have landed. See
   `SlackOutboxStore`/`SlackOutboxStatus`/`SlackOutboxRecovery` and
-  `docs/SLACK-VALIDATION.md` §5 for the validation steps.
+  `test/e2e/SlackOutboxRecovery.test.ts` for the exercised recovery paths.
 - M7's first stage (a bounded, explicit-invocation local conversation, plus a
   one-way Slack bridge into it) is implemented; see the M7 checkpoint below
   and the ADR's revised "M7 decision" section for what shipped versus the
@@ -484,10 +491,13 @@ GitHub writes, autonomous agent loops, or public MCP.
 The declaration names a repository and PR query, never one PR. Explicit refresh
 atomically publishes the next whole matching collection. Each refresh reports
 its source revision and freshness. A durable `notes/<number>/` source capture
-is available through `trace` and can be reconstructed through `reify` (see
-"Trace capture and reification" in the ADR). GitHub traces carry the PR head
-SHA rather than only the collection digest. The daemon runs durable interval
-refresh through the normal WAL publication path and retains the last snapshot
+is available through `capture` and can be reconstructed through `restore`
+(originally named `trace`/`reify`; see "Trace capture and reification" in
+the ADR for the decision record, and LANGUAGE-ROADMAP.md's "Implemented L1
+slice" for the rename to current vocabulary). GitHub captures carry the PR
+head SHA rather than only the collection digest. The daemon runs durable
+interval refresh through the normal WAL publication path and retains the
+last snapshot
 when a fetch fails. Its due-time/restart acceptance test remains the final M5
 check.
 
@@ -498,10 +508,11 @@ an alternative namespace or refresh path.
 Pipes remain a language increment after typed stream contracts are designed.
 
 The M5 foundation includes a local-only `yafs-mcp` adapter as a separate client
-executable. It currently exposes read/list/inspect only; a future structured,
-mount-scoped local-note write tool must not accept unrestricted shell strings.
-It does not expose provider activation. Dogfooding it against Yafs's own roadmap is
-an acceptance exercise for the structured API, not a reason to widen authority.
+executable — at M5 it exposed `read`/`list`/`inspect` only; see "Current
+status" above for its full present-day tool set (`tree`/`find`/`test`/
+`diff`/`grep`/`capture`/`restore`/`query` added since). It does not expose
+provider activation. Dogfooding it against Yafs's own roadmap is an
+acceptance exercise for the structured API, not a reason to widen authority.
 
 ## Near-term provider and surface candidates
 
@@ -544,7 +555,7 @@ rest.
   proved — a client observes growth by re-reading the file, no
   request/response-per-chunk primitive required. `agent chat` is a
   client-side yash feature (`src/yash/chat.ts`), not a server command; see
-  [agent chat validation](AGENT-CHAT-VALIDATION.md).
+  `test/e2e/AgentChatTurn.test.ts`.
 - **Local multi-agent group chat — deferred behind the above.** A shared
   local append-only log (`chat/room/messages.ndjson`) that several agent
   directories and a human read and append to still needs no
@@ -611,8 +622,11 @@ concrete need forces the question:**
 ### M6 — Durable artifacts and traces *(decision gate)*
 
 Checkpoint: a source subtree can be captured as a versioned `trace.json` plus
-content-addressed blobs, then `reify`d after the provider refreshes or is
-unmounted. Blob bytes are synced before the WAL record that names them;
+content-addressed blobs, then restored after the provider refreshes or is
+unmounted (`trace`/`reify` were the original command names for this at
+design time; delivered as `capture`/`restore` — see "Implemented L1
+slice" in LANGUAGE-ROADMAP.md). Blob bytes are synced before the WAL record
+that names them;
 startup rebuilds live references from durable traces before an explicit,
 serialized GC can reclaim anything. The command never falls back to the
 current provider view when a historical blob is missing.
@@ -721,8 +735,8 @@ run acceptance, reusing `PluginDriver`'s optional `recover()` hook (see
 `queued`/`running` action to `unknown` rather than `interrupted`, because
 unlike a half-finished model call, a half-sent Slack post may already have
 landed — retrying would risk a double-post, so the operator is left to check
-Slack directly. See `docs/SLACK-VALIDATION.md` §5 for the manual validation
-steps and `test/e2e/SlackOutboxRecovery.test.ts` for the automated coverage.
+Slack directly. See `test/e2e/SlackOutboxRecovery.test.ts` for the exercised
+recovery coverage.
 
 **Language dependency:** after the capability cleanup, L0 in
 [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md) must make typed effects enforceable
@@ -780,8 +794,8 @@ next decision — earned only by repeated use — covers subscriptions, automati
 turn scheduling, rate/budget limits, retries, and agent-to-agent conversation.
 A text exchange alone is not success: the validation must show who said what,
 the precise source/context they read, why a reply ran, and how the operator
-stopped it — see [AGENT-CHAT-VALIDATION.md](AGENT-CHAT-VALIDATION.md) and
-[SLACK-VALIDATION.md](SLACK-VALIDATION.md). The detailed data and lifecycle
+stopped it — see `test/e2e/AgentChatTurn.test.ts` and the
+`test/e2e/SlackInbound*.test.ts` suite. The detailed data and lifecycle
 decisions live in the ADR's “M7 decision: local conversation channels”
 section.
 
@@ -855,12 +869,15 @@ Every tool call and its bounded result — the LM Studio `output` array
 verbatim — is recorded durably at `runs/<runId>/tools.json`, alongside the
 existing `request.md`/`context.md`/`response.md`/`status.json` — inspectable
 the same way those already are. See
-[AGENT-TOOLS-VALIDATION.md](AGENT-TOOLS-VALIDATION.md) for the manual
-runbook against a real LM Studio instance.
+`test/plugins/agent/AgentToolServer.test.ts` (a real MCP client driving the
+real HTTP/session/budget stack end-to-end) for the exercised behavior; a
+live LM Studio instance still needs a manual pass — there is no automated
+substitute for that leg yet.
 
 This is the milestone that turns "text-in/text-out" into "agent" in the
-sense that matters for a demo: a persona reading a captured PR via bounded
-tools rather than only replying to whatever text was pasted in.
+sense that matters for a demo: a persona reading the live PR via bounded
+read tools (never `capture`/`restore` — excluded from the allowlist above)
+rather than only replying to whatever text was pasted in.
 
 ### Later: a provider-neutral event/workflow boundary (not yet scoped)
 
@@ -888,9 +905,11 @@ implemented, so the demo is:
 ```text
 Human mentions reviewer in Slack
   → at-least-once, mention-filtered inbound delivery (baseline cursor +
-    @mention filter — filtering mechanics, not a durable event record; see
-    SLACK-VALIDATION.md's "Known gaps" for the poller's own crash window)
-  → agent reads the captured review material using bounded tools (M6.5)
+    @mention filter — filtering mechanics, not a durable event record; the
+    cursor is in-memory only, so a daemon restart re-delivers whatever sat
+    in the channel's last `max` messages as if new — a known, accepted
+    poller crash-window gap, not yet closed)
+  → agent reads the live review material using bounded tools (M6.5)
   → durable proposed reply (run artifact, including the tool transcript)
   → operator approves
   → durable Slack outbox delivers it (M6.4)
@@ -932,6 +951,104 @@ declared mount—not an implicit host bind mount.
   volume/                # files exposed to the workload
   run/                   # status, logs, ports, artifacts
 ```
+
+### Next proof: review radar
+
+The one thing near-term work should be judged against. Everything else in
+this section — the `/world`/`/home`/`/commons` namespace direction (see
+[PRODUCT-SPEC.md](PRODUCT-SPEC.md#long-range-direction-a-legible-federated-world)),
+federation (see the ADR's federation section), commons functions (see
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md#paving-stones)) — is a downstream
+hypothesis worth recording, not allowed to obscure whether this proof is
+useful:
+
+> A scoped agent explores a live GitHub PR collection, identifies a
+> candidate worth reviewing, explains its evidence, and produces a
+> human-approved Slack response.
+
+### Next experiment: `yafs.start_here`
+
+A single typed, read-only MCP operation (same shape as the existing
+`yafs.tree`/`yafs.find`) returning structured orientation instead of
+prose: current principal/cwd, the caller's allowed roots and tool
+budgets, mounted provider roots with provider name/revision/freshness,
+and recommended first operations.
+
+Motivated by a real live failure: a tool-enabled persona with genuine
+read/list access to a PR queue replied "I haven't pulled the list of open
+PRs yet... give me the PR URLs" instead of just looking. A stopgap already
+shipped — the persona's system prompt now states its scoped roots
+explicitly (`AgentToolCompletion.ts`'s `systemPromptFor`) — but a
+discoverable, always-current tool call is the more durable fix than a
+prompt snapshot that goes stale the moment mount config changes.
+
+**Acceptance criterion:** does it materially improve tool-use reliability
+in the review-radar task above, measured, not assumed? If it doesn't move
+that number, it isn't worth keeping regardless of how principled it looks
+on paper. Also worth checking as a matter of habit whenever "the model has
+no context" recurs before building anything: today scope is static per
+persona, so a `tools.roots` that doesn't actually point at the mount that
+matters produces exactly this symptom and is a config bug, not a product
+gap.
+
+**Correction to an earlier version of this note:** it previously framed a
+Slack persona recursively driving its own Yafs tool calls as blocked on a
+not-yet-built path-scoping primitive. That was wrong — the bounded case is
+already built (M6.5's `AgentToolServer`/`ScopedMcpClient`, above) and now
+proven to chain through Slack end-to-end:
+`test/e2e/SlackToolEnabledReview.test.ts` drives one inbound Slack message
+to a `tools.roots`-scoped persona and asserts `runs/<runId>/tools.json`
+recorded a real tool call against live mount data before the reply posted,
+with a fake LM Studio client standing in for the model. `yafs.start_here`
+adds orientation on top of that already-working loop; it is not what makes
+recursion possible.
+
+What genuinely remains deferred is the *general/unbounded* case: a persona
+reading or writing outside its own mount, chaining across multiple
+personas or mounts in one run, or any actor other than a
+`ScopedMcpClient` session needing the same root-scoping — see
+[ADR.md](ADR.md)'s "Path-scoping primitive" section, sharpened to name
+this distinction explicitly. That gap is M7 "spaces" territory, not a
+prerequisite for the one-hop, one-mount case this experiment targets.
+Also still open per the roadmap's own acceptance criterion: this proof
+uses a fake model, so it shows the plumbing works, not that a real LM
+Studio model reliably chooses to use it — that still needs a live pass.
+
+### M6.6 — Runtime-overlay and plugin-registry consolidation *(decision gate, before M7)*
+
+A doc-review pass over the whole codebase surfaced two architectural items
+that are real but orthogonal to M6.5/`yafs.start_here`/`/world` above, and
+were deliberately deferred rather than folded into that work:
+
+- **Provider snapshots as mutable runtime state.** A mount's published
+  snapshot is meant to be the immutable, provider-fetched view; runtime
+  writers (agent runs/chats, the Slack outbox) currently republish the
+  *whole* mount snapshot on every write (`MountEntryPublish.ts`'s
+  `publishEntries`, called from `AgentRunStore.ts`, `AgentChatStore.ts`,
+  and `SlackOutboxStore.ts`) rather than layering their own mutable state
+  over a snapshot that stays untouched. This works today but conflates two
+  things that should stay separable: what a provider fetched, and what a
+  runtime actor wrote on top of it.
+- **Plugin-registry fragmentation.** Registering a new provider means
+  wiring it separately into `ProviderRegistry`, `BackgroundDrivers`, the
+  command set, and (where applicable) pseudobinary actions — four
+  call sites per plugin instead of one declarative registration point.
+  Tolerable at four providers; each new plugin makes the seams more
+  visible.
+
+**Why before M7, not before this milestone:** M7 ("spaces" — multiple
+personas taking turns, invoking MCP tools mid-generation, per ADR.md's
+"Deferred to M7, not scoped down") multiplies both problems — more
+concurrent runtime writers racing to republish snapshots, and more
+plugin/persona combinations flowing through the same fragmented
+registration path. Fixing the shape once here is cheaper than fixing it
+under M7's added concurrency. Not a blocker for `yafs.start_here`, `/world`
+default pathing, or the M6.5 tool loop, all of which ship first.
+
+**Decision gate, not yet designed:** this entry exists so the reviewer's
+two largest concerns are named and scheduled rather than silently dropped.
+Actual design (an explicit snapshot/overlay split; a single declarative
+plugin-registration surface) is deferred to when M7 work is scoped.
 
 ## M5 design gate
 

@@ -1,7 +1,13 @@
 import { SlackConfig } from "../../mounts/types";
 import { object, only, relative } from "../../mounts/ManifestValidation";
 
-const FIELDS = ["channel", "max", "persona", "requireMention", "replyTimeoutMs"];
+const FIELDS = [
+  "channel",
+  "max",
+  "persona",
+  "requireMention",
+  "replyTimeoutMs",
+];
 
 export function slackConfig(value: unknown): SlackConfig {
   const config = object(value, "slack config");

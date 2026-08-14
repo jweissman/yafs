@@ -83,7 +83,7 @@ function configuredYafs(providers: ProviderRegistry) {
   const store = new NodeStore();
   return new Yafs({
     store,
-    mounts: new MountManager(store, undefined, undefined, undefined, providers),
+    mounts: new MountManager(store, { providers }),
   });
 }
 

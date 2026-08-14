@@ -1,6 +1,7 @@
 import { Shell } from "./Shell";
 import { AbsolutePath } from "./core/AbsolutePath";
 import { MountRecord, Provenance } from "./mounts/types";
+import { pluginByName } from "./mounts/ManifestMountPath";
 import { NodeStore } from "./vfs/NodeStore";
 
 export class YafsWorkspace {
@@ -44,6 +45,17 @@ export class YafsWorkspace {
 
   mountLines() {
     return [...this.unionLines(), ...this.providerLines()];
+  }
+
+  mountSummaries() {
+    return this.mounts().map((mount) => ({
+      path: mount.path as AbsolutePath,
+      provider: mount.provider,
+      revision: mount.revision,
+      fetchedAt: mount.fetchedAt,
+      capabilities: mount.capabilities,
+      resourceShape: pluginByName(mount.provider).worldDescription(),
+    }));
   }
 
   private unionLines() {

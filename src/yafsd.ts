@@ -1,15 +1,14 @@
 import { mkdir, open } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { clearState, paths, writeState } from "./daemon";
+import { paths } from "./daemon";
 import { configArgument, restartConfig, selectedConfig } from "./DaemonConfig";
-import { YafsServer } from "./protocol/server";
-import { managedState, waitForStop } from "./DaemonHealth";
+import { managedState } from "./DaemonHealth";
 import { waitForState } from "./DaemonStartup";
-import { logStartup } from "./DaemonAnnounce";
 import { printLogs } from "./DaemonLogs";
-import { addressInUseError, isAddressInUse } from "./DaemonAddressError";
 import { toolsPort } from "./plugins/agent/AgentToolServer";
 import { defaultMcpJsonPath } from "./plugins/agent/LmStudioMcpJson";
+import { statusOf, stopDaemon } from "./DaemonControl";
+import { serve } from "./DaemonServe";
 
 const command = process.argv[2] || "serve";
 const settings = {
@@ -21,36 +20,10 @@ const settings = {
   mcpJsonPath: defaultMcpJsonPath(),
 };
 const statePaths = paths(settings.dataDir);
-await ({ serve, start, stop, restart, status, logs }[command] || usage)();
-async function serve() {
-  if (await managedState(statePaths.state)) {
-    throw new Error(`yafsd already running for ${statePaths.directory}`);
-  }
-  const server = await startServer();
-  const state = await announce(server);
-  await waitForSignal();
-  await server.close();
-  await clearState(statePaths.state, state.instanceId);
-}
-async function startServer() {
-  try {
-    return await YafsServer.start(settings);
-  } catch (error) {
-    throw isAddressInUse(error)
-      ? addressInUseError(settings.host, settings.port)
-      : error;
-  }
-}
-
-async function announce(server: YafsServer) {
-  const address = server.address();
-  const state = await writeState(
-    statePaths.state,
-    address,
-    settings.configPath,
-  );
-  logStartup(address, statePaths.directory, server.agentToolsPort());
-  return state;
+const commands = { serve: serveCommand, start, stop, restart, status, logs };
+await (commands[command] || usage)();
+function serveCommand() {
+  return serve(settings, statePaths);
 }
 
 async function start(configPath = settings.configPath) {
@@ -80,15 +53,8 @@ function detach(log: Awaited<ReturnType<typeof open>>, configPath?: string) {
   return child;
 }
 
-async function stop() {
-  const state = await managedState(statePaths.state);
-  if (!state) {
-    return report("stopped");
-  }
-  process.kill(state.pid, "SIGTERM");
-  await waitForStop(statePaths.state, state.pid);
-  await clearState(statePaths.state, state.instanceId);
-  report("stopped");
+function stop() {
+  return stopDaemon(statePaths, report);
 }
 
 async function restart() {
@@ -100,8 +66,8 @@ async function restart() {
   await start(configPath);
 }
 
-async function status() {
-  report((await managedState(statePaths.state)) ? "running" : "stopped");
+function status() {
+  return statusOf(statePaths, report);
 }
 
 function logs() {
@@ -117,11 +83,4 @@ function usage(): never {
 
 function report(value: string) {
   console.log(`yafsd ${value}; data: ${statePaths.directory}`);
-}
-
-function waitForSignal() {
-  return new Promise<void>((resolve) => {
-    process.once("SIGINT", resolve);
-    process.once("SIGTERM", resolve);
-  });
 }

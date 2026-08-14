@@ -73,3 +73,25 @@ export function bootstrapMountManager(o: BootstrapOptions): Bootstrapped {
   const rest = buildPrepareAndReplay(deps);
   return { persistence, planner, snapshots, records, ...rest };
 }
+
+export type MountManagerOptions = {
+  statePath?: string;
+  auditPath?: string;
+  limits?: SnapshotLimits;
+  providers?: ProviderRegistry;
+};
+
+export type ManagerCallbacks = {
+  getRecords: () => PreparedMountRecord[];
+  commit: (records: PreparedMountRecord[]) => void;
+};
+
+export function initializeManager(
+  store: NodeStore,
+  options: MountManagerOptions,
+  providers: ProviderRegistry,
+  callbacks: ManagerCallbacks,
+): Bootstrapped {
+  const base = { store, ...options, providers, ...callbacks };
+  return bootstrapMountManager(base);
+}

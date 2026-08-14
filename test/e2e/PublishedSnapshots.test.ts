@@ -32,10 +32,7 @@ test("a refresh republishes one snapshot for direct, link, and union reads", asy
 
 test("a bounded snapshot is rejected before it becomes a mount", async () => {
   const store = new NodeStore();
-  const mounts = new MountManager(store, undefined, undefined, {
-    files: 0,
-    bytes: 1,
-  });
+  const mounts = new MountManager(store, { limits: { files: 0, bytes: 1 } });
   const yafs = new Yafs({ store, mounts });
   await expect(activateDesired(yafs, fixtureManifest("hello"))).rejects.toThrow(
     "Snapshot exceeds 0 files",

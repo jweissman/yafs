@@ -5,7 +5,11 @@ import { expect, test } from "bun:test";
 import { sleep } from "../agent_test_helpers";
 import { startedHostConfigServer } from "../desired_mount_helpers";
 import { YashClient } from "../../src/protocol/client";
-import { LmStudioTurnRequest, ToolClient } from "../../src/plugins/agent/LmStudioMcpClient";
+import {
+  LmStudioTurnRequest,
+  ToolClient,
+} from "../../src/plugins/agent/LmStudioMcpClient";
+import { yafsKey } from "../../src/plugins/agent/LmStudioMcpJson";
 
 // AgentTools.test.ts only covers a persona that has `tools:` from its very
 // first activation. This covers the case the user actually hit live: a
@@ -15,7 +19,11 @@ import { LmStudioTurnRequest, ToolClient } from "../../src/plugins/agent/LmStudi
 test("adding tools: to an already-active persona and re-applying enables MCP on the next request", async () => {
   const calls: LmStudioTurnRequest[] = [];
   const client = fakeToolClient(calls);
-  const { server, client: yash, configPath } = await startedHostConfigServer(
+  const {
+    server,
+    client: yash,
+    configPath,
+  } = await startedHostConfigServer(
     "yafs-agent-tools-refresh-",
     manifestWithoutTools(),
     { toolClientFor: () => client },
@@ -35,7 +43,7 @@ test("adding tools: to an already-active persona and re-applying enables MCP on 
   await waitForComplete(yash, "run-1");
   expect(calls).toHaveLength(1);
   expect(calls[0].integrations).toEqual([
-    { type: "plugin", id: "mcp/yafs-agents-reviewer" },
+    { type: "plugin", id: `mcp/${yafsKey("agents", "reviewer")}` },
   ]);
 
   await yash.close();
@@ -79,7 +87,10 @@ function fakeToolClient(calls: LmStudioTurnRequest[]): ToolClient {
   return {
     respond: async (request) => {
       calls.push(request);
-      return { output: [{ type: "message", content: "Fine." }], responseId: "resp_1" };
+      return {
+        output: [{ type: "message", content: "Fine." }],
+        responseId: "resp_1",
+      };
     },
   };
 }

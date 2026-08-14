@@ -1,8 +1,8 @@
 export function isAddressInUse(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === "object" &&
-      (error as NodeJS.ErrnoException).code === "EADDRINUSE",
+    typeof error === "object" &&
+    (error as NodeJS.ErrnoException).code === "EADDRINUSE",
   );
 }
 

@@ -84,6 +84,36 @@ test("a reifier cannot substitute bytes for a trace digest", async () => {
   ).rejects.toThrow("wrong content");
 });
 
+test("materialize fails cleanly, naming the digest, when no reifier can recover a missing blob", async () => {
+  const store = new NodeStore();
+  store.mkdir("/source");
+  store.write("/source/a.txt", "captured");
+  const blobs = openBlobStore(await directory());
+  const service = new TraceService(blobs);
+  const captured = await service.capture(filesystem(store), "/source");
+  await blobs.gc();
+  await expect(
+    service.materialize(filesystem(store), captured, "/reified"),
+  ).rejects.toThrow(/Missing trace blob:/);
+});
+
+test("materialize fails cleanly when the reifier itself finds nothing", async () => {
+  const store = new NodeStore();
+  store.mkdir("/source");
+  store.write("/source/a.txt", "captured");
+  const blobs = openBlobStore(await directory());
+  const captured = await new TraceService(blobs).capture(
+    filesystem(store),
+    "/source",
+  );
+  captured.resourceReference = { revision: "immutable-one" };
+  await blobs.gc();
+  const service = new TraceService(blobs, { reify: async () => undefined });
+  await expect(
+    service.materialize(filesystem(store), captured, "/reified"),
+  ).rejects.toThrow(/Missing trace blob:/);
+});
+
 function trace(path: string): Trace {
   return {
     kind: "yafs-trace",

@@ -39,12 +39,12 @@ export default defineConfig([
       "max-lines": [
         "error",
         {
-          max: 125,
+          max: 100,
           skipBlankLines: true,
           skipComments: true,
         },
       ],
-      "max-params": ["error", 5],
+      "max-params": ["error", 4],
       "max-classes-per-file": ["error", 1],
     },
   },
@@ -63,7 +63,7 @@ export default defineConfig([
       "max-lines": [
         "error",
         {
-          max: 150,
+          max: 200,
           skipBlankLines: true,
           skipComments: true,
         },

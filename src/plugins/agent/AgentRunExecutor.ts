@@ -80,7 +80,7 @@ export class AgentRunExecutor {
     const model = this.clients.modelFor(target.persona, target.config);
     const onDelta = deltaWriter(this.runs, context);
     const history = chatHistoryFor(this.chats, context, request);
-    return completeAgent(model, target.persona, request, onDelta, history);
+    return completeAgent(model, target.persona, request, { onDelta, history });
   }
 
   private finishUnlessCancelled(

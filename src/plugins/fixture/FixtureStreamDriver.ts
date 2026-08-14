@@ -1,40 +1,39 @@
 import { Journal } from "../../protocol/Journal";
 import { MountManager } from "../../mounts/MountManager";
+import { Wiring } from "../../mounts/Plugin";
 import {
   FixtureConfig,
   PreparedMountRecord,
   StreamSpec,
 } from "../../mounts/types";
 import { commitDelivery, Delivery } from "./FixtureStreamCommit";
-import {
-  FixtureStreamRegistration,
-  RegisterCtl,
-  UnregisterCtl,
-} from "./FixtureStreamRegistration";
+import { FixtureStreamRegistration } from "./FixtureStreamRegistration";
 import { pendingDelivery } from "./FixtureStreamSchedule";
 
 const POLL_MS = 50;
-type Ctl = { registerCtl: RegisterCtl; unregisterCtl: UnregisterCtl };
 
 export class FixtureStreamDriver {
   private timer?: Timer;
   private readonly registration: FixtureStreamRegistration;
+  private readonly mounts: MountManager;
+  private readonly journal: Journal;
+  private readonly enqueue: (work: () => Promise<void>) => Promise<void>;
 
   constructor(
-    private readonly mounts: MountManager,
-    private readonly journal: Journal,
-    private readonly enqueue: (work: () => Promise<void>) => Promise<void>,
-    ctl: Ctl,
+    wiring: Wiring,
     private readonly now = () => Date.now(),
   ) {
-    this.registration = this.buildRegistration(mounts, ctl);
+    this.mounts = wiring.mounts;
+    this.journal = wiring.journal;
+    this.enqueue = wiring.enqueue;
+    this.registration = this.buildRegistration(wiring);
   }
 
-  private buildRegistration(mounts: MountManager, ctl: Ctl) {
+  private buildRegistration(wiring: Wiring) {
     return new FixtureStreamRegistration(
-      mounts,
-      ctl.registerCtl,
-      ctl.unregisterCtl,
+      wiring.mounts,
+      wiring.registerCtl,
+      wiring.unregisterCtl,
       (mountId, payload) => this.restart(mountId, payload),
     );
   }

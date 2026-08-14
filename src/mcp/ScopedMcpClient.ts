@@ -1,7 +1,12 @@
 import { ExecutionResult } from "../types/ExecutionResult";
-import { WorkspaceOperation } from "../operations/WorkspaceOperation";
+import {
+  StartHereValue,
+  WorkspaceOperation,
+} from "../operations/WorkspaceOperation";
 import { normalize } from "../core/PathResolver";
 import { McpClient } from "./types";
+import { scopedStartHere } from "./ScopedStartHere";
+import { pathsOf, Scopable } from "./ScopedMcpPaths";
 
 export type ScopedMcpConfig = {
   roots: string[];
@@ -28,8 +33,25 @@ export class ScopedMcpClient implements McpClient {
 
   async operation(request: WorkspaceOperation): Promise<ExecutionResult> {
     this.assertBudget();
+    if (request.name === "startHere") {
+      return this.scopedStartHere(request);
+    }
     this.assertScoped(request);
     return this.bounded(await this.inner.operation(request));
+  }
+
+  private async scopedStartHere(
+    request: Extract<WorkspaceOperation, { name: "startHere" }>,
+  ): Promise<ExecutionResult> {
+    const result = await this.inner.operation(request);
+    return result.error
+      ? result
+      : { ...result, stdout: this.scopedStdout(result.stdout) };
+  }
+
+  private scopedStdout(stdout: string): string {
+    const value = JSON.parse(stdout) as StartHereValue;
+    return JSON.stringify(scopedStartHere(value, this.config.roots));
   }
 
   private assertBudget() {
@@ -42,7 +64,7 @@ export class ScopedMcpClient implements McpClient {
     }
   }
 
-  private assertScoped(request: WorkspaceOperation) {
+  private assertScoped(request: Scopable) {
     const outside = pathsOf(request).filter((path) => !this.underRoot(path));
     if (outside.length) {
       throw this.logged(`Path outside allowed roots: ${outside.join(", ")}`);
@@ -72,22 +94,6 @@ export class ScopedMcpClient implements McpClient {
 function startsWith(segments: string[], root: string): boolean {
   const rootSegments = normalize(root);
   return rootSegments.every((segment, i) => segments[i] === segment);
-}
-
-function pathsOf(request: WorkspaceOperation): string[] {
-  if (request.name === "diff") {
-    return [request.left, request.right];
-  }
-  return request.name === "grep" ? request.paths : pathsOfOther(request);
-}
-
-type Other = Exclude<WorkspaceOperation, { name: "diff" | "grep" }>;
-
-function pathsOfOther(request: Other): string[] {
-  if (request.name === "capture") {
-    return [request.source];
-  }
-  return request.name === "restore" ? [request.destination] : [request.path];
 }
 
 function truncated(text: string, maxBytes: number): string {

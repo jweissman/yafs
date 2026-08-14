@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
 
-import {
-  addressInUseError,
-  isAddressInUse,
-} from "../src/DaemonAddressError";
+import { addressInUseError, isAddressInUse } from "../src/DaemonAddressError";
 
 test("isAddressInUse recognizes an EADDRINUSE error", () => {
   const error = Object.assign(new Error("bind failed"), {

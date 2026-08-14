@@ -1,15 +1,15 @@
 import { AbsolutePath } from "../core/AbsolutePath";
-import { FSNode } from "./FSNode";
+import { FSNode, ProviderOrigin } from "./FSNode";
 import { nodeStoreWriteGuard } from "./NodeStoreWriteGuard";
 import { assertAbsent, parentOf } from "./NodeStoreParent";
 import { NodeStoreResolver } from "./NodeStoreResolver";
 import { NodeStoreRmdir } from "./NodeStoreRmdir";
 import { NodeStoreState } from "./NodeStoreState";
 import { NodeStoreWritability } from "./NodeStoreWritability";
-import { canonicalUnionLayers } from "./UnionLayers";
 import { VfsOperation } from "./VfsOperation";
 import { applyOperation } from "./NodeStoreApply";
 import { removeChild, removeTreeChild } from "./NodeStoreRemove";
+import { LinkDeps, setProviderOrigin, symlink, union } from "./NodeStoreLinks";
 
 export class NodeStoreMutation {
   private readonly guard = nodeStoreWriteGuard;
@@ -59,30 +59,21 @@ export class NodeStoreMutation {
     const { parent, name } = this.parent(path);
     removeTreeChild(parent, name);
   }
-  setProviderOrigin(
-    path: AbsolutePath,
-    origin: import("./FSNode").ProviderOrigin,
-  ) {
-    const node = this.resolver.get(path, false);
-    if (!node) {
-      throw new Error(`No such file: ${path}`);
-    }
-    this.guard.setProviderOrigin(node, origin);
+  setProviderOrigin(path: AbsolutePath, origin: ProviderOrigin) {
+    setProviderOrigin(this.resolver, this.guard, path, origin);
   }
   symlink(target: string, path: AbsolutePath, at = this.state.clock.now()) {
-    const { parent, name } = this.parent(path);
-    assertAbsent(parent, name, path);
-    this.state.createNode(name, false, parent, at).symlinkTarget = target;
+    symlink(this.linkDeps(), target, path, at);
   }
   union(
     path: AbsolutePath,
     layers: AbsolutePath[],
     at = this.state.clock.now(),
   ) {
-    const resolved = canonicalUnionLayers(this.resolver, layers);
-    const { parent, name } = this.parent(path);
-    assertAbsent(parent, name, path);
-    this.state.createNode(name, true, parent, at).unionLayers = resolved;
+    union(this.linkDeps(), path, layers, at);
+  }
+  private linkDeps(): LinkDeps {
+    return { state: this.state, resolver: this.resolver };
   }
   apply(operation: VfsOperation) {
     return applyOperation(this, operation);

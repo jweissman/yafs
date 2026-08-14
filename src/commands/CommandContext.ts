@@ -3,6 +3,7 @@ import { TraceService } from "../traces/TraceService";
 import { AbsolutePath } from "../core/AbsolutePath";
 import { MountRecord, PreparedMountRecord, Provenance } from "../mounts/types";
 import { CacheService } from "../cache/CacheService";
+import { MountSummary } from "../operations/WorkspaceOperation";
 
 export type CommandContext = {
   clock: Clock;
@@ -24,6 +25,7 @@ export type CommandContext = {
   provenance(path: AbsolutePath): Provenance[];
   resourceReference(path: AbsolutePath): object | undefined;
   mounts(): string[];
+  mountSummaries(): MountSummary[];
   plugins(name?: string): object[];
   agentPersona(reference: string): AbsolutePath;
   agentPersonas(): { mountPath: string; persona: string }[];

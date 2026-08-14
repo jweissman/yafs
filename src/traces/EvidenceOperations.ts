@@ -1,8 +1,11 @@
 import { CommandContext } from "../commands/CommandContext";
 import { AbsolutePath } from "../core/AbsolutePath";
-import { CaptureValue, RestoreValue } from "../operations/WorkspaceOperation";
+import { CaptureValue } from "../operations/WorkspaceOperation";
 import { traceFilesystem } from "./TraceContextFilesystem";
 import { Trace } from "./TraceService";
+import { manifest } from "./TraceManifestPath";
+
+export { restore } from "./EvidenceRestore";
 
 export async function capture(
   context: CommandContext,
@@ -25,38 +28,6 @@ function publishedCapture(
   return captured(source, artifact, trace);
 }
 
-export async function restore(
-  context: CommandContext,
-  artifact: AbsolutePath,
-  destination: AbsolutePath,
-): Promise<RestoreValue> {
-  const trace = await materializeTrace(context, artifact, destination);
-  return restored(artifact, destination, trace);
-}
-
-async function materializeTrace(
-  context: CommandContext,
-  artifact: AbsolutePath,
-  destination: AbsolutePath,
-) {
-  const trace = parsedTrace(context, artifact);
-  const fs = traceFilesystem(context);
-  await context.traces.materialize(fs, trace, destination);
-  return trace;
-}
-
-function parsedTrace(context: CommandContext, artifact: AbsolutePath) {
-  const trace = context.traces.parse(context.read(manifest(artifact)));
-  assertRestoreLimit(trace);
-  return trace;
-}
-
-function assertRestoreLimit(trace: Trace) {
-  if (trace.entries.length > 10000) {
-    throw new Error("Result limit exceeded");
-  }
-}
-
 async function traced(
   context: CommandContext,
   source: AbsolutePath,
@@ -74,7 +45,7 @@ async function capturedTrace(
   const fs = traceFilesystem(context);
   const origin = providerOrigin(context, source);
   const at = context.clock.now().toISOString();
-  return context.traces.capture(fs, source, origin, at, limit);
+  return context.traces.capture(fs, source, { origin, capturedAt: at, limit });
 }
 
 function withResourceReference(
@@ -118,19 +89,6 @@ function assertAbsent(
 
 function providerOrigin(context: CommandContext, path: AbsolutePath) {
   return context.provenance(path).find((origin) => origin.kind === "provider");
-}
-
-function restored(
-  artifact: AbsolutePath,
-  destination: AbsolutePath,
-  trace: Trace,
-) {
-  const entries = trace.entries.length;
-  return { kind: "restore" as const, artifact, destination, entries };
-}
-
-function manifest(path: AbsolutePath) {
-  return `${path}/trace.json` as AbsolutePath;
 }
 
 function owner(path: AbsolutePath) {

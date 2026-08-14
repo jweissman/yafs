@@ -45,7 +45,7 @@ export class AgentToolMcpSync {
   private async reconcile(path: string) {
     const existing = await readMcpJson(path);
     if (!existing) {
-      return logUnparsable(path);
+      return logUnreadable(path);
     }
     await this.writeIfChanged(path, existing);
   }
@@ -85,9 +85,9 @@ function toolEnabledEntries(mountId: string, config: AgentConfig) {
     .map(([personaName]) => ({ mountId, personaName }));
 }
 
-function logUnparsable(path: string) {
+function logUnreadable(path: string) {
   console.error(
-    `agent tool mcp.json sync skipped: ${path} exists but isn't valid ` +
-      "JSON — fix or remove it manually.",
+    `agent tool mcp.json sync skipped: ${path} exists but could not be ` +
+      "read or parsed — fix or remove it manually.",
   );
 }

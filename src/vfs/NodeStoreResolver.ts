@@ -2,9 +2,14 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { PathResolver } from "../core/PathResolver";
 import { FSNode } from "./FSNode";
 import { NodeStoreState } from "./NodeStoreState";
+import { NodeStoreUnion } from "./NodeStoreUnion";
 
 export class NodeStoreResolver {
-  constructor(private readonly state: NodeStoreState) {}
+  private readonly union: NodeStoreUnion;
+
+  constructor(private readonly state: NodeStoreState) {
+    this.union = new NodeStoreUnion((path) => this.get(path));
+  }
 
   get(path: AbsolutePath, follow = true, depth = 0): FSNode | undefined {
     if (depth > 40) {
@@ -24,24 +29,15 @@ export class NodeStoreResolver {
   }
 
   child(node: FSNode, name: string): FSNode | undefined {
-    return node.unionLayers
-      ? this.layerChild(this.layers(node), name)
-      : node.children?.find((candidate) => candidate.name === name);
+    return this.union.child(node, name);
   }
 
   entries(node: FSNode): FSNode[] {
-    if (!node.unionLayers) {
-      return node.children || [];
-    }
-    const entries = new Map<string, FSNode>();
-    this.layers(node).forEach((layer) => this.addEntries(entries, layer));
-    return [...entries.values()];
+    return this.union.entries(node);
   }
 
   layers(node: FSNode): FSNode[] {
-    return (node.unionLayers || [])
-      .map((path) => this.get(path))
-      .filter(this.directory);
+    return this.union.layers(node);
   }
 
   pathOf(node: FSNode): string {
@@ -112,23 +108,5 @@ export class NodeStoreResolver {
   }
   private parent(link: FSNode) {
     return link.parent || this.state.origin;
-  }
-
-  private layerChild(layers: FSNode[], name: string): FSNode | undefined {
-    for (const layer of layers) {
-      const child = this.child(layer, name);
-      if (child) {
-        return child;
-      }
-    }
-  }
-
-  private addEntries(entries: Map<string, FSNode>, layer: FSNode) {
-    this.entries(layer).forEach((child) =>
-      entries.set(child.name, entries.get(child.name) || child),
-    );
-  }
-  private directory(node: FSNode | undefined): node is FSNode {
-    return Boolean(node?.dir);
   }
 }

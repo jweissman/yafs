@@ -17,7 +17,8 @@ export type WorkspaceOperation =
   | { name: "diff"; left: string; right: string; limit?: number }
   | { name: "capture"; source: string; artifact: string; limit?: number }
   | { name: "restore"; artifact: string; destination: string }
-  | { name: "grep"; pattern: string; paths: string[]; limit?: number };
+  | { name: "grep"; pattern: string; paths: string[]; limit?: number }
+  | { name: "startHere" };
 
 export type NodeType = "file" | "directory" | "symlink";
 export type TestPredicate = "-e" | "-f" | "-d" | "-L";
@@ -32,7 +33,8 @@ export type WorkspaceValue =
   | { kind: "diff"; changes: DiffChange[] }
   | { kind: "grep"; matches: GrepMatch[] }
   | CaptureValue
-  | RestoreValue;
+  | RestoreValue
+  | StartHereValue;
 
 export type TreeEntry = { path: AbsolutePath; type: NodeType; depth: number };
 export type GrepMatch = { path: AbsolutePath; line: number; text: string };
@@ -52,4 +54,27 @@ export type RestoreValue = {
   artifact: AbsolutePath;
   destination: AbsolutePath;
   entries: number;
+};
+export type MountSummary = {
+  path: AbsolutePath;
+  provider: string;
+  revision: string;
+  fetchedAt?: string;
+  capabilities: string[];
+  resourceShape?: string;
+};
+export type RootMountSummary = {
+  root: string;
+  mount: AbsolutePath;
+  provider: string;
+};
+export type StartHereValue = {
+  kind: "startHere";
+  principal: string;
+  cwd: AbsolutePath;
+  mounts: MountSummary[];
+  scoped: boolean;
+  roots?: string[];
+  rootMounts?: RootMountSummary[];
+  recommendedFirst: string[];
 };

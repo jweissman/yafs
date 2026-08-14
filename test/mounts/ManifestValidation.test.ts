@@ -22,6 +22,40 @@ test("a manifest rejects a plugin with a bad id, path, or provider", () => {
   );
 });
 
+test("a github mount with no path: defaults under /world/github/<owner>/<repo>", () => {
+  const manifest =
+    "{version: 1, mounts: [{id: review, provider: github, " +
+    'config: {repository: acme/widget, query: "is:pr", max: 2}, ' +
+    "capabilities: [network.github-api]}]}";
+  const { manifest: parsed } = parseManifest(manifest);
+  expect(parsed.mounts[0].path).toBe("world/github/acme/widget");
+});
+
+test("an explicit path: still overrides the github default", () => {
+  const manifest =
+    "{version: 1, mounts: [{id: review, path: reviews, provider: github, " +
+    'config: {repository: acme/widget, query: "is:pr", max: 2}, ' +
+    "capabilities: [network.github-api]}]}";
+  const { manifest: parsed } = parseManifest(manifest);
+  expect(parsed.mounts[0].path).toBe("reviews");
+});
+
+test("a slack mount with no path: defaults under /world/slack/channels/<channel>", () => {
+  const manifest =
+    "{version: 1, mounts: [{id: updates, provider: slack, " +
+    "config: {channel: C123}, " +
+    "capabilities: [network.slack-api, secret.slack-token]}]}";
+  const { manifest: parsed } = parseManifest(manifest);
+  expect(parsed.mounts[0].path).toBe("world/slack/channels/C123");
+});
+
+test("a fixture mount with no path: is rejected, since fixture has no default", () => {
+  const manifest =
+    "{version: 1, mounts: [{id: demo, provider: fixture, " +
+    "config: {files: {}}, capabilities: []}]}";
+  assertInvalid(manifest, "Invalid .yafsmeta plugin");
+});
+
 test("a manifest rejects non-array or non-string capabilities", () => {
   assertInvalid(entry("[]", "not-an-array"), "Invalid .yafsmeta capabilities");
   assertInvalid(entry("[]", "[1]"), "Invalid .yafsmeta capabilities");

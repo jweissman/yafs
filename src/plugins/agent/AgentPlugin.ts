@@ -51,13 +51,7 @@ export class AgentPlugin extends Plugin {
   }
 
   createDriver(wiring: Wiring, clients: AgentClients): PluginDriver {
-    return new AgentDirectoryDriver(
-      wiring.mounts,
-      wiring.journal,
-      wiring.enqueue,
-      ctlFor(wiring),
-      clients,
-    );
+    return new AgentDirectoryDriver(wiring, clients);
   }
 
   prepare(
@@ -76,13 +70,6 @@ export class AgentPlugin extends Plugin {
       persona.prompt,
     ]);
   }
-}
-
-function ctlFor(wiring: Wiring) {
-  return {
-    registerCtl: wiring.registerCtl,
-    unregisterCtl: wiring.unregisterCtl,
-  };
 }
 
 function sendAction(): PluginActionDefinition {

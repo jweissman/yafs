@@ -22,9 +22,10 @@ export type RefreshTiming = {
 };
 
 function refreshDriver(wiring: Wiring, timing: RefreshTiming) {
-  const { mounts, journal, enqueue } = wiring;
-  const { now, refreshIntervalMs } = timing;
-  return new ServerRefresh(mounts, journal, enqueue, now, refreshIntervalMs);
+  return new ServerRefresh(wiring, {
+    now: timing.now,
+    intervalMs: timing.refreshIntervalMs,
+  });
 }
 
 export type Clients = {
@@ -91,28 +92,4 @@ function slackInbound(
   const { mounts, dispatchCtl } = wiring;
   const ms = timing.slackPollIntervalMs;
   return new SlackInboundPoller(mounts, dispatchCtl, slackClientFor, ms);
-}
-
-export function startAll(drivers: BackgroundDrivers) {
-  drivers.refreshes.start();
-  drivers.plugins.forEach((plugin) =>
-    plugin.start ? plugin.start() : plugin.sync(),
-  );
-}
-
-export function closeAll(drivers: BackgroundDrivers) {
-  drivers.refreshes.close();
-  drivers.plugins.forEach((plugin) => plugin.close());
-}
-
-export function syncAll(drivers: BackgroundDrivers) {
-  drivers.plugins.forEach((plugin) => plugin.sync());
-}
-
-export function recoverAll(drivers: BackgroundDrivers) {
-  return Promise.all(
-    drivers.plugins
-      .filter((plugin) => plugin.recover)
-      .map((plugin) => plugin.recover!()),
-  );
 }

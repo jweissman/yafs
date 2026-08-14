@@ -1,11 +1,21 @@
-import { test } from "bun:test";
+import { expect, test } from "bun:test";
 
 import { AbsolutePath } from "../../../src/core/AbsolutePath";
 import {
   RouteOptions,
   routeMessage,
 } from "../../../src/plugins/slack/SlackInboundRouting";
-import { fakeDispatch, fakeMounts, waitFor } from "./slack_inbound_routing_helpers";
+import {
+  fakeDispatch,
+  fakeMounts,
+  waitFor,
+} from "./slack_inbound_routing_helpers";
+
+test("waitFor times out when the condition never becomes true", async () => {
+  await expect(waitFor(() => false, 30)).rejects.toThrow(
+    "Timed out waiting for the condition",
+  );
+});
 
 // The Slack outbound leg (SlackDirectoryDriver.send) durably queues via an
 // outbox and delivers in the background (`void attemptDelivery(...)`), so a
@@ -40,7 +50,11 @@ test("a dispatchCtl failure while posting the reply is logged, not left as an un
   const originalError = console.error;
   console.error = (...args: unknown[]) => errors.push(args);
   try {
-    await routeMessage(options, "chat1", { user: "U1", text: "hello", ts: "1.0" });
+    await routeMessage(options, "chat1", {
+      user: "U1",
+      text: "hello",
+      ts: "1.0",
+    });
     await waitFor(() => errors.some(loggedReplyFailure), 2000);
   } finally {
     console.error = originalError;

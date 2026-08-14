@@ -47,12 +47,28 @@ test("capture only accepts directories and restore rejects existing output", asy
   expect(
     (await yafs.executeAsync("capture --limit 0 notes notes/limited")).stderr,
   ).toContain("Result limit exceeded");
+  expect(
+    (await yafs.executeAsync("capture notes notes/copy")).stderr,
+  ).toContain("Capture destination already exists");
 });
 
 test("blobs gc is an explicit control command", async () => {
   const yafs = new Yafs();
   const result = await yafs.executeAsync("blobs gc");
   expect(JSON.parse(result.stdout)).toEqual({ reclaimed: [] });
+});
+
+test("blobs rejects any subcommand other than gc", async () => {
+  const yafs = new Yafs();
+  expect((await yafs.executeAsync("blobs")).stderr).toBe("blobs requires gc");
+});
+
+test("capture --limit rejects a non-numeric count", async () => {
+  const yafs = new Yafs();
+  await yafs.executeAsync("mkdir notes");
+  expect(
+    (await yafs.executeAsync("capture --limit abc notes notes/copy")).stderr,
+  ).toBe("capture requires --limit COUNT");
 });
 
 test("a failed trace plan leaves blobs unretained for explicit collection", async () => {
@@ -83,13 +99,9 @@ test("command substitution rejects trace before it can retain blobs", async () =
 function configuredYafs(pulls: GitHubPull[]) {
   const store = new NodeStore();
   const source = new GitHubCollectionSource({ pulls: async () => pulls });
-  const mounts = new MountManager(
-    store,
-    undefined,
-    undefined,
-    undefined,
-    new ProviderRegistry(source),
-  );
+  const mounts = new MountManager(store, {
+    providers: new ProviderRegistry(source),
+  });
   return new Yafs({ store, mounts });
 }
 

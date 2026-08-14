@@ -1,24 +1,9 @@
-import { randomUUID } from "node:crypto";
-import {
-  mkdir,
-  open,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { readFile, unlink } from "node:fs/promises";
+import { resolve } from "node:path";
 import { validate } from "./DaemonStateValidation";
+import { absentState, ignoreMissing, newState, replace } from "./DaemonStateIO";
 
-export type DaemonState = {
-  version: 1;
-  pid: number;
-  host: string;
-  port: number;
-  startedAt: string;
-  instanceId: string;
-  configPath?: string;
-};
+export type { DaemonState } from "./DaemonStateIO";
 
 export function paths(dataDir: string) {
   const directory = resolve(dataDir);
@@ -29,9 +14,7 @@ export function paths(dataDir: string) {
   };
 }
 
-export async function readState(
-  path: string,
-): Promise<DaemonState | undefined> {
+export async function readState(path: string) {
   try {
     return validate(JSON.parse(await readFile(path, "utf8")));
   } catch (error: unknown) {
@@ -64,9 +47,7 @@ export function isRunning(pid: number): boolean {
   }
 }
 
-export async function currentState(
-  path: string,
-): Promise<DaemonState | undefined> {
+export async function currentState(path: string) {
   const state = await readState(path);
   if (!state || isRunning(state.pid)) {
     return state;
@@ -77,50 +58,4 @@ export async function currentState(
 async function removeStaleState(path: string) {
   await clearState(path);
   return undefined;
-}
-
-function newState(
-  address: { host: string; port: number },
-  configPath?: string,
-): DaemonState {
-  return { ...identity(), ...address, ...(configPath && { configPath }) };
-}
-
-function identity() {
-  return {
-    version: 1 as const,
-    pid: process.pid,
-    startedAt: new Date().toISOString(),
-    instanceId: randomUUID(),
-  };
-}
-
-async function replace(path: string, temporary: string, contents: string) {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(temporary, contents);
-  await rename(temporary, path);
-  await syncDirectory(path);
-}
-
-function absentState(error: unknown): undefined {
-  if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-    return undefined;
-  }
-  throw error;
-}
-
-async function ignoreMissing(action: () => Promise<void>) {
-  try {
-    await action();
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-  }
-}
-
-async function syncDirectory(path: string) {
-  const directory = await open(dirname(path), "r");
-  await directory.sync();
-  await directory.close();
 }

@@ -35,7 +35,8 @@ export function refreshMount(deps: LifecycleDeps, request: RefreshRequest) {
   deps.snapshots.replace(record);
   deps.setRecords(restoredRefresh(deps.snapshots, deps.getRecords(), record));
   deps.save();
-  auditRefresh(deps.persistence, record, actor, previous.revision, detail);
+  const info = { record, actor, before: previous.revision, detail };
+  auditRefresh(deps.persistence, info);
 }
 
 export function removeMount(deps: LifecycleDeps, record: MountRecord) {

@@ -8,6 +8,7 @@ import {
   LmStudioTurnRequest,
   ToolClient,
 } from "../../src/plugins/agent/LmStudioMcpClient";
+import { yafsKey } from "../../src/plugins/agent/LmStudioMcpJson";
 
 test("a tool-enabled persona routes through LM Studio's native chat endpoint and records a durable transcript", async () => {
   const calls: LmStudioTurnRequest[] = [];
@@ -44,10 +45,13 @@ async function assertFirstTurn(yash: YashClient, calls: LmStudioTurnRequest[]) {
   expect(calls).toHaveLength(1);
   expect(calls[0]).toEqual({
     input: "hi",
-    systemPrompt: "You are a terse reviewer.",
-    integrations: [{ type: "plugin", id: "mcp/yafs-agents-reviewer" }],
+    systemPrompt: expect.stringContaining("You are a terse reviewer."),
+    integrations: [
+      { type: "plugin", id: `mcp/${yafsKey("agents", "reviewer")}` },
+    ],
     previousResponseId: undefined,
   });
+  expect(calls[0].systemPrompt).toContain("/home/root/agents");
 }
 
 async function assertThreadedSecondTurn(

@@ -21,8 +21,13 @@ function evidenceOperation(item: Record<string, unknown>) {
     grepOperation(item) ||
     diffOperation(item) ||
     captureOperation(item) ||
-    restoreOperation(item)
+    restoreOperation(item) ||
+    startHereOperation(item)
   );
+}
+
+function startHereOperation(item: Record<string, unknown>) {
+  return item.name === "startHere";
 }
 
 function grepOperation(item: Record<string, unknown>) {

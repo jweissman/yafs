@@ -1,9 +1,6 @@
 import { SlackSettings, slackSettings } from "./SlackSettings";
+import { ApiRequest, call, Fetch } from "./SlackApiFetch";
 
-type Fetch = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response>;
 export type SlackMessage = { user?: string; text: string; ts: string };
 export type SlackChannelClient = {
   history(channel: string, max: number): Promise<SlackMessage[]>;
@@ -45,6 +42,14 @@ export class SlackApiClient {
     return body.user_id as string;
   }
 
+  private call(path: string, init: RequestInit) {
+    return call(this.deps(), path, init);
+  }
+  private deps(): ApiRequest {
+    const { settings, request, timeoutMs } = this;
+    return { settings, request, timeoutMs };
+  }
+
   addReaction(channel: string, timestamp: string, name: string) {
     return this.reaction("reactions.add", channel, timestamp, name);
   }
@@ -62,56 +67,6 @@ export class SlackApiClient {
     const body = JSON.stringify({ channel, timestamp, name });
     await this.call(path, { method: "POST", body });
   }
-
-  private async call(
-    path: string,
-    init: RequestInit,
-  ): Promise<Record<string, unknown>> {
-    const response = await this.fetch(path, init);
-    return this.checked(
-      path,
-      (await response.json()) as Record<string, unknown>,
-    );
-  }
-
-  private checked(path: string, body: Record<string, unknown>) {
-    if (body.ok !== true) {
-      throw new Error(`Slack API request failed: ${path} -> ${body.error}`);
-    }
-    return body;
-  }
-
-  private async fetch(path: string, init: RequestInit) {
-    const url = `${this.settings.apiUrl}/${path}`;
-    const signal = AbortSignal.timeout(this.timeoutMs);
-    return this.request(url, {
-      ...init,
-      headers: this.headers(),
-      signal,
-    }).catch((error) => this.rethrow(error, url));
-  }
-
-  private rethrow(error: unknown, url: string): never {
-    throw timedOut(error)
-      ? new Error(
-          `Slack API request timed out after ${this.timeoutMs}ms: ${url}`,
-        )
-      : (error as Error);
-  }
-
-  private headers() {
-    return {
-      authorization: `Bearer ${this.settings.token}`,
-      "content-type": "application/json",
-    };
-  }
-}
-
-function timedOut(error: unknown) {
-  return (
-    error instanceof Error &&
-    (error.name === "TimeoutError" || error.name === "AbortError")
-  );
 }
 
 export function defaultSlackClient(): SlackApiClient {

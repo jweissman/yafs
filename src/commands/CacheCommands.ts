@@ -3,7 +3,8 @@ import { cacheMetadataPath } from "../cache/CachePaths";
 import { BuiltinCommand } from "./BuiltinCommand";
 import { CommandContext } from "./CommandContext";
 import { expired, requiredEntry, storedEntry } from "./CacheEntryLookup";
-import { put, putRequest } from "./CachePut";
+import { put } from "./CachePut";
+import { shellRequest } from "./CacheRequestParsing";
 
 export function cacheCommands(): BuiltinCommand[] {
   return [cacheCommand()];
@@ -24,31 +25,6 @@ function cache(context: CommandContext, args: string[]) {
     return cacheRequest(context, request);
   }
   throw new Error("cache expects put, get, stat, delete, or gc");
-}
-function shellRequest(
-  context: CommandContext,
-  args: string[],
-): CacheRequest | undefined {
-  if (args[0] === "put") {
-    return putRequest(context, args);
-  }
-  return readOrGcRequest(context, args);
-}
-
-function readOrGcRequest(context: CommandContext, args: string[]) {
-  if (["get", "stat", "delete"].includes(args[0])) {
-    return simpleRequest(context, args);
-  }
-  if (args[0] === "gc") {
-    return { operation: "gc" as const };
-  }
-}
-
-function simpleRequest(context: CommandContext, args: string[]): CacheRequest {
-  return {
-    operation: args[0] as "get" | "stat" | "delete",
-    key: context.required("cache", args, 1),
-  };
 }
 export async function cacheRequest(
   context: CommandContext,

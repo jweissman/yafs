@@ -1,14 +1,9 @@
 import { type Socket } from "node:net";
 import Yafs from "../index";
-import { NodeStore } from "../vfs/NodeStore";
 import { VfsOperation } from "../vfs/VfsOperation";
-import { MountManager } from "../mounts/MountManager";
-import { TraceService } from "../traces/TraceService";
-import { CacheService } from "../cache/CacheService";
-import { DesiredMounts as Desired } from "../mounts/DesiredMounts";
-import { Journal } from "./Journal";
 import { CtlDispatch } from "./CtlDispatch";
-import { BackgroundDrivers, syncAll } from "./BackgroundDrivers";
+import { BackgroundDrivers } from "./BackgroundDrivers";
+import { syncAll } from "./BackgroundDriversLifecycle";
 import {
   attachLines,
   persistenceFailure,
@@ -17,15 +12,7 @@ import {
   Request,
 } from "./Framing";
 import { planRequest } from "./ServerRequestPlanning";
-
-type Services = {
-  store: NodeStore;
-  journal: Journal;
-  mounts: MountManager;
-  traces: TraceService;
-  cache: CacheService;
-  desired: Desired;
-};
+import { Services } from "./ServerTypes";
 
 export class ServerConnection {
   private queue: Promise<void> = Promise.resolve();

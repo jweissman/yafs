@@ -90,6 +90,7 @@ function commandContext(): CommandContext {
     origins: () => [],
     provenance: () => [],
     mounts: () => [],
+    mountSummaries: () => [],
     plugins: () => [],
     ...mountContext(),
     ...writeContext(),

@@ -4,6 +4,7 @@ import {
   parseRequest,
   persistenceFailure,
   requestFailure,
+  requestOrReject,
   respond,
 } from "../../src/protocol/Framing";
 import type { ExecutionResult } from "../../src/types/ExecutionResult";
@@ -14,6 +15,23 @@ test("framing helpers validate protocol input and report version mismatches", ()
   expect(persistenceFailure(3, "disk").error.code).toBe("persistence_error");
   assertSocketWrite();
   assertVersionMismatch();
+});
+
+test("requestOrReject responds with a protocol failure instead of destroying the socket when the error names a request id", () => {
+  const writes: string[] = [];
+  let destroyed = false;
+  const socket = {
+    destroyed: false,
+    write: (value: string) => writes.push(value),
+    destroy: () => (destroyed = true),
+  };
+  const result = requestOrReject(
+    '{"version":2,"id":1,"command":"pwd"}',
+    socket as never,
+  );
+  expect(result).toBeUndefined();
+  expect(destroyed).toBe(false);
+  expect(writes[0]).toContain("unsupported_version");
 });
 
 function assertSocketWrite() {

@@ -5,24 +5,15 @@ import {
 } from "./GitHubCollectionSource";
 import { GitHubConfig } from "../../mounts/types";
 import { GitHubSettings } from "./GitHubSettings";
-import { failureDetail, timedOut } from "./GitHubApiFailure";
 import { searchSummary } from "./GitHubApiSummary";
-
-type Fetch = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response>;
-type Search = {
-  items: Array<{ number: number; title: string; updated_at: string }>;
-};
-type Pull = { head: { sha: string } };
-type PullDetails = { title: string; updated_at: string; head: { sha: string } };
-type PullSummary = {
-  number: number;
-  title: string;
-  updatedAt: string;
-  headSha: string;
-};
+import {
+  Fetch,
+  Pull,
+  PullDetails,
+  PullSummary,
+  Search,
+} from "./GitHubApiClientTypes";
+import { apiJson, apiText, ApiRequest } from "./GitHubApiFetch";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -80,47 +71,14 @@ export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
     return `${this.settings.apiUrl}/search/issues?${query}`;
   }
 
-  private async json<T>(url: string) {
-    return (
-      await this.response(url, "application/vnd.github+json")
-    ).json() as Promise<T>;
+  private json<T>(url: string) {
+    return apiJson<T>(this.deps(), url);
   }
-  private async text(url: string, accept: string) {
-    return (await this.response(url, accept)).text();
+  private text(url: string, accept: string) {
+    return apiText(this.deps(), url, accept);
   }
-  private async response(url: string, accept: string) {
-    const response = await this.fetch(url, accept);
-    if (!response.ok) {
-      throw new Error(await this.failure(url, accept, response));
-    }
-    return response;
-  }
-  private async fetch(url: string, accept: string) {
-    const signal = AbortSignal.timeout(this.timeoutMs);
-    try {
-      return await this.request(url, { headers: this.headers(accept), signal });
-    } catch (error) {
-      throw this.timeoutError(error, url) ?? error;
-    }
-  }
-
-  private timeoutError(error: unknown, url: string) {
-    return timedOut(error)
-      ? new Error(
-          `GitHub API request timed out after ${this.timeoutMs}ms: ${url}`,
-        )
-      : undefined;
-  }
-  private async failure(url: string, accept: string, response: Response) {
-    const body = await response.text().catch(() => "");
-    return failureDetail({ url, accept, response, body });
-  }
-  private headers(accept: string) {
-    return {
-      accept,
-      ...(this.settings.token
-        ? { authorization: `Bearer ${this.settings.token}` }
-        : {}),
-    };
+  private deps(): ApiRequest {
+    const { settings, request, timeoutMs } = this;
+    return { settings, request, timeoutMs };
   }
 }

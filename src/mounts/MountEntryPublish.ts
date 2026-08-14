@@ -23,13 +23,18 @@ export function withEntries(
 
 export type MountJournal = { mounts: MountManager; journal: Journal };
 
+export type PublishRequest = {
+  record: PreparedMountRecord;
+  updates: Entry[];
+  detail?: string;
+  extra?: Partial<PreparedMountRecord>;
+};
+
 export async function publishEntries(
   deps: MountJournal,
-  record: PreparedMountRecord,
-  updates: Entry[],
-  detail?: string,
-  extra?: Partial<PreparedMountRecord>,
+  request: PublishRequest,
 ) {
+  const { record, updates, detail, extra } = request;
   const updated = mergedRecord(record, updates, extra);
   await commitRefresh(deps, updated, detail);
 }

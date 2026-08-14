@@ -1,13 +1,18 @@
 import { createConnection, type Socket } from "node:net";
 
 import type { ExecutionResult } from "../types/ExecutionResult";
-import { PROTOCOL_VERSION } from "./version";
 import { CacheRequest } from "../cache/CacheRequest";
 import { completionTarget } from "./CompletionTarget";
 import { LineBuffer } from "./LineBuffer";
-import { Payload, Response } from "./ClientProtocol";
+import { Payload } from "./ClientProtocol";
 import { PendingRequests } from "./PendingRequests";
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
+import {
+  attachSocketEvents,
+  connected,
+  matches,
+  writeRequest,
+} from "./ClientTransport";
 
 type Address = { host: string; port: number };
 
@@ -18,18 +23,10 @@ export class YashClient {
   private constructor(private readonly socket: Socket) {
     this.requests = new PendingRequests(
       () => socket.destroyed,
-      (id, payload) => this.writeRequest(id, payload),
+      (id, payload) => writeRequest(socket, id, payload),
     );
     socket.setEncoding("utf8");
-    this.attachSocketEvents(socket);
-  }
-
-  private attachSocketEvents(socket: Socket) {
-    socket.on("data", (chunk) => this.receive(String(chunk)));
-    socket.on("error", (error) => this.requests.failAll(error));
-    socket.on("close", () =>
-      this.requests.failAll(new Error("Connection closed")),
-    );
+    attachSocketEvents(socket, this.lines, this.requests);
   }
 
   static async connect(address: Address): Promise<YashClient> {
@@ -86,40 +83,7 @@ export class YashClient {
     return result.error ? [] : matches(result.stdout, completion);
   }
 
-  private receive(chunk: string) {
-    this.lines.push(chunk);
-    this.lines
-      .lines()
-      .forEach((line) => this.requests.resolve(JSON.parse(line) as Response));
-  }
-
   private send(payload: Payload): Promise<ExecutionResult> {
     return this.requests.send(payload);
   }
-
-  private writeRequest(id: number, payload: Payload) {
-    const request = JSON.stringify({
-      version: PROTOCOL_VERSION,
-      id,
-      ...payload,
-    });
-    this.socket.write(`${request}\n`);
-  }
-}
-
-function matches(
-  stdout: string,
-  completion: ReturnType<typeof completionTarget>,
-) {
-  return stdout
-    .split("\n")
-    .filter((name) => name.startsWith(completion.prefix))
-    .map(completion.format);
-}
-
-function connected(socket: Socket) {
-  return new Promise<void>((resolve, reject) => {
-    socket.once("connect", resolve);
-    socket.once("error", reject);
-  });
 }

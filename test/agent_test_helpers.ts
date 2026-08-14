@@ -55,7 +55,7 @@ async function pollRunId(state: PollState): Promise<string | undefined> {
     return undefined;
   }
   const status = await readStatus(state.client, state.runsDir, runId);
-  return state.matches(status) ? runId : undefined;
+  return status && state.matches(status) ? runId : undefined;
 }
 
 async function firstRunId(state: PollState) {
@@ -65,8 +65,14 @@ async function firstRunId(state: PollState) {
   return listing?.split("\n")[0];
 }
 
+// A freshly listed run/action directory entry can momentarily precede its
+// status.json becoming readable (a republish can be mid-flight) — treat a
+// read failure as "not ready yet" so the poll retries instead of throwing.
 async function readStatus(client: YashClient, runsDir: string, runId: string) {
-  return JSON.parse(await client.exec(`cat ${runsDir}/${runId}/status.json`));
+  return client
+    .exec(`cat ${runsDir}/${runId}/status.json`)
+    .then((raw) => JSON.parse(raw))
+    .catch(() => undefined);
 }
 
 export function manifest(personas: Record<string, string>) {

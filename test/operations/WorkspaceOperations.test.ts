@@ -25,6 +25,22 @@ test("workspace operations return typed VFS values without shell parsing", async
   ).toBe("inspect");
 });
 
+test("yafs.start_here reports principal, cwd, mounts, and an unscoped default", async () => {
+  const yafs = new Yafs();
+  const value = await yafs.operations.invoke({ name: "startHere" });
+  expect(value).toMatchObject({
+    kind: "startHere",
+    principal: "root",
+    cwd: "/home/root",
+    scoped: false,
+  });
+  if (value.kind !== "startHere") {
+    throw new Error("expected startHere");
+  }
+  expect(Array.isArray(value.mounts)).toBe(true);
+  expect(value.recommendedFirst.length).toBeGreaterThan(0);
+});
+
 test("a typed workspace operation returns a structured failure", () => {
   const result = new Yafs().planOperation({
     name: "read",

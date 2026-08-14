@@ -81,6 +81,17 @@ test("a persona rejects an empty, missing, or malformed tools config", () => {
   );
 });
 
+test("a persona rejects a non-string endpoint or model", () => {
+  assertRejected(
+    personas('{reviewer: {prompt: "hi", endpoint: 5}}'),
+    "Invalid endpoint",
+  );
+  assertRejected(
+    personas('{reviewer: {prompt: "hi", model: 5}}'),
+    "Invalid model",
+  );
+});
+
 function assertRejected(manifest: string, message: string) {
   expect(() => parseManifest(manifest)).toThrow(message);
 }

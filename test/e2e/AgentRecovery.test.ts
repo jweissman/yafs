@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import {
   fakeMessageModel,
   manifest,
+  waitForRun,
   waitForStatus,
 } from "../agent_test_helpers";
 import { YafsServer } from "../../src/protocol/server";
@@ -37,6 +38,30 @@ test("restart marks an accepted in-flight run interrupted", async () => {
   );
   expect(status.state).toBe("interrupted");
   expect(status.error).toContain("Daemon restarted");
+  await recovered.close();
+  await restarted.close();
+});
+
+test("restart leaves an already-completed run's status untouched", async () => {
+  const { directory, server, client } = await startedHostConfigServer(
+    "yafs-agents-recover-complete-",
+    manifest({ reviewer: "prompt" }),
+    { modelFor: () => fakeMessageModel(["done"]) },
+  );
+  await client.exec("plugins apply");
+  await client.exec('printf \'{"message":"hi"}\' > agents/reviewer/ctl');
+  const runId = await waitForRun(client, "agents/reviewer/runs");
+  await client.close();
+  await server.close();
+  const restarted = await YafsServer.start({
+    dataDir: directory,
+    modelFor: () => fakeMessageModel([]),
+  });
+  const recovered = await YashClient.connect(restarted.address());
+  const status = JSON.parse(
+    await recovered.exec(`cat agents/reviewer/runs/${runId}/status.json`),
+  );
+  expect(status.state).toBe("complete");
   await recovered.close();
   await restarted.close();
 });

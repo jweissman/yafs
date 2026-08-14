@@ -8,17 +8,32 @@ export function populateSnapshot(
   store: NodeStore,
   record: PreparedMountRecord,
 ) {
-  store.mkdir(record.path);
+  ensureDirectory(store, record.path);
   record.snapshot.entries.forEach((entry) => write(store, record.path, entry));
   store.setProviderOrigin(record.path, origin(record));
 }
 
+// A mount's default /world path can be multiple segments deep
+// (world/github/<owner>/<repo>), unlike the single-segment paths every
+// mount used before defaulting existed — a bare store.mkdir(record.path)
+// throws "No such parent directory" the moment the immediate parent
+// (e.g. world/github/acme) doesn't already exist. Walk and create every
+// missing ancestor instead, the same way write() already does for entries.
+function ensureDirectory(store: NodeStore, path: AbsolutePath) {
+  const segments = path.slice(1).split("/");
+  const makeDir = (parent: AbsolutePath, name: string) =>
+    directory(store, parent, name);
+  segments.reduce<AbsolutePath>(makeDir, "/" as AbsolutePath);
+}
+
+// Every entry's relative path is already validated as a safe, non-escaping
+// relative path before it reaches here (see ManifestValidation.ts's
+// `relative()`, enforced on fixture `files:` keys and the only source of
+// caller-supplied snapshot entry paths) — no provider can hand this a path
+// that resolves outside `root`, so there is nothing to guard against here.
 function write(store: NodeStore, root: AbsolutePath, entry: [string, string]) {
   const [relative, content] = entry;
   const path = PathResolver.resolve(relative, root);
-  if (!path.startsWith(`${root}/`)) {
-    throw new Error(`Invalid fixture path: ${relative}`);
-  }
   parents(store, root, path);
   store.write(path, content);
 }

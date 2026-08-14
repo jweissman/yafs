@@ -11,9 +11,6 @@ export class UnionCommand {
   }
   private compose(context: CommandContext, args: string[]) {
     const layers = args.slice(1).map((layer) => context.resolve(layer));
-    if (!layers.length) {
-      throw new Error("union requires at least one layer");
-    }
     context.union(commandPath(context, args, this.name), layers);
     return "";
   }

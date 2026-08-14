@@ -1,5 +1,6 @@
 import type Yafs from "./index";
 import { commandContext } from "./YafsCommandContext";
+import { requiredArg } from "./YafsValues";
 
 export function yafsContext(yafs: Yafs) {
   return commandContext({ ...session(yafs), ...services(yafs) });
@@ -22,7 +23,7 @@ function session(yafs: Yafs) {
     user: () => yafs.user.name,
     pwd: () => yafs.shell.pwd,
     resolve: (path: string) => yafs.shell.resolve(path),
-    required: yafs.requiredArg.bind(yafs),
+    required: requiredArg,
     help: () => helpText(yafs),
   };
 }

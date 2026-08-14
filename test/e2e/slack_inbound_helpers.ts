@@ -1,64 +1,11 @@
 import { ProviderRegistry } from "../../src/mounts/ProviderRegistry";
 import { SlackCollectionSource } from "../../src/plugins/slack/SlackCollectionSource";
-import { SlackMessage } from "../../src/plugins/slack/SlackApiClient";
 import { fakeMessageModel } from "../agent_model_fakes";
 import { startedHostConfigServer } from "../desired_mount_helpers";
+import { fakeClient, FakeState } from "./slack_inbound_fakes";
 
-export type Reaction = { action: "add" | "remove"; channel: string; ts: string };
-export type FakeState = {
-  messages: SlackMessage[];
-  posted: Array<{ channel: string; text: string }>;
-  reactions: Reaction[];
-  failNextHistory?: boolean;
-};
-
-export function fakeState(messages: SlackMessage[]): FakeState {
-  return { messages, posted: [], reactions: [] };
-}
-
-export function arrive(state: FakeState, message: SlackMessage) {
-  state.messages = [message, ...state.messages];
-}
-
-function fakeClient(state: FakeState) {
-  return {
-    history: async () => historyOrFail(state),
-    identity: async () => "BOT",
-    postMessage: (channel: string, text: string) => post(state, channel, text),
-    ...reactions(state),
-  };
-}
-
-function reactions(state: FakeState) {
-  return {
-    addReaction: (channel: string, ts: string) =>
-      react(state, "add", channel, ts),
-    removeReaction: (channel: string, ts: string) =>
-      react(state, "remove", channel, ts),
-  };
-}
-
-async function post(state: FakeState, channel: string, text: string) {
-  state.posted.push({ channel, text });
-  return "9.0";
-}
-
-async function react(
-  state: FakeState,
-  action: "add" | "remove",
-  channel: string,
-  ts: string,
-) {
-  state.reactions.push({ action, channel, ts });
-}
-
-function historyOrFail(state: FakeState) {
-  if (state.failNextHistory) {
-    state.failNextHistory = false;
-    throw new Error("channel_not_found");
-  }
-  return state.messages;
-}
+export type { Reaction, FakeState } from "./slack_inbound_fakes";
+export { fakeState, arrive } from "./slack_inbound_fakes";
 
 export type ConfigExtra = { requireMention?: boolean; replyTimeoutMs?: number };
 
@@ -67,9 +14,9 @@ export function startServer(
   modelFor: () => ReturnType<typeof fakeMessageModel>,
   configExtra: ConfigExtra = {},
 ) {
-  const client = fakeClient(state);
-  const options = serverOptions(client, modelFor);
-  return startedHostConfigServer("yafs-slack-inbound-", manifest(configExtra), options);
+  const options = serverOptions(fakeClient(state), modelFor);
+  const config = manifest(configExtra);
+  return startedHostConfigServer("yafs-slack-inbound-", config, options);
 }
 
 function serverOptions(

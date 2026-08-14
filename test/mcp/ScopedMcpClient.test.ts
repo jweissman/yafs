@@ -25,6 +25,19 @@ test("rejects an operation outside the allowed roots", async () => {
   await client.close();
 });
 
+test("rejects a capture whose source is outside the allowed roots", async () => {
+  const client = new LocalYashClient();
+  const scoped = new ScopedMcpClient(client, config(["/home/root/work"]));
+  await expect(
+    scoped.operation({
+      name: "capture",
+      source: "/home/root/other",
+      artifact: "/home/root/work/out",
+    }),
+  ).rejects.toThrow("Path outside allowed roots");
+  await client.close();
+});
+
 test("rejects a diff whose either side is outside the allowed roots", async () => {
   const client = new LocalYashClient();
   const scoped = new ScopedMcpClient(client, config(["/home/root/work"]));

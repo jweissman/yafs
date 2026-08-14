@@ -146,16 +146,16 @@ directory from an earlier `mkdir`, not necessarily a mount) fails with
 (`rmdir` if it's an empty directory) before the path can be mounted.
 
 GitHub mounts additionally need an explicit named capability and daemon-held
-configuration — see [M5 validation](M5-VALIDATION.md).
+configuration — see [PRODUCT-SPEC.md](PRODUCT-SPEC.md#first-demo-collaborative-pr-review-collection).
 
 ### Built-in plugins
 
 | Provider | Config | Capability | Notes |
 | --- | --- | --- | --- |
 | `fixture` | `{ files: {PATH: CONTENT}, streams?: {PATH: {chunks, intervalMs}} } ` | none required | Static, config-sourced content. `streams` delivers `chunks` into `PATH` on a timer, for exercising background/`ctl` mechanics with no external dependency — not a production feature. |
-| `github` | `{ repository, query, max }` | `network.github-api`, `secret.github-token` for authenticated access | Bounded PR query collection; see [M5 validation](M5-VALIDATION.md). |
-| `agent` | `{ personas: { NAME: { prompt, endpoint?, model?, tools? } }, endpoint?, model? }` | `chat.completion` | Publishes `NAME/prompt.md` per persona from `config.personas.NAME.prompt`. One mount can host several personas. For a persona with no `tools:`, `endpoint`/`model` resolve persona → mount → the `YAFS_LLM_BASE_URL`/`YAFS_LLM_MODEL` env vars (generic, any OpenAI-compatible `/chat/completions` server). For a persona *with* `tools:` (MCP-enabled, LM Studio only — see [Agent tools validation](AGENT-TOOLS-VALIDATION.md)), the same persona/mount fields instead fall back to `YAFS_LMSTUDIO_BASE_URL`/`YAFS_LMSTUDIO_MODEL`, since that path uses LM Studio's own `/api/v1/chat` endpoint, not the generic completions shape. LM Studio requires `model` on every `/api/v1/chat` request — omitting it (persona, mount, *and* the env var) fails with `missing_required_parameter: model`. A tool-enabled persona is served via `AgentToolServer`, an in-process HTTP MCP listener on a fixed port (default `7338`, override with `YAFS_AGENT_TOOLS_PORT`) that `AgentToolMcpSync` keeps registered in `~/.lmstudio/mcp.json` automatically. If LM Studio's "Require Authentication" is on (required alongside "Allow calling servers from mcp.json"), set `YAFS_LMSTUDIO_ACCESS_TOKEN` — sent as `Authorization: Bearer <token>` on every tool-enabled request. |
-| `slack` | `{ channel, max? }` | `network.slack-api`, `secret.slack-token` | Publishes the channel's recent messages as an ordered `NAME/messages.ndjson` snapshot; `channel` is a Slack channel ID (e.g. `C0123456789`), not a name. `secret.slack-token` reads the `YAFS_SLACK_TOKEN` env var daemon-side — there is no per-manifest token field and no `SLACK_CHANNEL_ID` env var; the channel is config, the token is the only secret. See [Slack validation](SLACK-VALIDATION.md). |
+| `github` | `{ repository, query, max }` | `network.github-api`, `secret.github-token` for authenticated access | Bounded PR query collection; see [PRODUCT-SPEC.md](PRODUCT-SPEC.md#first-demo-collaborative-pr-review-collection). |
+| `agent` | `{ personas: { NAME: { prompt, endpoint?, model?, tools? } }, endpoint?, model? }` | `chat.completion` | Publishes `NAME/prompt.md` per persona from `config.personas.NAME.prompt`. One mount can host several personas. For a persona with no `tools:`, `endpoint`/`model` resolve persona → mount → the `YAFS_LLM_BASE_URL`/`YAFS_LLM_MODEL` env vars (generic, any OpenAI-compatible `/chat/completions` server). For a persona *with* `tools:` (MCP-enabled, LM Studio only — see `test/plugins/agent/AgentToolServer.test.ts` and `AgentToolMcpSync.ts`), the same persona/mount fields instead fall back to `YAFS_LMSTUDIO_BASE_URL`/`YAFS_LMSTUDIO_MODEL`, since that path uses LM Studio's own `/api/v1/chat` endpoint, not the generic completions shape. LM Studio requires `model` on every `/api/v1/chat` request — omitting it (persona, mount, *and* the env var) fails with `missing_required_parameter: model`. A tool-enabled persona is served via `AgentToolServer`, an in-process HTTP MCP listener on a fixed port (default `7338`, override with `YAFS_AGENT_TOOLS_PORT`) that `AgentToolMcpSync` keeps registered in `~/.lmstudio/mcp.json` automatically. If LM Studio's "Require Authentication" is on (required alongside "Allow calling servers from mcp.json"), set `YAFS_LMSTUDIO_ACCESS_TOKEN` — sent as `Authorization: Bearer <token>` on every tool-enabled request. |
+| `slack` | `{ channel, max? }` | `network.slack-api`, `secret.slack-token` | Publishes the channel's recent messages as an ordered `NAME/messages.ndjson` snapshot; `channel` is a Slack channel ID (e.g. `C0123456789`), not a name. `secret.slack-token` reads the `YAFS_SLACK_TOKEN` env var daemon-side — there is no per-manifest token field and no `SLACK_CHANNEL_ID` env var; the channel is config, the token is the only secret. See `test/e2e/SlackInbound.test.ts` and `test/plugins/slack/SlackProvider.test.ts`. |
 
 ### Plugin actions (`ctl`) and exposure boundary
 
@@ -220,18 +220,23 @@ client-side yash feature (like `edit`), not a server command: it mints one
 (bypassing yash's command-line quoting entirely, so arbitrary message text —
 quotes, `$`, anything — is safe), and polls `response.md` to print the reply
 as it streams in. Requires an interactive terminal; see
-[agent chat validation](AGENT-CHAT-VALIDATION.md) for a full walkthrough.
+`test/e2e/AgentChatTurn.test.ts` for the exercised turn/threading behavior.
 
 `slack send PLUGIN_ID MESSAGE` is the same `ctl`-write mechanism under a
 different adapter: it writes `{"message": MESSAGE}` to the named Slack
 mount's `ctl` and returns `accepted: PLUGIN_ID` once the write is parsed —
-before the Slack API call happens, not after it succeeds. A successful post
-refreshes `messages.ndjson` to include it; a failed post (bad channel,
-network error, revoked token) writes `last-error.json` with the message text,
-error detail, and timestamp instead of raising a Yash error, since the
-write already returned by the time the post is attempted. There is currently
-no durable record of an in-flight send between the `ctl` write and either
-outcome — see the M6.4 roadmap entry in `FEATURE-ROADMAP.md`.
+before the Slack API call happens, not after it succeeds. The send accepts
+into a durable per-action outbox (`outbox/<id>/{message.md,status.json}`,
+`SlackOutboxStore`) before the write returns, so an in-flight send between
+the `ctl` write and its outcome is itself a durable, inspectable record, not
+a gap. A successful post transitions the entry to `succeeded` and refreshes
+`messages.ndjson` to include it; a failed post (bad channel, network error,
+revoked token) transitions it to `failed` and writes `last-error.json` with
+the message text, error detail, and timestamp instead of raising a Yash
+error, since the write already returned by the time the post is attempted.
+A restart while a send was in flight sweeps it to `unknown` (never silently
+retried or dropped) via `SlackOutboxRecovery` — see the M6.4 entry in
+`FEATURE-ROADMAP.md` and `test/e2e/SlackOutboxRecovery.test.ts`.
 
 `plugins describe agent` also reports a planned `conversation` HTTP exposure.
 That is metadata, not a listening endpoint: no plugin can open a port by being

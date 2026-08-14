@@ -3,7 +3,10 @@ import { expect, test } from "bun:test";
 import { AbsolutePath } from "../../../src/core/AbsolutePath";
 import { MountManager } from "../../../src/mounts/MountManager";
 import { PreparedMountRecord } from "../../../src/mounts/types";
-import { awaitReply, RunLookup } from "../../../src/plugins/slack/SlackReplyWait";
+import {
+  awaitReply,
+  RunLookup,
+} from "../../../src/plugins/slack/SlackReplyWait";
 
 // A pending reply-wait is a detached background watcher (SlackInboundRouting's
 // `void reply(...)`), not something daemon shutdown should block on. If its

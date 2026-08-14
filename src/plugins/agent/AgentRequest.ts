@@ -44,13 +44,18 @@ function assertOptionalString(value: unknown, payload: string) {
   }
 }
 
+export type CompletionExtras = {
+  onDelta?: (delta: string) => void;
+  history?: ChatMessage[];
+};
+
 export function completeAgent(
   model: ModelClient,
   persona: PersonaConfig,
   request: AgentRequest,
-  onDelta?: (delta: string) => void,
-  history?: ChatMessage[],
+  extras: CompletionExtras = {},
 ) {
+  const { onDelta, history } = extras;
   return model.completeChat(messagesFor(persona, request, history), onDelta);
 }
 

@@ -8,25 +8,13 @@ import {
   requestEntry,
   responseEntry,
   RunId,
+  Status,
   statusEntry,
   toolsEntry,
 } from "./AgentRunEntries";
+import { completion } from "./AgentRunCompletion";
 
-export type Status = {
-  state:
-    "queued" | "running" | "complete" | "failed" | "interrupted" | "cancelled";
-  startedAt: string;
-  completedAt?: string;
-  error?: string;
-};
-
-function completeStatus(startedAt: string): Status {
-  return {
-    state: "complete",
-    startedAt,
-    completedAt: new Date().toISOString(),
-  };
-}
+export type { Status } from "./AgentRunEntries";
 
 function withContext(entries: Entry[], id: RunId, context?: string) {
   return context === undefined
@@ -84,29 +72,8 @@ export class AgentRunStore {
     request: RunId & { startedAt: string; message: string; reply: string },
   ) {
     const { startedAt, message, reply, ...id } = request;
-    const completed = this.completion(id, startedAt, message, reply);
+    const completed = completion(id, startedAt, message, reply);
     return this.commitEntries(id, completed.updates, completed.entryDetail);
-  }
-
-  private completion(
-    id: RunId,
-    startedAt: string,
-    message: string,
-    reply: string,
-  ) {
-    const status = completeStatus(startedAt);
-    const updates = this.runFiles(id, status, message, reply);
-    return { updates, entryDetail: detail(id, status) };
-  }
-
-  private runFiles(
-    id: RunId,
-    status: Status,
-    message: string,
-    reply: string,
-  ): Entry[] {
-    const request = requestEntry(id, message);
-    return [statusEntry(id, status), request, responseEntry(id, reply)];
   }
 
   private commitEntries(id: RunId, updates: Entry[], entryDetail: string) {
@@ -117,7 +84,7 @@ export class AgentRunStore {
     const record = this.record(id.mountId);
     if (record) {
       const deps = { mounts: this.mounts, journal: this.journal };
-      await publishEntries(deps, record, updates, info);
+      await publishEntries(deps, { record, updates, detail: info });
     }
   }
 

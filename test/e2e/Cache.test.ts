@@ -20,6 +20,13 @@ test("cache stores UTF-8 values in blobs with visible TTL metadata", async () =>
   expect(yafs.exec("cat cache/metadata/greeting.json")).toContain('"digest"');
 });
 
+test("cache put without --ttl is rejected", async () => {
+  const yafs = new Yafs();
+  expect((await yafs.executeAsync("cache put greeting hello")).stderr).toBe(
+    "cache put requires --ttl DURATION",
+  );
+});
+
 test("cache expiry hides an entry and explicit collection reclaims its blob", async () => {
   const now = clock("2026-08-05T12:00:00.000Z");
   const yafs = new Yafs({ clock: now });

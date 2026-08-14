@@ -1,4 +1,3 @@
-import { AbsolutePath } from "../../core/AbsolutePath";
 import { MountManager } from "../../mounts/MountManager";
 import { PreparedMountRecord, SlackConfig } from "../../mounts/types";
 import {
@@ -9,24 +8,16 @@ import {
 } from "./SlackInboundSchedule";
 import { DispatchCtl } from "./SlackInboundRouting";
 import {
-  channelChatId,
   InboundConfig,
   inboundConfig,
   log,
   logBaseline,
   logPoll,
-  routeAll,
 } from "./SlackInboundPollerSupport";
 import { SlackChannelClient, SlackMessage } from "./SlackApiClient";
+import { Msgs, Poll, route } from "./SlackInboundPollerRoute";
 
 const DEFAULT_POLL_MS = 3000;
-
-type Poll = {
-  record: PreparedMountRecord;
-  config: InboundConfig;
-  client: SlackChannelClient;
-};
-type Msgs = SlackMessage[];
 
 export class SlackInboundPoller {
   private timer?: Timer;
@@ -107,17 +98,8 @@ export class SlackInboundPoller {
     return id;
   }
 
-  private async route(poll: Poll, botUserId: string, messages: SlackMessage[]) {
-    const options = this.routeOptions(poll, botUserId);
-    const chatId = channelChatId(poll.record.id, poll.config.channel);
-    await routeAll(options, chatId, messages);
-  }
-
-  private routeOptions(poll: Poll, botUserId: string) {
-    const slackCtlPath = `${poll.record.path}/ctl` as AbsolutePath;
+  private route(poll: Poll, botUserId: string, messages: SlackMessage[]) {
     const { mounts, dispatchCtl } = this;
-    const { persona, replyTimeoutMs, channel } = poll.config;
-    const base = { mounts, dispatchCtl, persona, slackCtlPath, botUserId };
-    return { ...base, replyTimeoutMs, channel, client: poll.client };
+    return route({ mounts, dispatchCtl }, poll, botUserId, messages);
   }
 }

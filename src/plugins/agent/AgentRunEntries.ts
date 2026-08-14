@@ -1,7 +1,12 @@
-import { Status } from "./AgentRunStore";
-
 export type RunId = { mountId: string; personaName: string; runId: string };
 export type Entry = [string, string];
+export type Status = {
+  state:
+    "queued" | "running" | "complete" | "failed" | "interrupted" | "cancelled";
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+};
 
 export function detail(id: RunId, status: Status): string {
   return `persona=${id.personaName} run=${id.runId} state=${status.state}`;

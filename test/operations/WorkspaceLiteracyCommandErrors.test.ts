@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 
 import { workspace } from "./workspace_helpers";
+import { render } from "../../src/commands/WorkspaceLiteracyCommands";
+
+test("render has no terminal text for a value kind outside tree/find/test/diff", () => {
+  expect(render({ kind: "list", path: "/home/root", entries: [] })).toBe("");
+});
 
 test("Yash rejects an option without a value", async () => {
   const yafs = await workspace();

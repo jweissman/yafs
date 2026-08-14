@@ -17,6 +17,24 @@ test("an unrecoverable command error destroys the socket instead of hanging it",
   logged.mockRestore();
 });
 
+test("a failure while responding to a request failure aborts the connection", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => undefined);
+  const connection = new ServerConnection(fakeServices(), () => ({}) as never);
+  const socket = fakeSocket();
+  socket.write = () => {
+    throw new Error("socket gone");
+  };
+  connection.attach(socket as never);
+  socket.emit("data", '{"version":1,"id":1,"command":"pwd"}\n');
+  await Bun.sleep(0);
+  expect(socket.destroyed).toBe(true);
+  expect(logged).toHaveBeenCalledWith(
+    "Unhandled command error:",
+    expect.any(Error),
+  );
+  logged.mockRestore();
+});
+
 test("a socket-level error tears the connection down", () => {
   const connection = new ServerConnection(fakeServices(), () => ({}) as never);
   const socket = fakeSocket();
@@ -42,6 +60,7 @@ function fakeSocket() {
     destroyed: boolean;
     destroy(): void;
     setEncoding(): void;
+    write?(value: string): void;
   };
   socket.destroyed = false;
   socket.destroy = () => {

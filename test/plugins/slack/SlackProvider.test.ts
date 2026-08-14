@@ -93,6 +93,9 @@ function assertRejectsInvalidConfig() {
   expect(() =>
     parseManifest(slackManifest().replace("max: 10", "replyTimeoutMs: 0")),
   ).toThrow("Invalid slack replyTimeoutMs");
+  expect(() =>
+    parseManifest(slackManifest().replace("max: 10", "persona: 5")),
+  ).toThrow("Invalid slack persona");
 }
 
 test("an unconfigured Slack provider fails clearly instead of silently publishing nothing", async () => {
@@ -106,7 +109,7 @@ function configuredYafs(providers: ProviderRegistry) {
   const store = new NodeStore();
   return new Yafs({
     store,
-    mounts: new MountManager(store, undefined, undefined, undefined, providers),
+    mounts: new MountManager(store, { providers }),
   });
 }
 

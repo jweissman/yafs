@@ -91,6 +91,18 @@ test("a failed request reports its url, accept header, request id, and body for 
   );
 });
 
+test("failure detail still reports status when reading the failed response body itself fails", async () => {
+  const response = new Response("", { status: 500 });
+  response.text = () => Promise.reject(new Error("stream error"));
+  const client = new GitHubApiClient(
+    { apiUrl: "https://github.test" },
+    async () => response,
+  );
+  await expect(
+    client.pulls({ repository: "acme/widget", query: "is:open", max: 1 }),
+  ).rejects.toThrow("GitHub API request failed: 500");
+});
+
 test("the GitHub API client times out a stalled request instead of hanging forever", async () => {
   const client = new GitHubApiClient(
     { apiUrl: "https://github.test" },
@@ -105,6 +117,21 @@ test("the GitHub API client times out a stalled request instead of hanging forev
   await expect(failure).rejects.toThrow(
     "GitHub API request timed out after 20ms: https://github.test/search/issues",
   );
+});
+
+test("a non-timeout network error propagates as-is", async () => {
+  const client = new GitHubApiClient(
+    { apiUrl: "https://github.test" },
+    async () => {
+      throw new Error("ECONNREFUSED");
+    },
+  );
+  const failure = client.pulls({
+    repository: "acme/widget",
+    query: "is:open",
+    max: 1,
+  });
+  await expect(failure).rejects.toThrow("ECONNREFUSED");
 });
 
 function hangingFetch() {

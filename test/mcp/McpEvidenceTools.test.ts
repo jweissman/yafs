@@ -37,3 +37,13 @@ test("evidence tools reject host and relative paths", () => {
     }),
   ).toThrow("absolute Yafs path");
 });
+
+test("evidence tools reject a non-integer capture limit", () => {
+  expect(() =>
+    evidenceOperation("yafs.capture", {
+      source: "/source",
+      artifact: "/artifacts/one",
+      limit: "not-a-number",
+    }),
+  ).toThrow("limit must be an integer");
+});

@@ -7,12 +7,12 @@ import { emitGrowth, printLogs } from "../src/DaemonLogs";
 
 // --tail's `follow()` loop is a genuinely foreground, run-until-Ctrl-C CLI
 // behavior with no cancellation hook (by design, matching this repo's
-// precedent for interactive/long-running CLI surfaces — see
-// docs/AGENT-CHAT-VALIDATION.md's note that agent chat's REPL is validated
-// via its runbook, not an automated test). Manually verified: `yafsd logs
-// --tail` picks up content appended to the log file after it starts
-// watching. `emitGrowth` — the part of that loop that actually decides
-// what to (re-)read — is exported and tested directly below instead.
+// precedent for interactive/long-running CLI surfaces — `agent chat`'s
+// REPL has the same property: no automated test drives it directly).
+// Manually verified: `yafsd logs --tail` picks up content appended to the
+// log file after it starts watching. `emitGrowth` — the part of that loop
+// that actually decides what to (re-)read — is exported and tested
+// directly below instead.
 
 test("printLogs prints the last N lines by default and with -n", async () => {
   const path = await logFile("a\nb\nc\nd\ne\n");

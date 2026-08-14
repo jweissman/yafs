@@ -6,7 +6,11 @@ import {
   RouteOptions,
   routeMessage,
 } from "../../../src/plugins/slack/SlackInboundRouting";
-import { fakeDispatch, fakeMounts, waitFor } from "./slack_inbound_routing_helpers";
+import {
+  fakeDispatch,
+  fakeMounts,
+  waitFor,
+} from "./slack_inbound_routing_helpers";
 
 test("a successful reply adds and removes the working reaction", async () => {
   const entries: Array<[string, string]> = [];

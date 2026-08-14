@@ -1,15 +1,10 @@
 import { AbsolutePath } from "./core/AbsolutePath";
 import { errorCode } from "./core/errors";
 import Yafs from "./index";
-import {
-  CaptureValue,
-  RestoreValue,
-  WorkspaceOperation,
-} from "./operations/WorkspaceOperation";
-import { capture, restore } from "./traces/EvidenceOperations";
-import { yafsContext } from "./YafsContext";
+import { WorkspaceOperation } from "./operations/WorkspaceOperation";
 import { ExecutionPlan } from "./types/ExecutionPlan";
 import { ExecutionResult } from "./types/ExecutionResult";
+import { evidence, evidencePlan } from "./YafsEvidencePlan";
 
 export function planOperation(yafs: Yafs, operation: WorkspaceOperation) {
   try {
@@ -29,64 +24,9 @@ export async function planOperationAsync(
     : planOperation(yafs, operation);
 }
 
-async function evidencePlan(yafs: Yafs, operation: EvidenceOperation) {
-  yafs.operationQueue.reset();
-  try {
-    return await plannedEvidence(yafs, operation);
-  } catch (error) {
-    return { result: failure(yafs, error), operations: [] };
-  }
-}
-
 function planned(yafs: Yafs, operation: WorkspaceOperation): ExecutionPlan {
   const value = yafs.operations.invoke(operation);
   return { result: success(yafs, render(value), value), operations: [] };
-}
-
-async function plannedEvidence(yafs: Yafs, operation: EvidenceOperation) {
-  const value =
-    operation.name === "capture"
-      ? captureValue(yafs, operation)
-      : restoreValue(yafs, operation);
-  return appliedEvidence(yafs, await value);
-}
-
-function appliedEvidence(yafs: Yafs, value: CaptureValue | RestoreValue) {
-  yafs.operationQueue.validate();
-  return {
-    result: success(yafs, JSON.stringify(value), value),
-    operations: yafs.operationQueue.all(),
-  };
-}
-
-function captureValue(
-  yafs: Yafs,
-  operation: Extract<EvidenceOperation, { name: "capture" }>,
-) {
-  const context = yafsContext(yafs);
-  const source = yafs.shell.resolve(operation.source);
-  const artifact = yafs.shell.resolve(operation.artifact);
-  return capture(context, source, artifact, operation.limit);
-}
-
-function restoreValue(
-  yafs: Yafs,
-  operation: Extract<EvidenceOperation, { name: "restore" }>,
-) {
-  const context = yafsContext(yafs);
-  const artifact = yafs.shell.resolve(operation.artifact);
-  const destination = yafs.shell.resolve(operation.destination);
-  return restore(context, artifact, destination);
-}
-
-type EvidenceOperation = Extract<
-  WorkspaceOperation,
-  { name: "capture" | "restore" }
->;
-function evidence(
-  operation: WorkspaceOperation,
-): operation is EvidenceOperation {
-  return operation.name === "capture" || operation.name === "restore";
 }
 
 function render(value: NonNullable<ExecutionResult["value"]>) {
@@ -96,7 +36,7 @@ function render(value: NonNullable<ExecutionResult["value"]>) {
   return value.kind === "read" ? value.text : JSON.stringify(value);
 }
 
-function success(
+export function success(
   yafs: Yafs,
   stdout: string,
   value: NonNullable<ExecutionResult["value"]>,
@@ -104,7 +44,7 @@ function success(
   return { stdout, stderr: "", status: 0, value, session: session(yafs) };
 }
 
-function failure(yafs: Yafs, error: unknown): ExecutionResult {
+export function failure(yafs: Yafs, error: unknown): ExecutionResult {
   const message = error instanceof Error ? error.message : String(error);
   return {
     stdout: "",

@@ -29,6 +29,11 @@ test("a yash client talks to a persistent server", async () => {
     path: "/home/root/notes",
     entries: ["note.md"],
   });
+  expect((await client.operation({ name: "startHere" })).value).toMatchObject({
+    kind: "startHere",
+    principal: "root",
+  });
+  expect(server.agentToolsPort()).toBeGreaterThan(0);
   await client.close();
   await server.close();
   const restarted = await YafsServer.start({ walPath });
@@ -83,6 +88,36 @@ test("a yash client rejects unsupported and failed protocol replies", async () =
     "Unsupported protocol version",
   );
   await client.close();
+  await close(server);
+});
+
+test("a client fails every pending request when the connection closes unexpectedly", async () => {
+  const server = createServer((socket) =>
+    socket.on("data", () => socket.destroy()),
+  );
+  await listen(server);
+  const client = await YashClient.connect(address(server));
+  await expect(client.exec("pwd")).rejects.toThrow("Connection closed");
+  await close(server);
+});
+
+test("connect rejects when nothing is listening on the target port", async () => {
+  const server = createServer();
+  await listen(server);
+  const refusedAddress = address(server);
+  await close(server);
+  await expect(YashClient.connect(refusedAddress)).rejects.toThrow();
+});
+
+test("a client fails every pending request on a raw socket error after connecting", async () => {
+  const server = createServer();
+  await listen(server);
+  const client = await YashClient.connect(address(server));
+  const pending = client.exec("pwd");
+  (
+    client as unknown as { socket: { emit(event: string, e: Error): void } }
+  ).socket.emit("error", new Error("socket reset"));
+  await expect(pending).rejects.toThrow("socket reset");
   await close(server);
 });
 

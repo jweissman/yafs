@@ -5,7 +5,7 @@ import {
 } from "./GitHubCollectionSource";
 import { githubConfig } from "./GitHubManifest";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
-import { GitHubConfig, MountRecord } from "../../mounts/types";
+import { GitHubConfig, MountConfig, MountRecord } from "../../mounts/types";
 
 type Sources = {
   github?: GitHubCollectionSource;
@@ -28,6 +28,14 @@ export class GitHubPlugin extends Plugin {
 
   parseConfig(value: unknown) {
     return githubConfig(value);
+  }
+
+  defaultPath(config: MountConfig): string {
+    return `world/github/${(config as GitHubConfig).repository}`;
+  }
+
+  worldDescription(): string {
+    return "GitHub PR collection: pulls/<number>/{metadata.json,diff.patch}";
   }
 
   unavailableCapability(record: Pick<MountRecord, "id">, capability: string) {

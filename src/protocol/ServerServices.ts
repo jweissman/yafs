@@ -68,13 +68,11 @@ function openJournal(base: Base, options: StartOptions) {
 }
 function mountManager(store: NodeStore, paths: Paths, options: StartOptions) {
   const providers = options.providers || defaultProviders();
-  return new MountManager(
-    store,
-    paths.state,
-    paths.audit,
-    undefined,
+  return new MountManager(store, {
+    statePath: paths.state,
+    auditPath: paths.audit,
     providers,
-  );
+  });
 }
 export function listen(server: Server, options: StartOptions): Promise<void> {
   return new Promise((resolve, reject) => {

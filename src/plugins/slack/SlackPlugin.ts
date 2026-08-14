@@ -10,7 +10,7 @@ import { SlackDirectoryDriver } from "./SlackDirectoryDriver";
 import { SlackCollectionSource, SlackSnapshot } from "./SlackCollectionSource";
 import { SlackChannelClient } from "./SlackApiClient";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
-import { MountRecord, SlackConfig } from "../../mounts/types";
+import { MountConfig, MountRecord, SlackConfig } from "../../mounts/types";
 
 export type SlackClientFor = (config: SlackConfig) => SlackChannelClient;
 
@@ -29,6 +29,18 @@ export class SlackPlugin extends Plugin {
     return slackConfig(value);
   }
 
+  // Collides across two Slack mounts on different workspaces, since
+  // SlackConfig has no workspace/team field — only a bare channel id. An
+  // explicit path: is required once more than one Slack mount is active;
+  // see PRODUCT-SPEC.md's "Namespace: three concepts" section.
+  defaultPath(config: MountConfig): string {
+    return `world/slack/channels/${(config as SlackConfig).channel}`;
+  }
+
+  worldDescription(): string {
+    return "Slack channel history: messages.ndjson";
+  }
+
   actions(): PluginActionDefinition[] {
     return [
       {
@@ -45,13 +57,7 @@ export class SlackPlugin extends Plugin {
   }
 
   createDriver(wiring: Wiring, slackClientFor: SlackClientFor): PluginDriver {
-    return new SlackDirectoryDriver(
-      wiring.mounts,
-      wiring.journal,
-      wiring.enqueue,
-      { registerCtl: wiring.registerCtl, unregisterCtl: wiring.unregisterCtl },
-      slackClientFor,
-    );
+    return new SlackDirectoryDriver(wiring, slackClientFor);
   }
 
   async prepare(record: MountRecord, snapshots: SnapshotMaterializer) {

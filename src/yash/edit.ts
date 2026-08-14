@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
 import { basename, join } from "node:path";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { stdin } from "node:process";
 
 import type { ExecutionResult } from "../types/ExecutionResult";
+import { runEditor } from "./EditorProcess";
 
 export type EditClient = {
   execute(command: string): Promise<ExecutionResult>;
@@ -97,22 +97,4 @@ async function commit(
 ): Promise<string | undefined> {
   const result = await client.writeFile(path, content);
   return result.error?.message;
-}
-
-function runEditor(temporary: string): Promise<number> {
-  const [command, ...args] = editorCommand();
-  return waitForExit(
-    spawn(command, [...args, temporary], { stdio: "inherit" }),
-  );
-}
-
-function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
-  return new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code) => resolve(code ?? 1));
-  });
-}
-
-function editorCommand(): string[] {
-  return (process.env.VISUAL || process.env.EDITOR || "vi").trim().split(/\s+/);
 }

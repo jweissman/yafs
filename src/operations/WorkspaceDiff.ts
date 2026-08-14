@@ -2,6 +2,7 @@ import { CommandContext } from "../commands/CommandContext";
 import { AbsolutePath } from "../core/AbsolutePath";
 import { DiffChange } from "./WorkspaceOperation";
 import { WorkspaceWalker } from "./WorkspaceWalker";
+import { compare } from "./WorkspaceDiffCompare";
 
 export function diff(
   context: CommandContext,
@@ -62,64 +63,11 @@ function files(context: CommandContext, path: AbsolutePath) {
     .map((entry) => relative(path, entry.path));
 }
 
-function compare(
-  context: CommandContext,
-  left: AbsolutePath,
-  right: AbsolutePath,
-  paths: string[],
-): DiffChange[] {
-  return paths.flatMap((path) => change(context, left, right, path));
-}
-
-function change(
-  context: CommandContext,
-  left: AbsolutePath,
-  right: AbsolutePath,
-  path: string,
-): DiffChange[] {
-  const kind = missing(context, left, right, path);
-  return kind ? [{ path, kind }] : changed(context, left, right, path);
-}
-
-function missing(
-  context: CommandContext,
-  left: AbsolutePath,
-  right: AbsolutePath,
-  path: string,
-) {
-  return context.exists(join(left, path))
-    ? missingRight(context, right, path)
-    : ("added" as const);
-}
-
-function missingRight(
-  context: CommandContext,
-  right: AbsolutePath,
-  path: string,
-) {
-  return context.exists(join(right, path)) ? undefined : ("removed" as const);
-}
-
-function changed(
-  context: CommandContext,
-  left: AbsolutePath,
-  right: AbsolutePath,
-  path: string,
-) {
-  return context.read(join(left, path)) === context.read(join(right, path))
-    ? []
-    : [{ path, kind: "changed" as const }];
-}
-
 function bounded(changes: DiffChange[], limit: number) {
   if (changes.length > limit) {
     throw new Error("Result limit exceeded");
   }
   return changes;
-}
-
-function join(path: AbsolutePath, relative: string) {
-  return `${path}/${relative}` as AbsolutePath;
 }
 
 function relative(root: AbsolutePath, path: AbsolutePath) {

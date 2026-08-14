@@ -19,6 +19,17 @@ test("introspection commands describe the session and mounted unions", () => {
   );
 });
 
+test("creating a node at an already-occupied path is rejected", () => {
+  const yafs = new Yafs();
+  yafs.exec("mkdir projects");
+  expect(yafs.execute("mkdir projects").stderr).toBe(
+    "Path already exists: /home/root/projects",
+  );
+  expect(yafs.execute("ln -s projects projects").stderr).toBe(
+    "Path already exists: /home/root/projects",
+  );
+});
+
 test("a shell session can navigate and work with files", () => {
   const yafs = new Yafs();
   expect(yafs.exec("pwd")).toBe("/home/root");
@@ -124,5 +135,12 @@ test("union rejects a layer that is not a directory", () => {
   yafs.exec("mkdir dir");
   expect(() => yafs.exec("union workspace dir note")).toThrow(
     "Union layer is not a directory: /home/root/note",
+  );
+});
+
+test("union rejects being given no layers at all", () => {
+  const yafs = new Yafs();
+  expect(() => yafs.exec("union workspace")).toThrow(
+    "union requires at least one layer",
   );
 });

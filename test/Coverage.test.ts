@@ -77,6 +77,13 @@ function assertSnapshotRestoreAndReplay(store: NodeStore) {
   ]);
 }
 
+test("setProviderOrigin rejects a path with no node", () => {
+  const store = new NodeStore();
+  expect(() =>
+    store.setProviderOrigin("/home/root/missing", providerOrigin()),
+  ).toThrow("No such file: /home/root/missing");
+});
+
 test("provider metadata survives snapshots and protects composed paths", () => {
   const store = new NodeStore();
   store.mkdir("/home/root/provider");

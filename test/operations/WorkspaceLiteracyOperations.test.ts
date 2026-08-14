@@ -24,6 +24,18 @@ test("tree and find walk a virtual directory in deterministic order", async () =
   });
 });
 
+test("find rejects a result set beyond its explicit limit", async () => {
+  const yafs = await workspace();
+  expect(() =>
+    yafs.operations.invoke({
+      name: "find",
+      path: "work",
+      pattern: "*.md",
+      limit: 1,
+    }),
+  ).toThrow("Result limit exceeded");
+});
+
 test("tree/find bounds are explicit", async () => {
   const yafs = await workspace();
   expect(
@@ -132,6 +144,41 @@ test("diff reports deterministic virtual file-set changes", async () => {
   expect(yafs.exec("diff work changed")).toBe(
     "changed a.md\nremoved nested/b.md\nadded new.md",
   );
+});
+
+test("diff compares two individual files directly, not just directories", async () => {
+  const yafs = await workspace();
+  await yafs.executeAsync("echo same > work/a.md");
+  expect(
+    yafs.operations.invoke({
+      name: "diff",
+      left: "work/a.md",
+      right: "work/a.md",
+    }),
+  ).toEqual({ kind: "diff", changes: [] });
+  await yafs.executeAsync("mkdir changed");
+  await yafs.executeAsync("echo different > changed/a.md");
+  expect(
+    yafs.operations.invoke({
+      name: "diff",
+      left: "work/a.md",
+      right: "changed/a.md",
+    }),
+  ).toEqual({ kind: "diff", changes: [{ path: ".", kind: "changed" }] });
+});
+
+test("diff rejects a result set beyond its explicit limit", async () => {
+  const yafs = await workspace();
+  await yafs.executeAsync("mkdir changed");
+  await yafs.executeAsync("echo different > changed/a.md");
+  expect(() =>
+    yafs.operations.invoke({
+      name: "diff",
+      left: "work",
+      right: "changed",
+      limit: 1,
+    }),
+  ).toThrow("Result limit exceeded");
 });
 
 function treeEntries(): TreeEntry[] {

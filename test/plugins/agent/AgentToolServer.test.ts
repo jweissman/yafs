@@ -1,11 +1,22 @@
 import { expect, test } from "bun:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import Yafs from "../../../src";
-import { AgentToolServer } from "../../../src/plugins/agent/AgentToolServer";
 import { activateDesired } from "../../desired_mount_helpers";
-import { manifest, textOf, toolServer } from "./agent_tool_server_helpers";
+import {
+  connectedClient,
+  manifest,
+  textOf,
+  toolServer,
+} from "./agent_tool_server_helpers";
+
+test("starting a second server on an already-bound port fails with a named-port error", () => {
+  const first = toolServer(new Yafs());
+  first.start(0);
+  const port = first.port()!;
+  const second = toolServer(new Yafs());
+  expect(() => second.start(port)).toThrow(String(port));
+  first.close();
+});
 
 test("a real MCP client can list and call tools through a live persona's scoped server", async () => {
   const yafs = new Yafs();
@@ -25,6 +36,7 @@ test("a real MCP client can list and call tools through a live persona's scoped 
     "yafs.inspect",
     "yafs.list",
     "yafs.read",
+    "yafs.start_here",
     "yafs.test",
     "yafs.tree",
   ]);
@@ -49,6 +61,7 @@ test("closing the server tears down any still-open sessions", async () => {
   const client = await connectedClient(server, "agents", "reviewer");
   await client.listTools();
   server.close();
+  await Bun.sleep(10);
 });
 
 test("a real MCP client is rejected reading outside the persona's root", async () => {
@@ -109,14 +122,25 @@ test("the call budget persists across multiple tool calls in the same session", 
   server.close();
 });
 
-async function connectedClient(
-  server: AgentToolServer,
-  mountId: string,
-  personaName: string,
-) {
-  const url = new URL(server.urlFor(mountId, personaName));
-  const transport = new StreamableHTTPClientTransport(url);
-  const client = new Client({ name: "test-client", version: "1.0.0" });
-  await client.connect(transport);
-  return client;
-}
+test("yafs.start_here reports only the scoped session's own roots", async () => {
+  const yafs = new Yafs();
+  await yafs.exec("mkdir work");
+  await activateDesired(yafs, manifest(["/home/root/work"]), "agents");
+  const server = toolServer(yafs);
+  server.start(0);
+
+  const client = await connectedClient(server, "agents", "reviewer");
+  const result = await client.callTool({
+    name: "yafs.start_here",
+    arguments: {},
+  });
+  expect(result.isError).toBeFalsy();
+  const value = JSON.parse(textOf(result) ?? "{}");
+  expect(value.scoped).toBe(true);
+  expect(value.roots).toEqual(["/home/root/work"]);
+  expect(Array.isArray(value.mounts)).toBe(true);
+  expect(Array.isArray(value.recommendedFirst)).toBe(true);
+
+  await client.close();
+  server.close();
+});

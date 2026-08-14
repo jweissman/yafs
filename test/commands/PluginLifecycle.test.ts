@@ -18,6 +18,13 @@ test("plugin no longer accepts validate/activate/refresh, and deactivate still r
   );
 });
 
+test("plugins describe rejects an unknown provider name", () => {
+  const yafs = new Yafs();
+  expect(yafs.execute("plugins describe bogus").stderr).toBe(
+    "Unknown provider: bogus",
+  );
+});
+
 test("mount is no longer a recognized command", () => {
   const yafs = new Yafs();
   const result = yafs.execute("mount activate");

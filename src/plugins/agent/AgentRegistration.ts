@@ -2,11 +2,20 @@ import { AbsolutePath } from "../../core/AbsolutePath";
 import { CtlHandler } from "../../protocol/CtlDispatch";
 import { MountManager } from "../../mounts/MountManager";
 import { AgentConfig, PreparedMountRecord } from "../../mounts/types";
+import { QuarantineInfo } from "../../mounts/MountAudit";
 import { agentConfig } from "./AgentManifest";
 
 type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
 type UnregisterCtl = (path: AbsolutePath) => void;
 type Invoke = (mountId: string, personaName: string, payload: string) => void;
+
+function quarantineInfo(id: string): QuarantineInfo {
+  return {
+    actor: "system",
+    action: "quarantine",
+    detail: `Invalid persisted agent configuration: ${id}`,
+  };
+}
 
 export function validAgentConfig(config: unknown): AgentConfig | undefined {
   try {
@@ -70,8 +79,7 @@ export class AgentRegistration {
       return;
     }
     this.quarantined.add(record.id);
-    const detail = `Invalid persisted agent configuration: ${record.id}`;
-    this.mounts.audit(record, "system", "quarantine", detail);
+    this.mounts.audit(record, quarantineInfo(record.id));
   }
 
   private registerPersona(

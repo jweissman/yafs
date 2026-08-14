@@ -11,6 +11,7 @@ export const BOUNDED_TOOL_NAMES = [
   "yafs.grep",
   "yafs.diff",
   "yafs.test",
+  "yafs.start_here",
 ];
 
 export function boundedToolSet(): Set<string> {

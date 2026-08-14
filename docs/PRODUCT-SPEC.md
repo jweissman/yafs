@@ -2,11 +2,13 @@
 
 ## Purpose
 
-Yafs is a local-first workspace appliance. It gives an operator one durable,
-inspectable filesystem tree whose subtrees may be backed by explicit providers.
-The value is not that a provider makes an API look like files; it is that local
-notes, remote snapshots, provenance, and later model output can be composed,
-inspected, and—when it matters—captured as durable artifacts in one place.
+Yafs is a local-first, inspectable world model for humans and agents: live
+provider views for discovery, private workspaces for local work, and
+durable records for consequential effects. The value is not that a
+provider makes an API look like files; it is that local notes, remote
+snapshots, provenance, and agent output can be composed and inspected in
+one coherent, legible place — with durable capture available for the
+moments that need it, not as the default way of engaging with any of it.
 
 This document describes the operator-facing provider promise and the first
 demonstrable product experience. [ADR.md](ADR.md) owns architectural decisions;
@@ -42,7 +44,7 @@ inspectable:
 | --- | --- |
 | Browse | `ls`, `cat`, `stat`, and `inspect` work beneath the mount path. |
 | Locate source | `inspect` identifies local versus provider content, mount ID, provider, revision, and activation time. |
-| Understand state | `mounts` shows mounted subtrees and state; `mount validate`, `activate`, `refresh`, and `unmount` remain explicit. |
+| Understand state | `mounts` shows mounted subtrees and state; `plugins status`/`plan`/`apply`/`refresh ID` and `plugin deactivate ID` remain the explicit lifecycle surface (see [ADR.md](ADR.md#capabilities-distribution-and-adapters) — the earlier in-VFS `mount validate/activate/refresh/unmount` commands were removed as a capability-granting security gap). |
 | Know authority | Writes are accepted only when the provider mode and mount scope allow them. A read-only mount rejects them. |
 | Recover | Mount declarations and lifecycle operations survive restart; audit records explain activation and unmount transitions. |
 
@@ -76,10 +78,10 @@ distribution, and adapters" removal policy).
 
 ```yaml
 version: 1
-mounts:
+plugins:
   - id: github-acme-widget
     path: source
-    provider: github
+    plugin: github
     config:
       repository: acme/widget
       query: "is:pr is:open"
@@ -88,6 +90,9 @@ mounts:
       - network.github-api
       - secret.github-token
 ```
+
+(`mounts:`/`provider:` still parses — the legacy key spelling — but `plugins:`/`plugin:` is the
+canonical form new configuration should use; see [ADR.md](ADR.md#capabilities-distribution-and-adapters).)
 
 This mounts a GitHub collection, not PR 482. Its provider projects matching PRs
 under `source/pulls/<number>/`; a PR number is a virtual child path, not mount
@@ -143,28 +148,34 @@ refresh, start, stop, or deletion.
 | Namespace kind | Example | Meaning |
 | --- | --- | --- |
 | Collection projection | `source/pulls/482/diff.patch` | The provider enumerates remote objects as files/directories. Its query/filter controls which children exist. |
-| Reconciled resource | `machines/acme/image/` | Creating the resource path is a durable desired-state request; the controller creates an instance only after authorization and records actual status. |
-| Reconciled agent | `agents/reviewer/prompt.md` | Writing the prompt declares a named running agent resource. The controller starts/restarts it only after the write is durable and its grants are authorized. |
+| Reconciled resource | `machines/acme/image/` | Illustrative, not built: creating the resource path would be a durable desired-state request; a controller would create an instance only after authorization and record actual status. |
+| Reconciled agent | `agents/reviewer/{prompt.md,ctl}` | Built, but not by VFS write: the mount's host-side plugin config declares each persona, and `prompt.md` is published **read-only** from it. Writing `ctl` is what invokes the persona; the controller runs it only after capability authorization and records status/response durably under `runs/<run-id>/`. |
 
 This is the unifying shape for GitHub, machines, and agents: a mount is a
-controller boundary; its children are resources. Each mutable resource needs a
-visible distinction between desired configuration, observed status, and durable
+controller boundary; its children are resources — though "desired state" for
+an agent persona lives in host configuration, not a VFS write, unlike the
+hypothetical machine controller above. Each mutable resource needs a visible
+distinction between desired configuration, observed status, and durable
 history. `mkdir` can be a resource-creation operation, but only where the
 provider documents it as such; it is never a hidden consequence of browsing.
 
 ```text
-/machines/acme/image/
+/machines/acme/image/            # illustrative future shape, not built
   volume/                 # VFS files supplied to the instance
   desired.json             # requested image/configuration
   status.json              # observed lifecycle, revision, ports, errors
   logs/
 
-/agents/reviewer/
-  prompt.md                # durable desired prompt
-  context/                 # explicitly readable VFS material
-  status.json              # run/reconciliation state
-  transcript.ndjson
-  output/
+/agents/reviewer/                # built — current shape
+  prompt.md                # published read-only, from the mount's config
+  ctl                       # write here to invoke the persona
+  chats/<chatId>/
+    messages.ndjson          # append-only turn history for that chat
+  runs/<run-id>/
+    request.md                # the message that started the run
+    context.md                 # optional attached context (--context)
+    response.md                 # the model's reply
+    status.json                  # queued/running/complete/failed
 ```
 
 An eventual public chat endpoint is an adapter bound to an agent resource, not
@@ -216,7 +227,13 @@ it is out of scope for the first review provider.
 
 ## First demo: collaborative PR review collection
 
-The first useful proof should be small enough to explain in one screen:
+**Delivered, M5-era proof — not the current active experiment.** This demo
+shipped and is still true today, but it is not what near-term work is being
+judged against; that's [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md#next-proof-review-radar)'s
+"review radar," a materially different shape (one scoped agent exploring
+live, proposing one candidate, human-approved) that grew out of what this
+demo taught. Read this section as "what M5 proved," not "what to expect
+next." The first useful proof should be small enough to explain in one screen:
 
 ```text
 /reviews/acme/widget/
@@ -265,16 +282,187 @@ MCP and FUSE are adapters, not providers:
 - FUSE is a possible local read-only projection after provider read semantics
   stabilize. It does not promise general POSIX behavior or bypass mount policy.
 
+## Long-range direction: a legible, federated world
+
+Vision, not a committed milestone. Recorded in full here — not compressed,
+not deleted — because the destination matters even while implementation
+stays ruthlessly sequenced behind it; see
+[FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)'s "Next proof" and "Next
+experiment" sections for the actual near-term work this is downstream of.
+
+**The question this direction is really asking:** can agents become more
+useful when they inhabit a coherent, self-describing world, can preserve
+successful procedures, and can share them under explicit trust and
+capability rules? That's a richer question than "can a Slack bot review a
+PR" — and the whole point of sequencing hard behind a concrete near-term
+proof is to keep this question live without letting it stall real
+progress. Working tagline for where this points: **Yafs gives humans and
+agents a legible world of live external resources, private workspaces,
+reusable procedures, and inspectable effects** — broader and more
+distinctive than "virtual filesystem with plugins," while preserving the
+same kernel discipline (capability grants, durable operations, provenance)
+everything else in this spec already assumes.
+
+Motivated by a real live failure, not just aesthetics: a tool-enabled
+persona with genuine read/list access to a PR queue replied "I haven't
+pulled the list of open PRs yet... give me the PR URLs" instead of just
+looking. A tool-enabled model got no world model and no obvious first
+tool call — "I don't have repo context" was the predictable result, not a
+fluke of one weak model.
+
+### Namespace: three concepts, not one blended `/home`
+
+```text
+/world/                  # provider-backed, current external reality — read-only
+/home/<principal>/        # private writable work area — proposals, notes, runs
+/commons/                 # shared, versioned, explicitly trusted procedures
+```
+
+```text
+/world/github/acme/widget/pulls/482/{metadata.json,diff.patch}
+/world/slack/channels/reviews/messages.ndjson
+/home/reviewer/{notes/,proposals/,runs/}
+/commons/github/pr/identify-smallest-fixable/{fn.yash,README.md,manifest.json,tests/}
+```
+
+`/world` is read-only by default and self-describing — its job is
+discovery and context, not durable ownership. `/home` is the only place
+proposals/notes/scripts get written; keeping provider mounts and private
+working files apart (rather than an agent home merely symlinked into a
+jailed world) is a real clarity win on its own.
+
+**Implemented:** plugins get a *default* path derived from provider
+identity — `github` mounts default to `/world/github/<owner>/<repo>` (from
+the manifest's already-validated `owner/repo` `repository` field),
+`slack` mounts default to `/world/slack/channels/<channel>` — rather than
+requiring the operator to choose and communicate one per deployment;
+`path:` stays an explicit override, not removed, so this composes with the
+existing manifest contract rather than replacing it (see `Plugin.
+defaultPath`, `GitHubPlugin.ts`, `SlackPlugin.ts`, and
+`ManifestMountPath.ts`'s `resolvedPath`). `fixture` and `agent` mounts have
+no natural identity field to default from, so `path:` stays required for
+those, unchanged. **No sweeping migration**: this is a documented
+convention for new configurations only — no rename of any existing
+mount/test path, and no compatibility symlink/projection layer exists or
+is planned unless a real need for one shows up.
+
+**This is a path-default convention, not a declared contract.** Nothing
+stops an operator from setting `path:` to place a `github` mount outside
+`/world` entirely, and each provider's layout *beneath* its own mount root
+(`pulls/482/{metadata.json,diff.patch}` for GitHub, `messages.ndjson` for
+Slack) is implicit in that provider's own code, not a schema any tool
+validates against. That is an acceptable shape for a convention; it would
+not be enough if `/world` needed to be a machine-checkable guarantee
+(e.g. "every mount under `/world` exposes a `tree`-walkable resource of a
+declared shape") — no such contract is designed or built.
+
+**Known accepted gap: Slack default-path collisions across workspaces.**
+`SlackConfig` has no team/workspace field, so two Slack mounts for the
+same channel ID in two different workspaces would default to the same
+`/world/slack/channels/<channel>` path and collide. This is not solved by
+a schema change (a deliberate decision, not an oversight) — `path:`
+is the required override the moment a deployment has more than one Slack
+workspace. Single-workspace deployments, the only case in production
+today, are unaffected.
+
+**Known accepted gap: GitHub default paths omit host identity.**
+`GitHubConfig` has no `host` field — every GitHub mount is implicitly
+github.com — so `/world/github/<owner>/<repo>` cannot collide today. This
+is recorded now so it isn't forgotten: if GitHub Enterprise host
+configuration is ever added, two hosts sharing an `owner/repo` would
+collide under the current default unless the path scheme adds a host
+segment at that time.
+
+**Still an open question, not decided either way:** whether a
+resource-type segment belongs in the default path at all (`/world/github/
+<owner>/<repo>/pulls/482` as shown above, versus a more regularized
+`/world/github/repos/<owner>/<repo>/prs/482` that names the collection
+kind explicitly and might generalize better across providers whose
+resources aren't all "pull requests"). Defaulting to the mount root
+(`/world/github/<owner>/<repo>`) ships now without resolving this; a
+resource-type segment is additive path structure *beneath* that root, not
+a change to what's already shipped.
+
+### Capture stays secondary
+
+The default for an exploratory task (find a low-risk PR, triage a queue)
+is live exploration — tree/find/read/inspect against the live mount, not
+a capture-first workflow. `capture` remains useful once a consequential
+decision has been made: preserving the exact source behind a
+recommendation, building an audit bundle, or continuing work after a PR
+falls out of the query window. Related and still open from earlier
+reviewer feedback this project owes a real answer to: a **run input
+record** — record which mount revisions/roots an agent actually observed
+during a run, and flag if they changed mid-run. That's a better
+consistency primitive than forcing every exploratory task through
+capture, and hasn't been designed yet.
+
+### `/commons`: versioned, trusted procedures — not a live union of arbitrary public code
+
+A federated registry (tentatively "yashub") of reviewed, published local
+procedures — functions crystallized from successful agentic work, not a
+package marketplace of arbitrary third-party code (that stays explicitly
+deferred below). A function needs more than `fn.yash` + a README: a
+`manifest.json` declaring name/version, input schema, declared effects,
+required provider capabilities, allowed roots, source digest, and test
+command/results — treating a commons function like a capability-declaring
+unit, consistent with how mounts/plugins already work everywhere else in
+this system, not a bare script drop. Publication is an **explicit,
+human-reviewed external action** — an agent may *propose* extracting a
+successful procedure into a function, but a human approves publishing it,
+the same approval discipline M6.4/M6.5 already apply to a proposed Slack
+reply. Object-member call syntax (`commons.github.pr.identify_smallest_
+fixable(...)`) is deliberately deferred — it pulls parser and type-system
+complexity forward for a nicety; start with one explicit script/function
+invocation command with typed inputs, add syntax sugar only if repeated
+real use earns it.
+
+The falsifiable hypothesis, stated precisely: *do reviewed, tested
+procedures distilled from successful runs make later agents noticeably
+more effective?* That's the thing worth a cheap experiment designed to
+falsify, not the registry build itself. Design of the bundle/manifest
+contract can proceed alongside L2 scripting (see
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md#paving-stones)); actually
+publishing or invoking a function is gated strictly after L2 lands for
+real, since there's no script to publish or invoke before then. Federation
+(a `/commons/public` sourced from an actual external registry) is a
+second, separate concern layered on top — explicitly **beyond
+identity/auth work**, recorded as a post-M8 hypothesis with its own
+preconditions in [ADR.md](ADR.md#federation), not solved by or blocking
+anything else here. A `/commons/public` entry is executable code from an
+untrusted third party — a real supply-chain surface, equivalent to
+installing an unaudited package — and needs its own trust/sandboxing
+design regardless of when federation itself lands.
+
+### A `lab` is not a plugin, at least not yet
+
+Start as a bounded writable area under an agent's `/home/<principal>/runs`
+— ordinary local workspace semantics, no new subsystem. Only promote it
+to a real plugin if a concrete experiment actually needs lifecycle,
+external resources, or execution that local-write semantics can't
+express. This is the most speculative item in this whole direction —
+unlike `/world` (motivated by a bug just hit) and `/commons` (a scoped,
+falsifiable hypothesis), there's no concrete scenario driving anything
+beyond "a writable subdirectory" yet.
+
 ## Explicitly deferred
 
 - GitHub writes, provider writes, and distributed transactions.
-- Arbitrary third-party provider code and a package marketplace.
+- Arbitrary third-party provider code and a package marketplace — distinct
+  from the reviewed, human-published `/commons` procedures above.
 - Autonomous multi-agent orchestration and host-process execution.
-- Recursive-MCP tool-calling (an agent persona calling back into Yafs
-  operations mid-run) — blocked on a per-actor path-scoping primitive that
-  does not exist yet; see the ADR's "Path-scoping primitive" section.
+- **General/unbounded** recursive-MCP tool-calling: a persona reading or
+  writing outside its own mount, or chaining across multiple personas/mounts
+  in one run — blocked on a per-actor path-scoping primitive that does not
+  exist yet; see the ADR's "Path-scoping primitive" section. The **bounded**
+  case — a tool-enabled persona driving its own read-only tool loop scoped
+  to its own `tools.roots` — is implemented (M6.5) and proven to chain
+  through Slack end-to-end; it is not what's deferred here.
 - Public MCP, SSH, FUSE write support, and multi-user authorization.
 - Streaming shell pipelines and a general binary CLI.
+- Federation/`yashub` — see "Long-range direction" above and
+  [ADR.md](ADR.md#federation): explicitly gated on identity/trust work
+  beyond M8, not a near-term commitment.
 
 ## M5 checklist — delivered
 
@@ -301,9 +489,16 @@ provider, an embedded kernel API, or a shell-execution endpoint.
 
 ## Documentation ownership
 
-- [ADR.md](ADR.md) records durable architectural decisions and explicit
-  non-goals.
-- This product spec defines the operator promise and success criteria for the
-  review-workspace proof.
-- [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md) records implementation order and
-  current status. It should link to decisions rather than repeat them.
+- [ADR.md](ADR.md) records durable architectural decisions, explicit
+  non-goals, and the trust/security preconditions for later hypotheses
+  (e.g. federation).
+- This product spec defines the operator promise, success criteria for the
+  review-workspace proof, and the long-range direction — where the product
+  is headed, not when. Keep vision material here, in full, not compressed
+  into the roadmap.
+- [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md) stays short: current state, the
+  one active next proof, near-term experiments with acceptance criteria,
+  and the milestone table. It should link to decisions and vision rather
+  than repeat them.
+- [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md) owns script/function/operation
+  language decisions only.

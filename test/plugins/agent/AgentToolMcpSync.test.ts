@@ -5,10 +5,12 @@ import { join } from "node:path";
 
 import Yafs from "../../../src";
 import { AgentToolMcpSync } from "../../../src/plugins/agent/AgentToolMcpSync";
+import { yafsKey } from "../../../src/plugins/agent/LmStudioMcpJson";
 import { activateDesired } from "../../desired_mount_helpers";
 
 const URL_FOR = (mountId: string, personaName: string) =>
   `http://127.0.0.1:7338/mcp/${mountId}/${personaName}`;
+const REVIEWER_KEY = yafsKey("agents", "reviewer");
 
 test("close() is a no-op (satisfies the PluginDriver interface)", async () => {
   const yafs = await toolPersonaYafs();
@@ -31,7 +33,7 @@ test("sync() writes an entry for each tool-enabled persona", async () => {
   await flush();
   expect(await readJson(path)).toEqual({
     mcpServers: {
-      "yafs-agents-reviewer": {
+      [REVIEWER_KEY]: {
         url: "http://127.0.0.1:7338/mcp/agents/reviewer",
       },
     },
@@ -51,12 +53,13 @@ test("sync() skips a persona with no tools: configured and writes nothing", asyn
 
 test("sync() preserves entries it doesn't own and removes stale yafs entries", async () => {
   const path = await mcpJsonPath();
+  const staleKey = yafsKey("agents", "old");
   await writeFile(
     path,
     JSON.stringify({
       mcpServers: {
         "mcp/playwright": { command: "npx" },
-        "yafs-agents-old": { url: "http://stale" },
+        [staleKey]: { url: "http://stale" },
       },
     }),
   );
@@ -66,7 +69,7 @@ test("sync() preserves entries it doesn't own and removes stale yafs entries", a
   expect(await readJson(path)).toEqual({
     mcpServers: {
       "mcp/playwright": { command: "npx" },
-      "yafs-agents-reviewer": {
+      [REVIEWER_KEY]: {
         url: "http://127.0.0.1:7338/mcp/agents/reviewer",
       },
     },
@@ -94,9 +97,7 @@ async function toolPersonaYafs(): Promise<Yafs> {
 }
 
 function manifest(withTools: boolean) {
-  const tools = withTools
-    ? ', tools: {roots: ["/home/root/agents"]}'
-    : "";
+  const tools = withTools ? ', tools: {roots: ["/home/root/agents"]}' : "";
   return (
     "{version: 1, mounts: [{id: agents, path: agents, provider: agent, " +
     'config: {personas: {reviewer: {prompt: "hi"' +

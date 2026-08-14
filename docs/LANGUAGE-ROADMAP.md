@@ -143,6 +143,21 @@ value-passing problem turns out to be nearly solved already by the grammar's
 existing `$variable` support, which is the single most load-bearing finding
 of that section.
 
+**Downstream vision, not scoped here:** a federated `/commons` registry of
+reviewed, versioned local procedures (a `manifest.json` declaring input
+schema, effects, required capabilities, allowed roots, and test
+results — not a bare `fn.yash` drop) is captured in full in
+[PRODUCT-SPEC.md](PRODUCT-SPEC.md#long-range-direction-a-legible-federated-world)'s
+"Long-range direction" section, with the federation-specific trust
+preconditions in [ADR.md](ADR.md#federation). It is explicitly downstream
+of L2 landing for real — there's nothing to
+publish or invoke until a script exists — publication is an explicit,
+human-reviewed action rather than agent auto-publish, object-member call
+syntax (`commons.foo.bar(...)`) is deliberately deferred in favor of one
+plain invocation command, and the whole thing is framed as a falsifiable
+hypothesis (do reviewed, tested procedures distilled from successful runs
+make later agents noticeably more effective?), not an assumed win.
+
 ## L0 delivery strategy
 
 L0 is a boundary migration, not a rewrite of every builtin or a new script

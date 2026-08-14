@@ -29,7 +29,7 @@ function publish(
 ) {
   const updates: [string, string][] = [[delivery.path, delivery.content]];
   const extra = { revision: revision(record, delivery.count) };
-  return publishEntries({ mounts, journal }, record, updates, undefined, extra);
+  return publishEntries({ mounts, journal }, { record, updates, extra });
 }
 
 function revision(record: PreparedMountRecord, count: number) {

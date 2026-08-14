@@ -2,12 +2,17 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { FSNode, ProviderOrigin } from "./FSNode";
 import { NodeStoreResolver } from "./NodeStoreResolver";
 import { NodeStoreState } from "./NodeStoreState";
+import { NodeStoreOrigins } from "./NodeStoreOrigins";
 
 export class NodeStoreInspection {
+  private readonly originsFor: NodeStoreOrigins;
+
   constructor(
     private readonly state: NodeStoreState,
     private readonly resolver: NodeStoreResolver,
-  ) {}
+  ) {
+    this.originsFor = new NodeStoreOrigins(state, resolver);
+  }
   read(path: AbsolutePath): string {
     const node = this.resolver.get(path);
     if (!node) {
@@ -52,49 +57,15 @@ export class NodeStoreInspection {
     return (node.children || []).map((child) => child.name).sort();
   }
   origins(path: AbsolutePath): string[] {
-    if (path === "/") {
-      return ["/"];
-    }
-    return this.findOrigins(this.state.origin, path.slice(1).split("/"), path);
+    return this.originsFor.origins(path);
   }
   provenance(path: AbsolutePath): { path: string; origin?: ProviderOrigin }[] {
-    return this.origins(path).map((origin) =>
-      this.provenanceItem(origin as AbsolutePath),
-    );
+    return this.originsFor.provenance(path);
   }
   mounts(): { path: string; layers: string[] }[] {
     const mounts: { path: string; layers: string[] }[] = [];
     this.collect(this.state.origin, mounts);
     return mounts;
-  }
-  private findOrigins(
-    node: FSNode,
-    parts: string[],
-    path: AbsolutePath,
-  ): string[] {
-    return node.unionLayers
-      ? this.unionOrigins(node, parts)
-      : this.childOrigins(node, parts, path);
-  }
-
-  private unionOrigins(node: FSNode, parts: string[]) {
-    return this.resolver
-      .layers(node)
-      .map((layer) => this.resolver.resolveFrom(layer, parts))
-      .filter(this.node)
-      .map((item) => this.resolver.pathOf(item));
-  }
-  private childOrigins(node: FSNode, parts: string[], path: AbsolutePath) {
-    const child = node.children?.find((item) => item.name === parts[0]);
-    if (!child) {
-      throw new Error(`No such file: ${path}`);
-    }
-    return parts.length === 1
-      ? [this.resolver.pathOf(child)]
-      : this.nextOrigins(child, parts, path);
-  }
-  private nextOrigins(node: FSNode, parts: string[], path: AbsolutePath) {
-    return this.findOrigins(node, parts.slice(1), path);
   }
   private collect(node: FSNode, mounts: { path: string; layers: string[] }[]) {
     if (node.unionLayers) {
@@ -104,11 +75,5 @@ export class NodeStoreInspection {
   }
   private mount(node: FSNode) {
     return { path: this.resolver.pathOf(node), layers: node.unionLayers || [] };
-  }
-  private node(value: FSNode | undefined): value is FSNode {
-    return !!value;
-  }
-  private provenanceItem(path: AbsolutePath) {
-    return { path, origin: this.resolver.get(path)?.providerOrigin };
   }
 }

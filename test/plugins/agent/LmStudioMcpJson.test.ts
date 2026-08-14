@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,8 +16,21 @@ test("defaultMcpJsonPath points at ~/.lmstudio/mcp.json", () => {
 });
 
 test("yafsKey combines mountId and personaName so same-named personas on different mounts don't collide", () => {
-  expect(yafsKey("agents", "reviewer")).toBe("yafs-agents-reviewer");
-  expect(yafsKey("other", "reviewer")).toBe("yafs-other-reviewer");
+  expect(yafsKey("agents", "reviewer")).toStartWith("yafs-agents-reviewer-");
+  expect(yafsKey("other", "reviewer")).toStartWith("yafs-other-reviewer-");
+  expect(yafsKey("agents", "reviewer")).not.toBe(yafsKey("other", "reviewer"));
+});
+
+test("yafsKey is deterministic for the same pair", () => {
+  expect(yafsKey("agents", "reviewer")).toBe(yafsKey("agents", "reviewer"));
+});
+
+// Regression test: mount id has no character restriction in manifest
+// validation (just `typeof === "string"`), and persona names allow "-",
+// so a naive `${mountId}-${personaName}` join is genuinely ambiguous —
+// this exact pair was found to collide before the hash suffix was added.
+test("yafsKey does not collide when mountId/personaName reconstruct the same joined string", () => {
+  expect(yafsKey("a", "b-c")).not.toBe(yafsKey("a-b", "c"));
 });
 
 test("readMcpJson treats a missing file as an empty document", async () => {
@@ -28,6 +41,16 @@ test("readMcpJson treats a missing file as an empty document", async () => {
 test("readMcpJson returns undefined for an existing but unparsable file, rather than guessing", async () => {
   const path = join(await tempDir(), "mcp.json");
   await writeFile(path, "{ not valid json");
+  expect(await readMcpJson(path)).toBeUndefined();
+});
+
+test("readMcpJson does not treat a real read failure as an empty document", async () => {
+  // A directory, not a missing path: readFile fails with EISDIR, not
+  // ENOENT — this must not be collapsed into "safe to treat as empty" the
+  // way a bare `.catch(() => undefined)` would (the exact bug class behind
+  // this session's near-incident overwriting a real mcp.json).
+  const path = join(await tempDir(), "mcp.json");
+  await mkdir(path);
   expect(await readMcpJson(path)).toBeUndefined();
 });
 
@@ -48,7 +71,9 @@ test("mergedDocument keeps non-yafs entries untouched and replaces yafs entries 
     },
   };
   const desired = {
-    "yafs-agents-reviewer": { url: "http://127.0.0.1:7338/mcp/agents/reviewer" },
+    "yafs-agents-reviewer": {
+      url: "http://127.0.0.1:7338/mcp/agents/reviewer",
+    },
   };
   expect(mergedDocument(existing, desired)).toEqual({
     mcpServers: {
@@ -78,6 +103,23 @@ test("writeMcpJson creates missing parent directories and writes pretty JSON", a
     mcpServers: { "yafs-agents-reviewer": { url: "http://x" } },
   });
   expect(raw).toContain("\n");
+});
+
+test("writeMcpJson writes atomically, leaving no temp file behind", async () => {
+  const directory = await tempDir();
+  const path = join(directory, "mcp.json");
+  await writeMcpJson(path, { mcpServers: {} });
+  const entries = await readdir(directory);
+  expect(entries).toEqual(["mcp.json"]);
+});
+
+test("writeMcpJson replaces existing content wholesale, never a partial write", async () => {
+  const path = join(await tempDir(), "mcp.json");
+  await writeFile(path, JSON.stringify({ mcpServers: { old: { url: "x" } } }));
+  await writeMcpJson(path, { mcpServers: { new: { url: "y" } } });
+  expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+    mcpServers: { new: { url: "y" } },
+  });
 });
 
 async function tempDir(): Promise<string> {

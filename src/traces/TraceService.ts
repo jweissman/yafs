@@ -4,10 +4,10 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { Provenance } from "../mounts/types";
 import { BlobStore } from "../protocol/BlobStore";
 import { Trace, TraceFilesystem, TraceReifier } from "./TraceTypes";
-import { writeEntry } from "./TraceMaterializer";
-import { assertEntry } from "./TraceEntryValidation";
+import { parseTrace } from "./TraceEntryValidation";
 import { collectEntries } from "./TraceCapture";
 import { assertEntryLimit } from "./TraceCapture";
+import { materialize } from "./TraceMaterialize";
 
 export type {
   TraceEntry,
@@ -15,6 +15,20 @@ export type {
   TraceFilesystem,
   TraceReifier,
 } from "./TraceTypes";
+
+export type CaptureOptions = {
+  origin?: Provenance;
+  capturedAt?: string;
+  limit?: number;
+};
+
+function resolvedOptions(options: CaptureOptions) {
+  return {
+    origin: options.origin,
+    capturedAt: options.capturedAt ?? new Date().toISOString(),
+    limit: options.limit ?? 10000,
+  };
+}
 
 export class TraceService {
   constructor(
@@ -25,10 +39,9 @@ export class TraceService {
   async capture(
     files: TraceFilesystem,
     source: AbsolutePath,
-    origin?: Provenance,
-    capturedAt = new Date().toISOString(),
-    limit = 10000,
+    options: CaptureOptions = {},
   ): Promise<Trace> {
+    const { origin, capturedAt, limit } = resolvedOptions(options);
     this.assertCapturable(files, source, limit);
     return this.captureEntries(files, source, origin, capturedAt);
   }
@@ -62,31 +75,9 @@ export class TraceService {
     return { kind: "yafs-trace", version: 1, ...fields };
   }
 
-  async materialize(
-    files: TraceFilesystem,
-    trace: Trace,
-    destination: AbsolutePath,
-  ) {
-    this.assertAvailable(files, destination);
-    files.mkdir(destination);
-    await this.writeEntries(files, trace, destination);
-  }
-
-  private assertAvailable(files: TraceFilesystem, destination: AbsolutePath) {
-    if (files.exists(destination)) {
-      throw new Error(`Trace destination already exists: ${destination}`);
-    }
-  }
-
-  private async writeEntries(
-    files: TraceFilesystem,
-    trace: Trace,
-    destination: AbsolutePath,
-  ) {
-    const target = { files, blobs: this.blobs, reifier: this.reifier };
-    for (const entry of trace.entries) {
-      await writeEntry(target, trace, destination, entry);
-    }
+  materialize(files: TraceFilesystem, trace: Trace, destination: AbsolutePath) {
+    const deps = { blobs: this.blobs, reifier: this.reifier };
+    return materialize(deps, files, trace, destination);
   }
 
   retain(trace: Trace, owner: string) {
@@ -100,20 +91,7 @@ export class TraceService {
   }
 
   parse(content: string): Trace {
-    const trace = JSON.parse(content) as Trace;
-    this.assertManifest(trace);
-    trace.entries.forEach((entry) => assertEntry(entry));
-    return trace;
-  }
-  private assertManifest(trace: Trace) {
-    if (
-      trace.kind !== "yafs-trace" ||
-      trace.version !== 1 ||
-      !Array.isArray(trace.entries) ||
-      !trace.capturedAt
-    ) {
-      throw new Error("Invalid trace manifest");
-    }
+    return parseTrace(content);
   }
 }
 

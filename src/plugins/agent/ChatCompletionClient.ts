@@ -4,11 +4,8 @@ import {
   ChatCompletionSettings,
 } from "./ChatCompletionSettings";
 import { readStream } from "./ChatCompletionStream";
+import { fetchCompletion, Fetch } from "./ChatCompletionFetch";
 
-type Fetch = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response>;
 export type ChatMessage = { role: string; content: string };
 
 export type ModelClient = {
@@ -53,50 +50,10 @@ export class ChatCompletionClient implements ModelClient {
     return full;
   }
 
-  private async fetch(body: unknown) {
+  private fetch(body: unknown) {
     const url = `${this.settings.apiUrl}/chat/completions`;
-    const response = await this.post(url, body).catch((error) =>
-      this.rethrow(error, url),
-    );
-    if (!response.ok) {
-      throw new Error(await this.failure(url, response));
-    }
-    return response;
+    return fetchCompletion(this.request, url, body, this.timeoutMs);
   }
-
-  private post(url: string, body: unknown) {
-    const init = {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    };
-    return this.request(url, init);
-  }
-
-  private rethrow(error: unknown, url: string): never {
-    throw timedOut(error)
-      ? new Error(
-          `Chat completion request timed out after ${this.timeoutMs}ms: ${url}`,
-        )
-      : (error as Error);
-  }
-
-  private async failure(url: string, response: Response) {
-    const body = await response.text().catch(() => "");
-    return `Chat completion request failed: ${response.status} ${response.statusText}\nurl: ${url}\nbody: ${body}`;
-  }
-
-  private headers() {
-    return { "content-type": "application/json" };
-  }
-}
-
-function timedOut(error: unknown) {
-  return (
-    error instanceof Error &&
-    (error.name === "TimeoutError" || error.name === "AbortError")
-  );
 }
 
 export function chatCompletionClientFor(

@@ -4,18 +4,15 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { YafsOptions } from "../../index";
 import { LocalYashClient } from "../../protocol/local";
 import { MountManager } from "../../mounts/MountManager";
-import { PersonaToolsConfig } from "../../mounts/types";
 import { ScopedMcpClient, ScopedMcpConfig } from "../../mcp/ScopedMcpClient";
-import { agentTarget } from "./AgentTarget";
 import { badRequest, mcpServer, notFound } from "./AgentToolProtocol";
 import { logSession } from "./AgentToolServerLog";
 import { isAddressInUse } from "../../DaemonAddressError";
 import { toolsPortInUseError } from "./AgentToolServerPort";
-import { budgetsFor } from "./AgentToolServerBudgets";
+import { Identity, identityFrom, scopedConfig } from "./AgentToolServerScope";
 
 export { toolsPort, DEFAULT_TOOLS_PORT } from "./AgentToolServerPort";
 
-type Identity = { mountId: string; personaName: string };
 type Session = { transport: HttpTransport };
 
 export class AgentToolServer {
@@ -75,7 +72,7 @@ export class AgentToolServer {
     if (!isInitializeRequest(body)) {
       return badRequest();
     }
-    const config = this.scopedConfig(identity);
+    const config = scopedConfig(this.mounts, identity);
     logSession(identity, Boolean(config));
     return config ? this.initSession(config, body, req) : notFound();
   }
@@ -106,23 +103,4 @@ export class AgentToolServer {
       this.sessions.delete(transport.sessionId);
     }
   }
-
-  private scopedConfig(identity: Identity): ScopedMcpConfig | undefined {
-    const persona = this.personaTools(identity);
-    return persona && budgetsFor(persona);
-  }
-
-  private personaTools(identity: Identity): PersonaToolsConfig | undefined {
-    try {
-      const { mountId, personaName } = identity;
-      return agentTarget(this.mounts, mountId, personaName).persona.tools;
-    } catch {
-      return undefined;
-    }
-  }
-}
-
-function identityFrom(pathname: string): Identity | undefined {
-  const match = /^\/mcp\/([^/]+)\/([^/]+)$/.exec(pathname);
-  return match ? { mountId: match[1], personaName: match[2] } : undefined;
 }

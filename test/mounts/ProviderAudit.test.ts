@@ -48,13 +48,11 @@ test("a failed provider fetch is durable audit state without publishing a mount"
 
 function configuredYafs(directory: string, source: GitHubCollectionSource) {
   const store = new NodeStore();
-  const manager = new MountManager(
-    store,
-    join(directory, "mounts.json"),
-    join(directory, "audit.ndjson"),
-    undefined,
-    new ProviderRegistry(source),
-  );
+  const manager = new MountManager(store, {
+    statePath: join(directory, "mounts.json"),
+    auditPath: join(directory, "audit.ndjson"),
+    providers: new ProviderRegistry(source),
+  });
   return new Yafs({ store, mounts: manager });
 }
 
