@@ -1,10 +1,11 @@
 import { SlackConfig } from "../../mounts/types";
 import { object, only, relative } from "../../mounts/ManifestValidation";
 
+const FIELDS = ["channel", "max", "persona", "requireMention", "replyTimeoutMs"];
+
 export function slackConfig(value: unknown): SlackConfig {
   const config = object(value, "slack config");
-  const fields = ["channel", "max", "persona", "requireMention"];
-  only(config, fields, "slack config");
+  only(config, FIELDS, "slack config");
   assertValidChannel(config.channel);
   return parsedConfig(config);
 }
@@ -15,7 +16,18 @@ function parsedConfig(config: Record<string, unknown>): SlackConfig {
     max: max(config.max),
     persona: persona(config.persona),
     requireMention: requireMention(config.requireMention),
+    replyTimeoutMs: replyTimeoutMs(config.replyTimeoutMs),
   };
+}
+
+function replyTimeoutMs(value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(value) || (value as number) < 1) {
+    throw new Error("Invalid slack replyTimeoutMs");
+  }
+  return value as number;
 }
 
 function requireMention(value: unknown): boolean | undefined {

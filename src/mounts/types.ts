@@ -7,10 +7,22 @@ export type FixtureConfig = {
   streams?: Record<string, StreamSpec>;
 };
 export type GitHubConfig = { repository: string; query: string; max: number };
+// Declares this persona has bounded MCP tool access. Yafs runs its own
+// scoped MCP HTTP server (AgentToolServer) and points LM Studio at it via
+// an `ephemeral_mcp` integration computed automatically per request — the
+// operator never edits LM Studio's mcp.json or hand-authors an
+// `integrations` list; `roots`/budgets here are the whole contract.
+export type PersonaToolsConfig = {
+  roots: string[];
+  maxResultBytes?: number;
+  maxCalls?: number;
+  deadlineMs?: number;
+};
 export type PersonaConfig = {
   prompt: string;
   endpoint?: string;
   model?: string;
+  tools?: PersonaToolsConfig;
 };
 export type AgentConfig = {
   personas: Record<string, PersonaConfig>;
@@ -22,6 +34,7 @@ export type SlackConfig = {
   max?: number;
   persona?: string;
   requireMention?: boolean;
+  replyTimeoutMs?: number;
 };
 export type MountProvider = "fixture" | "github" | "agent" | "slack";
 export type MountConfig =

@@ -1,10 +1,13 @@
-import { callTool, tools } from "./Tools";
+import { callTool, failure, tools } from "./Tools";
 import { McpClient, McpId, McpRequest, McpResponse } from "./types";
 
 const protocolVersion = "2025-11-25";
 
 export class McpServer {
-  constructor(private readonly client: McpClient) {}
+  constructor(
+    private readonly client: McpClient,
+    private readonly allowedTools?: ReadonlySet<string>,
+  ) {}
 
   async receive(value: unknown): Promise<McpResponse | undefined> {
     const request = requestFor(value);
@@ -15,11 +18,25 @@ export class McpServer {
   }
 
   private async respond(request: McpRequest): Promise<McpResponse> {
-    const result = standardResult(request.method);
+    const result = this.standardResult(request.method);
     if (result) {
       return response(request.id!, result);
     }
     return this.callOrError(request);
+  }
+
+  private standardResult(method: string) {
+    if (method === "initialize") {
+      return initialized();
+    }
+    if (method === "tools/list") {
+      return { tools: tools().filter((tool) => this.permitted(tool.name)) };
+    }
+    return undefined;
+  }
+
+  private permitted(name: string): boolean {
+    return !this.allowedTools || this.allowedTools.has(name);
   }
 
   private async callOrError(request: McpRequest): Promise<McpResponse> {
@@ -31,6 +48,9 @@ export class McpServer {
 
   private call(request: McpRequest) {
     const params = callParams(request.params);
+    if (!this.permitted(params.name)) {
+      return failure(new Error(`Tool not permitted: ${params.name}`));
+    }
     return callTool(this.client, params.name, params.arguments);
   }
 }
@@ -66,16 +86,6 @@ function initialized() {
     capabilities: { tools: { listChanged: false } },
     serverInfo: { name: "yafs-mcp", version: "0.1.0" },
   };
-}
-
-function standardResult(method: string) {
-  if (method === "initialize") {
-    return initialized();
-  }
-  if (method === "tools/list") {
-    return { tools: tools() };
-  }
-  return undefined;
 }
 
 function callParams(value: unknown): { name: string; arguments: unknown } {

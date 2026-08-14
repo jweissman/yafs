@@ -50,6 +50,15 @@ plugins apply
 cat updates/messages.ndjson
 ```
 
+`yafsd start` runs the daemon detached — its stdout/stderr go to
+`<dataDir>/daemon.log`, not your terminal, so nothing prints where you ran
+`start`. Keep a second terminal open with `bun run yafsd -- logs --tail`
+(same `--config`/`YAFS_DATA_DIR` as above) to watch this in real time —
+every session/tool-call/poll-failure/reply-abandoned line this doc
+mentions below lands there, live, as it happens. `bun run yafsd -- logs`
+with no `--tail` just prints the last 50 lines and exits, useful for a
+quick "what happened" check without leaving a terminal open.
+
 There is no in-VFS way to activate a plugin — `yafs.plugins.yaml`, selected
 by `yafsd --config`, is the only mechanism that can grant a capability.
 
@@ -156,6 +165,7 @@ plugins:
       personas:
         reviewer:
           prompt: "You are a terse, careful code reviewer."
+          tools: { roots: ["/home/root"], maxCalls: 30 }
     capabilities: [chat.completion]
   - id: updates
     plugin: slack
@@ -163,6 +173,36 @@ plugins:
     config: { channel: C0123456789, max: 25, persona: reviewer }
     capabilities: [network.slack-api, secret.slack-token]
 ```
+
+The persona's `tools:` block is what makes the completion request carry a
+`plugin` integration at all — without it, LM Studio never sees
+anything MCP-related, by design (`AgentRunExecutor` only takes the
+tool-completion path when `persona.tools` is set). This is easy to trip
+over live: `docs/AGENT-TOOLS-VALIDATION.md` uses a persona also named
+`reviewer`, but its manifest sets `tools:`; this doc's manifest, above, did
+not until this line was added. If you ask a Slack-routed persona "can you
+use the yafs mcp" and see no sign of it in LM Studio, check this first
+before assuming the wiring is broken. Combining Slack routing with actual
+tool use (the scenario in `docs/AGENT-TOOLS-VALIDATION.md`) hasn't been
+validated end-to-end as one flow — only each half separately.
+
+Also: don't rely on LM Studio's UI alone to tell you whether it reached the
+tool server at all — watch `yafsd`'s own stdout, which now logs `agent tool
+session started for agents/reviewer` (or `... rejected ...: no such
+tool-enabled persona` if the `tools:` block is missing/misapplied) the
+moment a request lands, plus one `agent tool call: <name>` line per actual
+tool invocation. See `docs/AGENT-TOOLS-VALIDATION.md` §0 for the full
+walkthrough of this signal.
+
+Separately: `plugins apply` returning `[]` is not a failure signal by
+itself. `yafsd` reconciles its config file against a fresh manifest hash
+at startup (`server.ts`'s `await s.reconcile()`), so if you connect and run
+`plugins apply` without having changed the file since the daemon started,
+`[]` correctly means "nothing to do," not "nothing happened." It only
+means something's wrong if you *just* edited the config and still get
+`[]` — in that case the daemon may be reading a different file than the
+one you edited (check `yafsd`'s `data:` path and how it was started with
+`--config`).
 
 ```sh
 plugins apply
@@ -183,8 +223,25 @@ the same channel within a few poll intervals. Also post a message in the
 same channel *without* mentioning the bot and confirm it is never picked up
 — this is the main behavior this section validates.
 
+You should see a 👀 (`eyes`) reaction appear on your message almost
+immediately (added right after the message is routed, before the model has
+replied) and disappear once the reply posts — a live "it's working on
+this" indicator, independent of and faster than the reply itself. It's
+best-effort: a reaction failure is logged (`Slack reaction update failed:
+...`) but never blocks the actual reply. If you see the reaction appear
+but never disappear, the run is still in progress or got abandoned — check
+`agent status` / `yafsd logs` rather than assuming the reaction itself is
+broken.
+
+The chat id is deterministic, not random — `channelChatId()` builds it as
+`slack-<mountId>-<channel>`, so for this manifest (`id: updates`, `channel:
+C0123456789`) it's `slack-updates-C0123456789`. Yash does not do glob
+expansion (`chats/*/...` is a literal path, not a wildcard, and will fail
+to resolve), so either name it directly or list first if unsure:
+
 ```text
-cat agents/reviewer/chats/*/messages.ndjson
+ls agents/reviewer/chats
+cat agents/reviewer/chats/slack-updates-C0123456789/messages.ndjson
 ```
 
 should show a `user` turn whose content is prefixed with the Slack sender's
@@ -270,6 +327,13 @@ the message never lands twice in the real channel across a few repeats of
 this test with the `updates` mount instead of `wrong`.
 
 ## Known gaps this doc deliberately does not re-litigate
+
+**Call the inbound side "at-least-once, mention-filtered inbound delivery,"
+not "durable inbound event."** The baseline cursor and `@mention` filter
+(§4) are safe-ish filtering mechanics — they stop replay-on-restart and
+stop replying to unaddressed messages — not a durable event record with
+its own accept/commit step the way M6.4's outbox has for the outbound
+leg. The gap below is exactly why that distinction matters.
 
 The M6.4 durable outbox (§5) closes the outbound fire-and-forget gap this
 section used to describe — both `slack send` and §4's inbound-bridge reply

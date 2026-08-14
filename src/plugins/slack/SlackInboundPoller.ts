@@ -7,10 +7,18 @@ import {
   Cursor,
   newMessages,
 } from "./SlackInboundSchedule";
-import { DispatchCtl, RouteOptions, routeMessage } from "./SlackInboundRouting";
+import { DispatchCtl } from "./SlackInboundRouting";
+import {
+  channelChatId,
+  InboundConfig,
+  inboundConfig,
+  log,
+  logBaseline,
+  logPoll,
+  routeAll,
+} from "./SlackInboundPollerSupport";
 import { SlackChannelClient, SlackMessage } from "./SlackApiClient";
 
-type InboundConfig = SlackConfig & { persona: string };
 const DEFAULT_POLL_MS = 3000;
 
 type Poll = {
@@ -45,7 +53,7 @@ export class SlackInboundPoller {
 
   private async tick() {
     for (const record of this.mounts.mounts()) {
-      await this.tickRecord(record);
+      await this.tickRecord(record).catch((error) => log(record.id, error));
     }
   }
 
@@ -74,6 +82,7 @@ export class SlackInboundPoller {
     const fetched = await this.history(poll);
     if (!cursor) {
       this.cursors.set(poll.record.id, baselineCursor(fetched));
+      logBaseline(poll.record.id, fetched.length);
       return;
     }
     await this.drainFetched(poll, cursor, fetched);
@@ -83,6 +92,7 @@ export class SlackInboundPoller {
     const botUserId = await this.identity(poll);
     const requireMention = poll.config.requireMention ?? true;
     const fresh = newMessages(botUserId, cursor, fetched, requireMention);
+    logPoll(poll.record.id, fetched.length, fresh.length);
     await this.route(poll, botUserId, fresh);
     this.cursors.set(poll.record.id, advanceCursor(cursor, fresh));
   }
@@ -106,29 +116,8 @@ export class SlackInboundPoller {
   private routeOptions(poll: Poll, botUserId: string) {
     const slackCtlPath = `${poll.record.path}/ctl` as AbsolutePath;
     const { mounts, dispatchCtl } = this;
-    const persona = poll.config.persona;
-    return { mounts, dispatchCtl, persona, slackCtlPath, botUserId };
+    const { persona, replyTimeoutMs, channel } = poll.config;
+    const base = { mounts, dispatchCtl, persona, slackCtlPath, botUserId };
+    return { ...base, replyTimeoutMs, channel, client: poll.client };
   }
-}
-
-async function routeAll(
-  options: RouteOptions,
-  chatId: string,
-  messages: SlackMessage[],
-) {
-  for (const message of messages) {
-    await routeMessage(options, chatId, message);
-  }
-}
-
-function inboundConfig(record: PreparedMountRecord): InboundConfig | undefined {
-  if (record.provider !== "slack") {
-    return undefined;
-  }
-  const config = record.config as SlackConfig;
-  return config.persona ? (config as InboundConfig) : undefined;
-}
-
-function channelChatId(mountId: string, channel: string): string {
-  return `slack-${mountId}-${channel}`;
 }

@@ -345,12 +345,23 @@ which is separately tracked, not implied by a milestone checkbox.
   one-way Slack bridge into it) is implemented; see the M7 checkpoint below
   and the ADR's revised "M7 decision" section for what shipped versus the
   original channel design.
+- M6.5 (bounded agent evidence tools) is **implemented**: a tool-enabled
+  persona's requests go through LM Studio's native `/api/v1/chat` +
+  `integrations` mechanism (LM Studio drives its own tool loop; Yafs never
+  parses `tool_calls` itself) against `AgentToolServer`, a persistent MCP
+  HTTP listener `yafsd` starts itself — one URL per mount/persona, no
+  manual LM Studio-side registration — enforcing an operation allowlist,
+  root scoping, and byte/call/deadline budgets in code, scoped per MCP
+  session. See the M6.5 checkpoint below.
 - `yafs-mcp` is a local stdio client of `yafsd`, not a provider or a second VFS
-  implementation. Its tools are the L0/L1 workspace operations
-  (`yafs.list`/`yafs.read`/`yafs.inspect`/`yafs.query`/`yafs.tree`/
-  `yafs.find`/`yafs.test`/`yafs.diff`/`yafs.grep`) plus `yafs.capture`/
-  `yafs.restore`; arbitrary shell execution, MCP writes, and public access are
-  deliberately absent.
+  implementation, and its surface is **bounded local operations, not purely
+  read-only** — alongside the L0/L1 workspace operations (`yafs.list`/
+  `yafs.read`/`yafs.inspect`/`yafs.query`/`yafs.tree`/`yafs.find`/`yafs.test`/
+  `yafs.diff`/`yafs.grep`) it also exposes `yafs.capture`/`yafs.restore`,
+  which are durable local mutations, reasonable for a trusted local operator
+  but deliberately excluded from `AgentToolServer`'s agent-facing allowlist.
+  Arbitrary shell execution, MCP writes beyond capture/restore, and public
+  access are deliberately absent from both.
 
 ### M0 — Foundation: composable in-memory filesystem
 
@@ -774,34 +785,78 @@ stopped it — see [AGENT-CHAT-VALIDATION.md](AGENT-CHAT-VALIDATION.md) and
 decisions live in the ADR's “M7 decision: local conversation channels”
 section.
 
-### M6.5 — Bounded agent evidence tools *(scoped, not started)*
+### M6.5 — Bounded agent evidence tools *(implemented)*
 
 Checkpoint: a persona can investigate, not just receive pasted context. It
-gets a specific, read-only, bounded tool loop — reusing the exact tool
-surface `yafs-mcp` already exposes to Claude Code/Codex (`WorkspaceOperations`
+gets a specific, bounded tool loop — reusing the exact operation layer
+`yafs-mcp` already exposes to Claude Code/Codex (`WorkspaceOperations`
 via `LiteracyTools`/`EvidenceTools`: `list`/`read`/`inspect`/`tree`/`find`/
-`grep`/`diff`), not a second, bespoke tool vocabulary invented for
-self-hosted models:
+`grep`/`diff`/`test`), not a second, bespoke tool vocabulary invented for
+self-hosted models. Yafs does not parse or execute tool calls itself:
 
 ```text
-Agent model
-  → tool request (a subset of yafs-mcp's own tools)
-  → WorkspaceOperations, invoked through an agent-scoped context
-  → durable transcript: request, tool call, bounded result, final reply
+Agent model (in LM Studio)
+  → LM Studio's own tool-calling loop, driven against a real MCP server
+  → AgentToolServer: one persistent MCP-over-Streamable-HTTP listener,
+    started by yafsd itself, one URL per mount/persona (no mcp.json, no
+    manual registration — the manifest's persona.tools.roots is the whole
+    contract)
+  → ScopedMcpClient (fresh per MCP session): operation allowlist, root
+    scoping, byte/call/time budgets
+  → LM Studio returns the finished output array (tool calls + final reply)
+  → durable transcript: request, every tool call + bounded result, final reply
 ```
 
-Concretely, this is the same `McpServer`/`WorkspaceOperations` dispatch
-`yafs-mcp` already runs, reused in-process for `ChatCompletionClient`'s
-tool-calling loop (OpenAI-compatible `tools`/`tool_calls`), not a parallel
-reimplementation — the point is a persona gets *an MCP endpoint*, the same
-one any other client gets, just scoped down, never an unrestricted shell.
-The scoping is explicit and enforced, not left to model good behavior:
-allowed operations (read-only only, initially — no `capture`/`restore`, no
-`ctl`, no `slack send`, no `yafs.query`, no recursive/self-triggering
-calls), allowed roots, a result-byte budget, a call-count limit, and a
-deadline. Every tool call and its bounded result is recorded in the run
-artifact alongside the request and final reply — inspectable the same way
-`runs/<runId>/{request,context,response}.md` already are.
+**Why this shape, not a hand-rolled OpenAI `tools`/`tool_calls` loop:**
+`ChatCompletionClient` stays completely untouched — no `tools`/`tool_calls`
+parsing, no streaming tool-call delta accumulation, no second copy of
+whatever quirks a given model has around tool-call formatting. Instead, a
+tool-enabled persona (`persona.tools.roots` in the manifest) talks to LM
+Studio's native `/api/v1/chat` endpoint (`LmStudioMcpClient`,
+`input`/`system_prompt`/`integrations`/`previous_response_id` in;
+an `output` array of `message`/`tool_call`/`reasoning`/`invalid_tool_call`
+items out) instead of the OpenAI-compatible `/v1/chat/completions` path —
+LM Studio drives its own tool loop against whichever MCP server the
+`integrations` field names, the same way any other MCP client would.
+Multi-turn threading reuses LM Studio's own `previous_response_id`, not a
+resent message history — recorded per-chat at
+`chats/<chatId>/lmstudio-response-id.txt`.
+
+**`AgentToolServer` is a standalone, persistent HTTP listener yafsd starts
+alongside itself — not a subprocess spawned per run, and not the
+unrestricted `yafs-mcp` reused directly.** `yafs-mcp` remains an
+operator-facing stdio adapter with a full daemon connection and no scope
+of its own — appropriate for Codex/Claude Code, wrong for an unattended
+agent run. `AgentToolServer` speaks MCP's Streamable HTTP transport (via
+`@modelcontextprotocol/sdk`, used only for the transport/session layer —
+tool dispatch still runs through Yafs's own `WorkspaceOperations`/`Tools.ts`)
+and serves one URL per mount/persona
+(`http://127.0.0.1:<port>/mcp/<mountId>/<personaName>`), resolving that
+persona's `tools` config fresh from the live mount on every new MCP
+session — no restart needed when config changes. Each session gets its own
+`ScopedMcpClient`, which enforces (in code, not left to model good
+behavior or to LM Studio's own `allowed_tools` filter alone): a hardcoded
+operation allowlist (`list`/`read`/`inspect`/`tree`/`find`/`grep`/`diff`/
+`test` only — never `capture`/`restore`, `yafs.query`, `ctl`, or
+`slack send`), an allowed-root prefix check on every path-bearing argument
+(normalized against `..` traversal the same way the VFS's own path
+resolver is), a byte-truncation budget per result, a call-count budget
+scoped to that one MCP session (so it resets per agent run, not
+per-persona-forever), and a wall-clock deadline. `AgentToolCompletion`
+computes the `plugin` integration entry itself, per call, referencing an
+entry `AgentToolMcpSync` keeps written into LM Studio's own `mcp.json` for
+every currently tool-enabled persona — an operator never hand-authors an
+`integrations` list or edits `mcp.json` directly (LM Studio's SSRF guard
+on its `ephemeral_mcp` integration type rejects loopback URLs supplied
+inline per-request; `mcp.json`-registered servers are exempt, since
+registering one already requires local filesystem access).
+
+Every tool call and its bounded result — the LM Studio `output` array
+verbatim — is recorded durably at `runs/<runId>/tools.json`, alongside the
+existing `request.md`/`context.md`/`response.md`/`status.json` — inspectable
+the same way those already are. See
+[AGENT-TOOLS-VALIDATION.md](AGENT-TOOLS-VALIDATION.md) for the manual
+runbook against a real LM Studio instance.
 
 This is the milestone that turns "text-in/text-out" into "agent" in the
 sense that matters for a demo: a persona reading a captured PR via bounded
@@ -827,14 +882,16 @@ that model itself.
 **Sequencing and initial demo scope:** M6.5 depended on M6.4 closing first —
 an agent proposing a Slack reply through a still-fire-and-forget outbound
 write would have made any approval step sit in front of a write that could
-still silently double-post or lose the record of what it sent. M6.4 is now
-closed; once M6.5 lands too, the demo is:
+still silently double-post or lose the record of what it sent. Both are now
+implemented, so the demo is:
 
 ```text
 Human mentions reviewer in Slack
-  → durable inbound event (already true: baseline cursor + @mention filter)
+  → at-least-once, mention-filtered inbound delivery (baseline cursor +
+    @mention filter — filtering mechanics, not a durable event record; see
+    SLACK-VALIDATION.md's "Known gaps" for the poller's own crash window)
   → agent reads the captured review material using bounded tools (M6.5)
-  → durable proposed reply (run artifact)
+  → durable proposed reply (run artifact, including the tool transcript)
   → operator approves
   → durable Slack outbox delivers it (M6.4)
 ```

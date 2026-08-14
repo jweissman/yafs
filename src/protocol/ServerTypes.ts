@@ -5,17 +5,20 @@ import { ProviderRegistry } from "../mounts/ProviderRegistry";
 import { TraceReifier, TraceService } from "../traces/TraceService";
 import { DesiredMounts as Desired } from "../mounts/DesiredMounts";
 import { CacheService } from "../cache/CacheService";
-import { ModelFor, SlackClientFor } from "./BackgroundDrivers";
+import { ModelFor, SlackClientFor, ToolClientFor } from "./BackgroundDrivers";
 
 export type StartOptions = {
   walPath?: string;
   dataDir?: string;
   port?: number;
+  toolsPort?: number;
+  mcpJsonPath?: string;
   host?: string;
   providers?: ProviderRegistry;
   now?: () => number;
   traceReifier?: TraceReifier;
   modelFor?: ModelFor;
+  toolClientFor?: ToolClientFor;
   slackClientFor?: SlackClientFor;
   configPath?: string;
   refreshIntervalMs?: number;

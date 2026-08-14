@@ -3,6 +3,7 @@ import { MountManager } from "../../mounts/MountManager";
 import { MountJournal, publishEntries } from "../../mounts/MountEntryPublish";
 import { PreparedMountRecord } from "../../mounts/types";
 import { ChatMessage, historyEntry, historyFrom } from "./AgentChatHistory";
+import { threadEntry, threadResponseId } from "./AgentToolThread";
 
 export type PersonaRef = { mountId: string; personaName: string };
 
@@ -20,6 +21,26 @@ export class AgentChatStore {
 
   appendChatTurn(ref: PersonaRef, chatId: string, message: ChatMessage) {
     return this.enqueue(() => this.applyChatTurn(ref, chatId, message));
+  }
+
+  currentResponseId(ref: PersonaRef, chatId: string): string | undefined {
+    const record = this.record(ref.mountId);
+    if (!record) {
+      return undefined;
+    }
+    return threadResponseId(record, ref.personaName, chatId);
+  }
+
+  recordResponseId(ref: PersonaRef, chatId: string, responseId: string) {
+    return this.enqueue(() => this.applyResponseId(ref, chatId, responseId));
+  }
+
+  private applyResponseId(ref: PersonaRef, chatId: string, responseId: string) {
+    const record = this.record(ref.mountId);
+    if (record) {
+      const entry = threadEntry(ref.personaName, chatId, responseId);
+      return publishEntries(this.deps(), record, [entry]);
+    }
   }
 
   // Accept-time appends run inside the same awaited chain as the ctl

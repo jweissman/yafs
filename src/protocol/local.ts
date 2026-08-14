@@ -1,12 +1,14 @@
-import Yafs from "../index";
+import Yafs, { YafsOptions } from "../index";
 import type { ExecutionResult } from "../types/ExecutionResult";
 import { completionTarget } from "./CompletionTarget";
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 export class LocalYashClient {
-  private readonly yafs = new Yafs();
+  private readonly yafs: Yafs;
 
-  constructor() {}
+  constructor(options: YafsOptions = {}) {
+    this.yafs = new Yafs(options);
+  }
 
   async execute(command: string): Promise<ExecutionResult> {
     return this.yafs.executeAsync(command);

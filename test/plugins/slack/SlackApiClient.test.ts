@@ -49,6 +49,36 @@ test("identity returns the bot's own Slack user ID", async () => {
   expect(requests[0].method).toBe("POST");
 });
 
+test("addReaction posts channel/timestamp/name to reactions.add", async () => {
+  const requests: Request[] = [];
+  const client = new SlackApiClient(
+    { apiUrl: "https://slack.test/api", token: "xoxb-1" },
+    fakeFetch(requests, { ok: true }),
+  );
+  await client.addReaction("C123", "1.0", "eyes");
+  expect(requests[0].url).toBe("https://slack.test/api/reactions.add");
+  expect(await requests[0].json()).toEqual({
+    channel: "C123",
+    timestamp: "1.0",
+    name: "eyes",
+  });
+});
+
+test("removeReaction posts channel/timestamp/name to reactions.remove", async () => {
+  const requests: Request[] = [];
+  const client = new SlackApiClient(
+    { apiUrl: "https://slack.test/api", token: "xoxb-1" },
+    fakeFetch(requests, { ok: true }),
+  );
+  await client.removeReaction("C123", "1.0", "eyes");
+  expect(requests[0].url).toBe("https://slack.test/api/reactions.remove");
+  expect(await requests[0].json()).toEqual({
+    channel: "C123",
+    timestamp: "1.0",
+    name: "eyes",
+  });
+});
+
 test("a 200 response with ok:false is reported as a failure, not treated as success", async () => {
   const client = new SlackApiClient(
     { apiUrl: "https://slack.test/api", token: "xoxb-1" },

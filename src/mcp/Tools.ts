@@ -133,7 +133,7 @@ async function run(client: McpClient, command: string | WorkspaceOperation) {
 function result(text: string) {
   return { content: [{ type: "text", text }], isError: false };
 }
-function failure(error: unknown) {
+export function failure(error: unknown) {
   return { content: [{ type: "text", text: message(error) }], isError: true };
 }
 function message(error: unknown) {

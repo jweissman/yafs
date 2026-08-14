@@ -5,6 +5,11 @@ import { configArgument, restartConfig, selectedConfig } from "./DaemonConfig";
 import { YafsServer } from "./protocol/server";
 import { managedState, waitForStop } from "./DaemonHealth";
 import { waitForState } from "./DaemonStartup";
+import { logStartup } from "./DaemonAnnounce";
+import { printLogs } from "./DaemonLogs";
+import { addressInUseError, isAddressInUse } from "./DaemonAddressError";
+import { toolsPort } from "./plugins/agent/AgentToolServer";
+import { defaultMcpJsonPath } from "./plugins/agent/LmStudioMcpJson";
 
 const command = process.argv[2] || "serve";
 const settings = {
@@ -12,9 +17,11 @@ const settings = {
   port: Number(process.env.YAFS_PORT || 7337),
   dataDir: process.env.YAFS_DATA_DIR || ".yafs",
   configPath: selectedConfig(process.argv, process.env),
+  toolsPort: toolsPort(),
+  mcpJsonPath: defaultMcpJsonPath(),
 };
 const statePaths = paths(settings.dataDir);
-await ({ serve, start, stop, restart, status }[command] || usage)();
+await ({ serve, start, stop, restart, status, logs }[command] || usage)();
 async function serve() {
   if (await managedState(statePaths.state)) {
     throw new Error(`yafsd already running for ${statePaths.directory}`);
@@ -29,23 +36,10 @@ async function startServer() {
   try {
     return await YafsServer.start(settings);
   } catch (error) {
-    throw isAddressInUse(error) ? addressInUseError() : error;
+    throw isAddressInUse(error)
+      ? addressInUseError(settings.host, settings.port)
+      : error;
   }
-}
-
-function isAddressInUse(error: unknown) {
-  return Boolean(
-    error &&
-    typeof error === "object" &&
-    (error as NodeJS.ErrnoException).code === "EADDRINUSE",
-  );
-}
-
-function addressInUseError() {
-  return new Error(
-    `Port ${settings.host}:${settings.port} is already in use; another yafsd ` +
-      "(perhaps a different data directory, or one started outside this lifecycle) may already be listening",
-  );
 }
 
 async function announce(server: YafsServer) {
@@ -55,14 +49,8 @@ async function announce(server: YafsServer) {
     address,
     settings.configPath,
   );
-  logListening(address);
+  logStartup(address, statePaths.directory, server.agentToolsPort());
   return state;
-}
-
-function logListening(address: { host: string; port: number }) {
-  console.log(
-    `yafsd listening on ${address.host}:${address.port}; data: ${statePaths.directory}`,
-  );
 }
 
 async function start(configPath = settings.configPath) {
@@ -116,9 +104,14 @@ async function status() {
   report((await managedState(statePaths.state)) ? "running" : "stopped");
 }
 
+function logs() {
+  return printLogs(statePaths.log, process.argv.slice(3));
+}
+
 function usage(): never {
   throw new Error(
-    "Usage: yafsd [serve|start|stop|restart|status] [--config FILE]",
+    "Usage: yafsd [serve|start|stop|restart|status|logs [-f|--tail] [-n N]] " +
+      "[--config FILE]",
   );
 }
 

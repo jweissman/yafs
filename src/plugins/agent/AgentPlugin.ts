@@ -7,7 +7,7 @@ import {
 } from "../../mounts/Plugin";
 import { agentConfig } from "./AgentManifest";
 import { agentCommands } from "./AgentCommands";
-import { AgentDirectoryDriver } from "./AgentDirectoryDriver";
+import { AgentClients, AgentDirectoryDriver } from "./AgentDirectoryDriver";
 import { ModelClient } from "./ChatCompletionClient";
 import { carryForward } from "../../mounts/SnapshotCarryForward";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
@@ -50,13 +50,13 @@ export class AgentPlugin extends Plugin {
     return agentCommands();
   }
 
-  createDriver(wiring: Wiring, modelFor: ModelFor): PluginDriver {
+  createDriver(wiring: Wiring, clients: AgentClients): PluginDriver {
     return new AgentDirectoryDriver(
       wiring.mounts,
       wiring.journal,
       wiring.enqueue,
-      { registerCtl: wiring.registerCtl, unregisterCtl: wiring.unregisterCtl },
-      modelFor,
+      ctlFor(wiring),
+      clients,
     );
   }
 
@@ -76,6 +76,13 @@ export class AgentPlugin extends Plugin {
       persona.prompt,
     ]);
   }
+}
+
+function ctlFor(wiring: Wiring) {
+  return {
+    registerCtl: wiring.registerCtl,
+    unregisterCtl: wiring.unregisterCtl,
+  };
 }
 
 function sendAction(): PluginActionDefinition {

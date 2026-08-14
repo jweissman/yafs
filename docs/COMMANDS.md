@@ -115,6 +115,17 @@ the ADR's "Capabilities, distribution, and adapters" removal policy) — don't
 build new tooling against it, but existing `yafs.plugins.yaml` files using it
 keep working.
 
+`yafsd`'s own lifecycle (`serve|start|stop|restart|status|logs`) is a
+separate CLI surface from the yash commands above — run directly (`bun run
+yafsd -- <subcommand>`), not from inside a yash session. `yafsd start` runs
+the daemon detached, with stdout/stderr redirected to `<dataDir>/daemon.log`
+(every plugin/tool-server/poller log line lands there, not your terminal);
+`yafsd logs [-n N]` prints its last `N` lines (default 50) and exits,
+`yafsd logs --tail`/`-f` follows it live until Ctrl-C — the fastest way to
+see what the daemon is actually doing without hunting for the log file by
+hand. `yafsd serve` runs it in the foreground instead, if you'd rather see
+output in the same terminal you started it from.
+
 ```yaml
 version: 1
 plugins:
@@ -143,7 +154,7 @@ configuration — see [M5 validation](M5-VALIDATION.md).
 | --- | --- | --- | --- |
 | `fixture` | `{ files: {PATH: CONTENT}, streams?: {PATH: {chunks, intervalMs}} } ` | none required | Static, config-sourced content. `streams` delivers `chunks` into `PATH` on a timer, for exercising background/`ctl` mechanics with no external dependency — not a production feature. |
 | `github` | `{ repository, query, max }` | `network.github-api`, `secret.github-token` for authenticated access | Bounded PR query collection; see [M5 validation](M5-VALIDATION.md). |
-| `agent` | `{ personas: { NAME: { prompt, endpoint?, model? } }, endpoint?, model? }` | `chat.completion` | Publishes `NAME/prompt.md` per persona from `config.personas.NAME.prompt`. One mount can host several personas. `endpoint`/`model` resolve persona → mount → the `YAFS_LLM_BASE_URL`/`YAFS_LLM_MODEL` env vars, so a single manifest can mix personas backed by different local, OpenAI-compatible model servers. |
+| `agent` | `{ personas: { NAME: { prompt, endpoint?, model?, tools? } }, endpoint?, model? }` | `chat.completion` | Publishes `NAME/prompt.md` per persona from `config.personas.NAME.prompt`. One mount can host several personas. For a persona with no `tools:`, `endpoint`/`model` resolve persona → mount → the `YAFS_LLM_BASE_URL`/`YAFS_LLM_MODEL` env vars (generic, any OpenAI-compatible `/chat/completions` server). For a persona *with* `tools:` (MCP-enabled, LM Studio only — see [Agent tools validation](AGENT-TOOLS-VALIDATION.md)), the same persona/mount fields instead fall back to `YAFS_LMSTUDIO_BASE_URL`/`YAFS_LMSTUDIO_MODEL`, since that path uses LM Studio's own `/api/v1/chat` endpoint, not the generic completions shape. LM Studio requires `model` on every `/api/v1/chat` request — omitting it (persona, mount, *and* the env var) fails with `missing_required_parameter: model`. A tool-enabled persona is served via `AgentToolServer`, an in-process HTTP MCP listener on a fixed port (default `7338`, override with `YAFS_AGENT_TOOLS_PORT`) that `AgentToolMcpSync` keeps registered in `~/.lmstudio/mcp.json` automatically. If LM Studio's "Require Authentication" is on (required alongside "Allow calling servers from mcp.json"), set `YAFS_LMSTUDIO_ACCESS_TOKEN` — sent as `Authorization: Bearer <token>` on every tool-enabled request. |
 | `slack` | `{ channel, max? }` | `network.slack-api`, `secret.slack-token` | Publishes the channel's recent messages as an ordered `NAME/messages.ndjson` snapshot; `channel` is a Slack channel ID (e.g. `C0123456789`), not a name. `secret.slack-token` reads the `YAFS_SLACK_TOKEN` env var daemon-side — there is no per-manifest token field and no `SLACK_CHANNEL_ID` env var; the channel is config, the token is the only secret. See [Slack validation](SLACK-VALIDATION.md). |
 
 ### Plugin actions (`ctl`) and exposure boundary

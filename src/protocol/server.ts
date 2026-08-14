@@ -6,15 +6,13 @@ import { CtlHandler } from "./CtlDispatch";
 import { BackgroundCommit } from "./BackgroundCommit";
 import {
   BackgroundDrivers,
-  ModelFor,
-  SlackClientFor,
   backgroundDrivers,
   startAll,
   closeAll,
   recoverAll,
 } from "./BackgroundDrivers";
-import { chatCompletionClientFor } from "../plugins/agent/ChatCompletionClient";
-import { defaultSlackClient } from "../plugins/slack/SlackApiClient";
+import { AgentToolServer } from "../plugins/agent/AgentToolServer";
+import { defaultClients, toolServerOptions } from "./ServerClients";
 import { daemonDesiredMounts } from "../mounts/daemonDesiredMounts";
 import { reconcileDesired } from "./ReconcileDesired";
 import { ServerConnection } from "./ServerConnection";
@@ -25,14 +23,17 @@ export type { StartOptions } from "./ServerTypes";
 export class YafsServer {
   private readonly server: Server;
   private readonly connection: ServerConnection;
+  private readonly toolServer: AgentToolServer;
   private background!: BackgroundDrivers;
   private constructor(private readonly services: Services) {
     this.connection = new ServerConnection(services, () => this.background);
     this.server = createServer((socket) => this.connection.attach(socket));
+    const options = toolServerOptions(services);
+    this.toolServer = new AgentToolServer(services.mounts, options);
   }
   private driversFor(options: StartOptions) {
-    const [modelFor, slackClientFor] = defaultClients(options);
-    return backgroundDrivers(this.wiring(), modelFor, slackClientFor, {
+    const clients = defaultClients(options, this.toolServer);
+    return backgroundDrivers(this.wiring(), clients, {
       now: options.now,
       refreshIntervalMs: options.refreshIntervalMs,
       slackPollIntervalMs: options.slackPollIntervalMs,
@@ -56,6 +57,7 @@ export class YafsServer {
   }
   static async start(options: StartOptions): Promise<YafsServer> {
     const s = YafsServer.construct(await openServices(options), options);
+    s.toolServer.start(options.toolsPort);
     const bg = s.background;
     await recoverAll(bg);
     await s.reconcile();
@@ -87,7 +89,11 @@ export class YafsServer {
     }
     return { host: address.address, port: address.port };
   }
+  agentToolsPort(): number | undefined {
+    return this.toolServer.port();
+  }
   async close(): Promise<void> {
+    this.toolServer.close();
     closeAll(this.background);
     this.connection.closeSockets();
     await new Promise<void>((ok, no) =>
@@ -115,11 +121,4 @@ export class YafsServer {
       this.connection.enqueueWork(work),
     ).commit(operations);
   }
-}
-
-function defaultClients(options: StartOptions): [ModelFor, SlackClientFor] {
-  return [
-    options.modelFor || chatCompletionClientFor,
-    options.slackClientFor || (() => defaultSlackClient()),
-  ];
 }

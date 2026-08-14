@@ -61,6 +61,8 @@ function fakeClient(state: FakeState) {
     history: async () => state.messages,
     identity: async () => "BOT",
     postMessage: (channel: string, text: string) => post(state, channel, text),
+    addReaction: async () => {},
+    removeReaction: async () => {},
   };
 }
 

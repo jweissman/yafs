@@ -8,15 +8,22 @@ import { failedStatus, runningStatus } from "./AgentStatus";
 import { AgentRequest, completeAgent } from "./AgentRequest";
 import { deltaWriter } from "./AgentDeltaWriter";
 import { chatHistoryFor, finishChatTurn } from "./AgentChatTurn";
+import { completeWithTools, ToolServerUrl } from "./AgentToolCompletion";
+import { ToolClientFor } from "./LmStudioMcpClient";
 
 type ModelFor = (persona: PersonaConfig, mount: AgentConfig) => ModelClient;
+export type AgentClients = {
+  modelFor: ModelFor;
+  toolClientFor: ToolClientFor;
+  toolServerUrl: ToolServerUrl;
+};
 
 export class AgentRunExecutor {
   constructor(
     private readonly runs: AgentRunStore,
     private readonly chats: AgentChatStore,
     private readonly cancels: AgentRunCancellation,
-    private readonly modelFor: ModelFor,
+    private readonly clients: AgentClients,
   ) {}
 
   settle(target: AgentTarget, context: RunContext, request: AgentRequest) {
@@ -49,7 +56,28 @@ export class AgentRunExecutor {
     context: RunContext,
     request: AgentRequest,
   ) {
-    const model = this.modelFor(target.persona, target.config);
+    return target.persona.tools
+      ? this.toolCompletion(target, context, request)
+      : this.textCompletion(target, context, request);
+  }
+
+  private toolCompletion(
+    target: AgentTarget,
+    context: RunContext,
+    request: AgentRequest,
+  ) {
+    const { chats, runs } = this;
+    const { toolClientFor } = this.clients;
+    const deps = { chats, runs, toolClientFor };
+    return completeWithTools(deps, { target, context, request });
+  }
+
+  private textCompletion(
+    target: AgentTarget,
+    context: RunContext,
+    request: AgentRequest,
+  ) {
+    const model = this.clients.modelFor(target.persona, target.config);
     const onDelta = deltaWriter(this.runs, context);
     const history = chatHistoryFor(this.chats, context, request);
     return completeAgent(model, target.persona, request, onDelta, history);

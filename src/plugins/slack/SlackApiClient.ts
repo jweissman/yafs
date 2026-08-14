@@ -9,6 +9,12 @@ export type SlackChannelClient = {
   history(channel: string, max: number): Promise<SlackMessage[]>;
   postMessage(channel: string, text: string): Promise<string>;
   identity(): Promise<string>;
+  addReaction(channel: string, timestamp: string, name: string): Promise<void>;
+  removeReaction(
+    channel: string,
+    timestamp: string,
+    name: string,
+  ): Promise<void>;
 };
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -37,6 +43,24 @@ export class SlackApiClient {
   async identity(): Promise<string> {
     const body = await this.call("auth.test", { method: "POST" });
     return body.user_id as string;
+  }
+
+  addReaction(channel: string, timestamp: string, name: string) {
+    return this.reaction("reactions.add", channel, timestamp, name);
+  }
+
+  removeReaction(channel: string, timestamp: string, name: string) {
+    return this.reaction("reactions.remove", channel, timestamp, name);
+  }
+
+  private async reaction(
+    path: string,
+    channel: string,
+    timestamp: string,
+    name: string,
+  ) {
+    const body = JSON.stringify({ channel, timestamp, name });
+    await this.call(path, { method: "POST", body });
   }
 
   private async call(

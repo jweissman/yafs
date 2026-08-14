@@ -79,7 +79,7 @@ function assertRejectsInvalidConfig() {
   expect(() =>
     parseManifest(slackManifest().replace("max: 10", "unknown: 10")),
   ).toThrow(
-    "Unknown slack config field: unknown (expected one of: channel, max, persona, requireMention)",
+    "Unknown slack config field: unknown (expected one of: channel, max, persona, requireMention, replyTimeoutMs)",
   );
   expect(() => parseManifest(slackManifest().replace("C123", "a/b"))).toThrow(
     "Invalid slack channel",
@@ -87,6 +87,12 @@ function assertRejectsInvalidConfig() {
   expect(() =>
     parseManifest(slackManifest().replace("max: 10", "max: 0")),
   ).toThrow("Invalid slack max");
+  expect(() =>
+    parseManifest(slackManifest().replace("max: 10", "requireMention: 1")),
+  ).toThrow("Invalid slack requireMention");
+  expect(() =>
+    parseManifest(slackManifest().replace("max: 10", "replyTimeoutMs: 0")),
+  ).toThrow("Invalid slack replyTimeoutMs");
 }
 
 test("an unconfigured Slack provider fails clearly instead of silently publishing nothing", async () => {

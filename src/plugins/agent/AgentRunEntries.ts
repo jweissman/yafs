@@ -19,6 +19,11 @@ export function contextEntry(id: RunId, context: string): Entry {
   return [`${id.personaName}/runs/${id.runId}/context.md`, context];
 }
 
+export function toolsEntry(id: RunId, transcript: unknown): Entry {
+  const path = `${id.personaName}/runs/${id.runId}/tools.json`;
+  return [path, JSON.stringify(transcript)];
+}
+
 export function statusEntry(id: RunId, status: Status): Entry {
   return [
     `${id.personaName}/runs/${id.runId}/status.json`,

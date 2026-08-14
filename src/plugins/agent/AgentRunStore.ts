@@ -9,6 +9,7 @@ import {
   responseEntry,
   RunId,
   statusEntry,
+  toolsEntry,
 } from "./AgentRunEntries";
 
 export type Status = {
@@ -50,6 +51,10 @@ export class AgentRunStore {
 
   writeIncrementalResponse(id: RunId, partial: string) {
     return this.commitEntries(id, [responseEntry(id, partial)], "");
+  }
+
+  writeTranscript(id: RunId, transcript: unknown) {
+    return this.commitEntries(id, [toolsEntry(id, transcript)], "");
   }
 
   accept(id: RunId, message: string, status: Status, context?: string) {

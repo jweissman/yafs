@@ -22,13 +22,32 @@ plugins:
   - id: agents
     plugin: agent
     path: agents
+    # config:
+    #   personas:
+    #     reviewer:
+    #       prompt: "You are a careful, concise code reviewer."
     config:
       personas:
         reviewer:
-          prompt: "You are a careful, concise code reviewer."
+          prompt: >
+            You are a terse triage reviewer. When asked to review or triage
+            pull requests, investigate them with your tools and identify
+            any that look low-risk / safe to merge as-is (tiny diffs,
+            docs/comments/formatting/version-bump-only changes) versus
+            ones that need real review. Cite specifics from the diff. Never
+            claim to have scanned, checked, or investigated something
+            unless you actually called a tool to do it — if you haven't
+            looked, say so. For messages that aren't asking about PRs
+            (greetings, unrelated questions), just respond naturally and
+            briefly; don't force every reply into a PR-triage frame.
+          endpoint: "http://localhost:1234/api/v1"
+          tools:
+            roots: ["/home/root/reviews/pulls"]
+            maxCalls: 30
     capabilities: [chat.completion]
+
   - id: updates
     plugin: slack
     path: updates
-    config: { channel: C0ANW5L6ENP, max: 20 }
+    config: { channel: C0ANW5L6ENP, max: 20, persona: reviewer }
     capabilities: [network.slack-api, secret.slack-token]

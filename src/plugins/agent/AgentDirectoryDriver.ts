@@ -2,8 +2,6 @@ import { AbsolutePath } from "../../core/AbsolutePath";
 import { CtlHandler } from "../../protocol/CtlDispatch";
 import { Journal } from "../../protocol/Journal";
 import { MountManager } from "../../mounts/MountManager";
-import { AgentConfig, PersonaConfig } from "../../mounts/types";
-import { ModelClient } from "./ChatCompletionClient";
 import { AgentRunStore } from "./AgentRunStore";
 import { AgentChatStore } from "./AgentChatStore";
 import { recoverAgentRuns } from "./AgentRunRecovery";
@@ -13,12 +11,12 @@ import { AgentTarget, agentTarget, RunContext } from "./AgentTarget";
 import { queuedStatus } from "./AgentStatus";
 import { AgentRequest, parseAgentRequest } from "./AgentRequest";
 import { acceptChatTurn } from "./AgentChatTurn";
-import { AgentRunExecutor } from "./AgentRunExecutor";
+import { AgentClients, AgentRunExecutor } from "./AgentRunExecutor";
 
+export type { AgentClients } from "./AgentRunExecutor";
 type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
 type UnregisterCtl = (path: AbsolutePath) => void;
 type Ctl = { registerCtl: RegisterCtl; unregisterCtl: UnregisterCtl };
-type ModelFor = (persona: PersonaConfig, mount: AgentConfig) => ModelClient;
 type Enqueue = (work: () => Promise<void>) => Promise<void>;
 
 export class AgentDirectoryDriver {
@@ -33,21 +31,25 @@ export class AgentDirectoryDriver {
     journal: Journal,
     enqueue: Enqueue,
     ctl: Ctl,
-    modelFor: ModelFor,
+    clients: AgentClients,
   ) {
-    this.buildStores(journal, enqueue, modelFor);
+    this.buildStores(journal, enqueue, clients);
     this.registration = this.buildRegistration(ctl);
   }
 
-  private buildStores(journal: Journal, enqueue: Enqueue, modelFor: ModelFor) {
+  private buildStores(
+    journal: Journal,
+    enqueue: Enqueue,
+    clients: AgentClients,
+  ) {
     this.runs = new AgentRunStore(this.mounts, journal, enqueue);
     this.chats = new AgentChatStore(this.mounts, journal, enqueue);
     this.cancels = new AgentRunCancellation(this.mounts, this.runs);
-    this.executor = this.buildExecutor(modelFor);
+    this.executor = this.buildExecutor(clients);
   }
 
-  private buildExecutor(modelFor: ModelFor) {
-    return new AgentRunExecutor(this.runs, this.chats, this.cancels, modelFor);
+  private buildExecutor(clients: AgentClients) {
+    return new AgentRunExecutor(this.runs, this.chats, this.cancels, clients);
   }
 
   private buildRegistration({ registerCtl, unregisterCtl }: Ctl) {

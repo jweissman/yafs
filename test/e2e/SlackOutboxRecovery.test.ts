@@ -49,6 +49,8 @@ function fakeClient() {
     history: async () => [],
     identity: async () => "BOT",
     postMessage: () => new Promise<string>(() => undefined),
+    addReaction: async () => {},
+    removeReaction: async () => {},
   };
 }
 
