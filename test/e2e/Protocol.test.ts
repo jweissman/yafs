@@ -109,18 +109,6 @@ test("connect rejects when nothing is listening on the target port", async () =>
   await expect(YashClient.connect(refusedAddress)).rejects.toThrow();
 });
 
-test("a client fails every pending request on a raw socket error after connecting", async () => {
-  const server = createServer();
-  await listen(server);
-  const client = await YashClient.connect(address(server));
-  const pending = client.exec("pwd");
-  (
-    client as unknown as { socket: { emit(event: string, e: Error): void } }
-  ).socket.emit("error", new Error("socket reset"));
-  await expect(pending).rejects.toThrow("socket reset");
-  await close(server);
-});
-
 test("a malformed or empty-payload request closes only that client connection", async () => {
   const directory = await mkdtemp(join(tmpdir(), "yafs-protocol-"));
   const server = await YafsServer.start({

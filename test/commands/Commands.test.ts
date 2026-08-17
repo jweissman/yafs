@@ -64,6 +64,10 @@ test("read-only text commands query virtual files without host processes", () =>
   expect(yafs.exec("tail -n 1 words")).toBe("alphabet");
   expect(yafs.exec("wc -l words")).toBe("3");
   expect(yafs.exec("grep beta words")).toBe("beta");
+  expect(yafs.exec("grep -i ALPHA words")).toBe("alpha\nalphabet");
+  expect(yafs.exec("grep -v alpha words")).toBe("beta");
+  expect(yafs.exec("grep -c alpha words")).toBe("2");
+  expect(yafs.exec("grep -l alpha words")).toBe("/home/root/words");
   expect(yafs.execute("head words").stderr).toContain(
     "head requires -n COUNT PATH",
   );

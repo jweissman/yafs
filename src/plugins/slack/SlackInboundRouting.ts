@@ -63,8 +63,20 @@ interface DispatchRequest {
 
 function dispatch(options: RouteOptions, request: DispatchRequest) {
   const { personaPath, chatId, message, runId } = request;
-  const body = { message: content(options.botUserId, message), chatId, runId };
+  const text = content(options.botUserId, message);
+  logInbound(options.persona, runId, text);
+  const body = { message: text, chatId, runId };
   return options.dispatchCtl(ctlPath(personaPath), JSON.stringify(body));
+}
+
+// Fires once per message actually routed (not per poll tick -- see
+// SlackInboundPoller.ts's own logging, which is silenced when nothing
+// routes), so it stays proportionate to real activity. Without this, the
+// only way to see what a persona was actually asked was to already know
+// its runId and go read request.md -- there was no way to watch inbound
+// traffic as it happened.
+function logInbound(persona: string, runId: string, text: string) {
+  console.log(`agent inbound: persona=${persona} runId=${runId} "${text}"`);
 }
 
 function content(botUserId: string, message: SlackMessage): string {

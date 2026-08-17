@@ -985,7 +985,11 @@ Resolving the six contracts the original decision left open:
    suite, which exercise these flows on every `bun test` run rather than
    requiring a human to remember to walk through a runbook.
 
-**Revised M7 exit criterion** (matches what is actually checkable today):
+**M7.0 exit criterion** (matches what is actually checkable today —
+see [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)'s "M7.0" section for why
+this is named M7.0, not M7: a supervised, single-persona,
+explicit-invocation spike, not durable multi-speaker semantics plus an
+orchestration decision, which is what "M7 complete" is reserved for):
 from ordinary files under `agents/<persona>/`, an operator can see who said
 what and in what order (`chats/<chatId>/messages.ndjson`), which run produced
 which reply and when (`runs/<runId>/status.json`), why an automated turn
@@ -1488,7 +1492,13 @@ an alternative action or authorization path.
   authorization design.
 - **FUSE:** FUSE is a possible local, read-only adapter after provider read
   semantics stabilize. It is not an M5 prerequisite, a POSIX-conformance
-  promise, or a bypass for mount capabilities/provider write policy.
+  promise, or a bypass for mount capabilities/provider write policy. It must
+  project one already-published Yafs revision and make its cache policy
+  explicit: kernel page caching can return bytes without another daemon read,
+  while direct I/O avoids that cache at a performance cost. Neither choice can
+  turn a pathname lookup into a provider fetch. Start only when a real host
+  application needs POSIX-shaped browse access that the typed RPC/MCP surface
+  cannot provide; do not use FUSE as an integration shortcut for agents.
 - **Wire-protocol gateways are adapters, and a different thing from Yash
   commands with similar-sounding semantics.** A Yash command like `cache put
 --ttl` only ever serves yash/RPC clients — it is not compatibility with

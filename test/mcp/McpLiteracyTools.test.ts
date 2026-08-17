@@ -15,6 +15,7 @@ test("literacy tools validate individual field types, not just presence", () => 
   invalid("yafs.grep", { pattern: "x", paths: [123] });
   invalid("yafs.find", { path: "/", pattern: 123 });
   invalid("yafs.tree", { path: "/", limit: "five" });
+  invalid("yafs.grep", { pattern: "x", paths: ["/"], ignoreCase: "yes" });
 });
 
 test("yafs.find accepts a valid type filter", () => {

@@ -1,15 +1,21 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 import { CommandContext } from "../commands/CommandContext";
 import { GrepMatch } from "./WorkspaceOperation";
-import { WorkspaceWalker } from "./WorkspaceWalker";
-import { expandGlob } from "./WorkspaceGlob";
+import { targetsFor } from "./WorkspaceGrepTargets";
 
-const DIRECTORY_WALK_DEPTH = 10;
-const DIRECTORY_WALK_LIMIT = 5000;
+export interface GrepOptions {
+  limit?: number;
+  ignoreCase?: boolean;
+  invert?: boolean;
+  countOnly?: boolean;
+  filesOnly?: boolean;
+}
 
 export interface GrepResult {
   matches: GrepMatch[];
   truncated: boolean;
+  count: number;
+  files: AbsolutePath[];
 }
 
 // Bounded exploratory read, same family as tree/find: a caller (often an
@@ -20,69 +26,82 @@ export function grep(
   context: CommandContext,
   pattern: string,
   paths: string[],
-  limit = 10000,
+  options: GrepOptions = {},
 ): GrepResult {
-  const found = paths.flatMap((value) => matchesAt(context, pattern, value));
-  return bounded(found, limit);
+  return summarized(foundMatches(context, pattern, paths, options), options);
 }
 
-function bounded(matches: GrepMatch[], limit: number): GrepResult {
+function foundMatches(
+  context: CommandContext,
+  pattern: string,
+  paths: string[],
+  options: GrepOptions,
+): GrepMatch[] {
+  return paths.flatMap((value) =>
+    matchesAt(context, pattern, value, options),
+  );
+}
+
+// count/files reflect every match found (before `limit` truncates the
+// detail view), and matches itself is suppressed for countOnly/filesOnly
+// -- the whole point of asking for either is to avoid paying to receive
+// full match detail when only the aggregate is wanted (mirrors why the
+// review-radar persona prompt asks for a broad, cheap scan before a full
+// read: an agent counting "how many diffs mention TODO" shouldn't have to
+// download every line to get that number).
+function summarized(found: GrepMatch[], options: GrepOptions): GrepResult {
+  const limit = options.limit ?? 10_000;
+  const suppressed = Boolean(options.countOnly) || Boolean(options.filesOnly);
   return {
-    matches: matches.slice(0, limit),
-    truncated: matches.length > limit,
+    ...detail(found, limit, suppressed),
+    count: found.length,
+    files: [...new Set(found.map((match) => match.path))],
   };
 }
 
-function matchesAt(context: CommandContext, pattern: string, value: string) {
-  return targetsFor(context, value).flatMap((path) =>
-    matches(context, pattern, path),
-  );
+function detail(found: GrepMatch[], limit: number, suppressed: boolean) {
+  return {
+    matches: suppressed ? [] : found.slice(0, limit),
+    truncated: !suppressed && found.length > limit,
+  };
 }
 
-// A path element may be a literal file, a literal directory (searched
-// recursively across every file beneath it), or contain a single
-// wildcard segment (e.g. "pulls/*/diff.patch") -- expanded against real
-// directory listings, since the model has no shell to glob with itself.
-// Live-observed failure this fixes: an agent tried exactly that glob,
-// got a hard "no such file" for the literal `*` path, and (not told the
-// call had failed rather than matched nothing) went on to narrate having
-// reviewed several diffs it never actually read.
-function targetsFor(context: CommandContext, value: string): AbsolutePath[] {
-  const roots = value.includes("*")
-    ? expandGlob(context, value)
-    : [context.resolve(value)];
-  return roots.flatMap((path) => filesAt(context, path));
-}
-
-function filesAt(context: CommandContext, path: AbsolutePath): AbsolutePath[] {
-  return context.type(path, false) === "directory"
-    ? filesUnder(context, path)
-    : [path];
-}
-
-function filesUnder(
+function matchesAt(
   context: CommandContext,
+  pattern: string,
+  value: string,
+  options: GrepOptions,
+) {
+  return targetsFor(context, value).flatMap((path) =>
+    matches(context, pattern, path, options),
+  );
+}
+
+function matches(
+  context: CommandContext,
+  pattern: string,
   path: AbsolutePath,
-): AbsolutePath[] {
-  return directoryWalker(context)
-    .all(path)
-    .filter((entry) => entry.type === "file")
-    .map((entry) => entry.path);
+  options: GrepOptions,
+): GrepMatch[] {
+  const needle = options.ignoreCase ? pattern.toLowerCase() : pattern;
+  return lineMatches(lines(context.read(path)), needle, options, path);
 }
 
-function directoryWalker(context: CommandContext) {
-  return new WorkspaceWalker(
-    context,
-    DIRECTORY_WALK_DEPTH,
-    DIRECTORY_WALK_LIMIT,
-    false,
+function lineMatches(
+  textLines: string[],
+  needle: string,
+  options: GrepOptions,
+  path: AbsolutePath,
+): GrepMatch[] {
+  return textLines.flatMap((text, index) =>
+    isMatch(text, needle, options) ? [{ path, line: index + 1, text }] : [],
   );
 }
 
-function matches(context: CommandContext, pattern: string, path: AbsolutePath) {
-  return lines(context.read(path)).flatMap((text, index) =>
-    text.includes(pattern) ? [{ path, line: index + 1, text }] : [],
-  );
+function isMatch(text: string, needle: string, options: GrepOptions): boolean {
+  const haystack = options.ignoreCase ? text.toLowerCase() : text;
+  const found = haystack.includes(needle);
+  return options.invert ? !found : found;
 }
 
 function lines(value: string) {

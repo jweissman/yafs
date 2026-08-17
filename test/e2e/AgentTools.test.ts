@@ -33,7 +33,7 @@ async function assertFirstTurn(yash: YashClient, calls: LmStudioTurnRequest[]) {
   await send(yash, "run-1", "hi", "c1");
   await waitForComplete(yash, "run-1");
   expect(await yash.exec("cat agents/reviewer/runs/run-1/response.md")).toBe(
-    "Looks fine.\n\n---\n1 tool call(s) in 0s.",
+    "Looks fine.\n\n---\n1 tool call(s) this turn, in 0s.",
   );
   const transcript = parseJson(
     await yash.exec("cat agents/reviewer/runs/run-1/tools.json"),

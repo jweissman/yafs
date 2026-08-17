@@ -1,27 +1,55 @@
 import { BuiltinCommand } from "./BuiltinCommand";
 import { CommandContext } from "./CommandContext";
-import { grep } from "../operations/WorkspaceGrep";
+import { grep, GrepResult } from "../operations/WorkspaceGrep";
+
+const FLAGS = new Set(["-n", "-i", "-v", "-c", "-l"]);
 
 export class GrepCommand implements BuiltinCommand {
   readonly name = "grep";
-  readonly synopsis = "grep [-n] PATTERN PATH...";
+  readonly synopsis = "grep [-n] [-i] [-v] [-c] [-l] PATTERN PATH...";
   readonly access = "read" as const;
   constructor() {}
   execute(context: CommandContext, args: string[]) {
     const query = this.arguments(args);
-    return grep(context, query.pattern, query.paths)
-      .matches.map((match) => `${this.prefix(query, match.line - 1)}${match.text}`)
-      .join("\n");
+    const result = grep(context, query.pattern, query.paths, {
+      ignoreCase: query.flags.has("-i"),
+      invert: query.flags.has("-v"),
+      countOnly: query.flags.has("-c"),
+      filesOnly: query.flags.has("-l"),
+    });
+    return render(query, result);
   }
   private arguments(args: string[]) {
-    const numbered = args[0] === "-n";
-    const values = numbered ? args.slice(1) : args;
-    if (values.length < 2) {
+    const { flags, rest } = takeFlags(args);
+    if (rest.length < 2) {
       throw new Error("grep requires a pattern and path");
     }
-    return { numbered, pattern: values[0], paths: values.slice(1) };
+    return { flags, pattern: rest[0], paths: rest.slice(1) };
   }
-  private prefix(query: { numbered: boolean }, index: number) {
-    return query.numbered ? `${String(index + 1)}:` : "";
+}
+
+function takeFlags(args: string[]) {
+  const flags = new Set<string>();
+  let index = 0;
+  while (index < args.length && FLAGS.has(args[index])) {
+    flags.add(args[index]);
+    index += 1;
   }
+  return { flags, rest: args.slice(index) };
+}
+
+function render(query: { flags: Set<string> }, result: GrepResult): string {
+  if (query.flags.has("-c")) {
+    return String(result.count);
+  }
+  if (query.flags.has("-l")) {
+    return result.files.join("\n");
+  }
+  return renderMatches(query.flags.has("-n"), result);
+}
+
+function renderMatches(numbered: boolean, result: GrepResult): string {
+  return result.matches
+    .map((match) => `${numbered ? `${String(match.line)}:` : ""}${match.text}`)
+    .join("\n");
 }

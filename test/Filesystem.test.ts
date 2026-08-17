@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import Yafs from "../src";
+import { activateDesired } from "./desired_mount_helpers";
 
 test("introspection commands describe the session and mounted unions", () => {
   const yafs = new Yafs();
@@ -66,6 +67,101 @@ test("rm -r removes a non-empty directory tree", () => {
   expect(() => yafs.exec("rmdir docs")).toThrow("Directory not empty");
   expect(yafs.exec("rm -r docs")).toBe("");
   expect(yafs.execute("stat docs").error?.code).toBe("not_found");
+});
+
+test("cp copies a file, leaving the source in place", () => {
+  const yafs = new Yafs();
+  yafs.exec("echo hello > note");
+  expect(yafs.exec("cp note copy")).toBe("");
+  expect(yafs.exec("cat copy")).toBe("hello");
+  expect(yafs.exec("cat note")).toBe("hello");
+});
+
+test("cp without -r rejects a directory source", () => {
+  const yafs = new Yafs();
+  yafs.exec("mkdir docs");
+  expect(() => yafs.exec("cp docs docs2")).toThrow(
+    "is a directory (not copied, use -r)",
+  );
+});
+
+test("cp -r copies a directory tree, including nested symlinks", () => {
+  const yafs = new Yafs();
+  yafs.exec("mkdir docs");
+  yafs.exec("echo guide > docs/guide.md");
+  yafs.exec("mkdir docs/nested");
+  yafs.exec("echo deep > docs/nested/file.md");
+  yafs.exec("ln -s guide.md docs/latest");
+  expect(yafs.exec("cp -r docs archive")).toBe("");
+  expect(yafs.exec("cat archive/guide.md")).toBe("guide");
+  expect(yafs.exec("cat archive/nested/file.md")).toBe("deep");
+  expect(yafs.exec("readlink archive/latest")).toBe("guide.md");
+  // The source is untouched by cp.
+  expect(yafs.exec("cat docs/guide.md")).toBe("guide");
+});
+
+test("cp refuses to copy out of a read-only provider mount into itself, but reading the source is fine", async () => {
+  const yafs = new Yafs();
+  await activateDesired(
+    yafs,
+    "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}",
+  );
+  expect(yafs.exec("cp fixture/hello.txt copy")).toBe("");
+  expect(yafs.exec("cat copy")).toBe("hello");
+});
+
+test("mv renames a file, removing the source", () => {
+  const yafs = new Yafs();
+  yafs.exec("echo hello > note");
+  expect(yafs.exec("mv note renamed")).toBe("");
+  expect(yafs.exec("cat renamed")).toBe("hello");
+  expect(yafs.execute("cat note").error?.code).toBe("not_found");
+});
+
+test("mv moves a whole directory tree", () => {
+  const yafs = new Yafs();
+  yafs.exec("mkdir docs");
+  yafs.exec("echo guide > docs/guide.md");
+  yafs.exec("mkdir docs/nested");
+  yafs.exec("echo deep > docs/nested/file.md");
+  expect(yafs.exec("mv docs archive")).toBe("");
+  expect(yafs.exec("cat archive/guide.md")).toBe("guide");
+  expect(yafs.exec("cat archive/nested/file.md")).toBe("deep");
+  expect(yafs.execute("stat docs").error?.code).toBe("not_found");
+});
+
+test("mv out of a read-only provider mount is rejected atomically -- no copy lands, source untouched", async () => {
+  const yafs = new Yafs();
+  await activateDesired(
+    yafs,
+    "{version: 1, mounts: [{id: demo, path: fixture, provider: fixture, config: {files: {hello.txt: hello}}, capabilities: []}]}",
+  );
+  expect(yafs.execute("mv fixture/hello.txt moved").error?.code).toBe(
+    "read_only_mount",
+  );
+  // A command's queued operations are validated as one batch before any
+  // of them apply, so the write half of mv never lands just because the
+  // removeTree half would fail -- better than the copy-then-remove
+  // partial-failure this test originally (incorrectly) expected.
+  expect(yafs.execute("cat moved").error?.code).toBe("not_found");
+  expect(yafs.exec("cat fixture/hello.txt")).toBe("hello");
+});
+
+test("du reports a single file's own byte size", () => {
+  const yafs = new Yafs();
+  yafs.exec("echo hello > note");
+  expect(yafs.exec("du note")).toBe("files: 1\nbytes: 5");
+});
+
+test("du sums files and bytes recursively across a directory tree", () => {
+  const yafs = new Yafs();
+  yafs.exec("mkdir docs");
+  yafs.exec("echo guide > docs/guide.md");
+  yafs.exec("mkdir docs/nested");
+  yafs.exec("echo deep > docs/nested/file.md");
+  yafs.exec("ln -s guide.md docs/latest");
+  // 2 real files + 1 symlink (0 bytes of its own) = 3 files.
+  expect(yafs.exec("du docs")).toBe("files: 3\nbytes: 9");
 });
 
 test("touch on an already-existing file updates its modified time without erroring", () => {

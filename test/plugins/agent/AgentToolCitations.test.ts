@@ -40,7 +40,7 @@ test("citationsFooter cites the real PR link and title from read/inspect calls, 
     ],
   };
   expect(citationsFooter(yafs.mounts, turn, 4_000)).toBe(
-    "\n\n---\n3 tool call(s) in 4s. Viewed:\n" +
+    "\n\n---\n3 tool call(s) this turn, in 4s. Viewed:\n" +
       "- <https://github.com/acme/widget/pull/42|#42 Add widget polish>",
   );
 });
@@ -65,7 +65,7 @@ test("citationsFooter escapes a title's own markdown-significant characters", as
     ],
   };
   expect(citationsFooter(yafs.mounts, turn, 1_000)).toBe(
-    "\n\n---\n1 tool call(s) in 1s. Viewed:\n" +
+    "\n\n---\n1 tool call(s) this turn, in 1s. Viewed:\n" +
       "- <https://github.com/acme/widget/pull/42|#42 B_read/applicant_vets_letter " +
       "&lt;history&gt; &amp; logic / notes>",
   );
@@ -91,7 +91,7 @@ test("citationsFooter links to the configured GitHub host, not a hardcoded githu
     ],
   };
   expect(citationsFooter(yafs.mounts, turn, 1_000)).toBe(
-    "\n\n---\n1 tool call(s) in 1s. Viewed:\n" +
+    "\n\n---\n1 tool call(s) this turn, in 1s. Viewed:\n" +
       "- <https://va.ghe.com/acme/widget/pull/42|#42 Add widget polish>",
   );
 });
@@ -105,7 +105,7 @@ test("citationsFooter reports elapsed time in minutes and seconds once it crosse
     ],
   };
   expect(citationsFooter(mounts, turn, 65_000)).toBe(
-    "\n\n---\n1 tool call(s) in 1m05s.",
+    "\n\n---\n1 tool call(s) this turn, in 1m05s.",
   );
 });
 
@@ -118,14 +118,56 @@ test("citationsFooter reports the call count with no Viewed list when nothing re
     ],
   };
   expect(citationsFooter(mounts, turn, 1_000)).toBe(
-    "\n\n---\n1 tool call(s) in 1s.",
+    "\n\n---\n1 tool call(s) this turn, in 1s.",
   );
 });
 
-test("citationsFooter is empty when no tool was called", () => {
+// Regression coverage for a real live bug: a resourceReference persisted
+// before `url` was added to the shape (an unrefreshed mount snapshot from
+// before this session's fix) rendered as a literal "<undefined|...>" link
+// in Slack, because the field was interpolated unchecked. A reference
+// missing a field this citation needs should be skipped, not rendered
+// broken -- the mount's own refresh cycle will pick up the new shape.
+test("citationsFooter skips a resourceReference missing a field added after it was persisted", () => {
+  const staleMounts = {
+    resourceReference: () => ({
+      kind: "github-pr",
+      repository: "acme/widget",
+      number: 42,
+      headSha: "abc123",
+      title: "Old shape, persisted before url existed",
+      // url intentionally absent.
+    }),
+  } as unknown as MountManager;
+  const turn: LmStudioTurn = {
+    output: [
+      {
+        type: "tool_call",
+        tool: "yafs.read",
+        arguments: { path: "/world/github/acme/widget/pulls/42/diff.patch" },
+        output: "...",
+      },
+    ],
+  };
+  expect(citationsFooter(staleMounts, turn, 1_000)).toBe(
+    "\n\n---\n1 tool call(s) this turn, in 1s.",
+  );
+});
+
+// Regression coverage for a real live failure: asked to "review 29795
+// carefully," a persona's own reasoning said "already did [read the
+// diff]," made zero tool calls, and invented a specific, false claim
+// ("a quick grep across the repo shows no remaining hard-coded
+// instances") that couldn't have happened -- the mount holds one PR's
+// diff/metadata, never a checked-out repo. An empty footer gave zero
+// signal that nothing was freshly checked; this is the one case where
+// the footer matters most, so it must never go silent.
+test("citationsFooter explicitly warns when zero tools were called, rather than staying silent", () => {
   const mounts = new MountManager(new NodeStore());
   const turn: LmStudioTurn = { output: [{ type: "message", content: "Hi." }] };
-  expect(citationsFooter(mounts, turn, 1_000)).toBe("");
+  expect(citationsFooter(mounts, turn, 1_000)).toBe(
+    "\n\n---\n0 tool calls this turn (1s) -- nothing above was freshly verified.",
+  );
 });
 
 test("citationsFooter omits a read with no provider reference", () => {
@@ -141,7 +183,7 @@ test("citationsFooter omits a read with no provider reference", () => {
     ],
   };
   expect(citationsFooter(mounts, turn, 1_000)).toBe(
-    "\n\n---\n1 tool call(s) in 1s.",
+    "\n\n---\n1 tool call(s) this turn, in 1s.",
   );
 });
 

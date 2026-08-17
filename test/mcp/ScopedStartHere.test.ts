@@ -56,6 +56,7 @@ function baseValue(): StartHereValue {
     kind: "startHere",
     principal: "root",
     cwd: "/home/root",
+    now: "2026-08-17T00:00:00.000Z",
     scoped: false,
     recommendedFirst: [],
     mounts: [

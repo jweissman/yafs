@@ -17,7 +17,16 @@ export type WorkspaceOperation =
   | { name: "diff"; left: string; right: string; limit?: number }
   | { name: "capture"; source: string; artifact: string; limit?: number }
   | { name: "restore"; artifact: string; destination: string }
-  | { name: "grep"; pattern: string; paths: string[]; limit?: number }
+  | {
+      name: "grep";
+      pattern: string;
+      paths: string[];
+      limit?: number;
+      ignoreCase?: boolean;
+      invert?: boolean;
+      countOnly?: boolean;
+      filesOnly?: boolean;
+    }
   | { name: "startHere" };
 
 export type NodeType = "file" | "directory" | "symlink";
@@ -31,7 +40,13 @@ export type WorkspaceValue =
   | { kind: "find"; paths: AbsolutePath[]; truncated: boolean }
   | { kind: "test"; value: boolean }
   | { kind: "diff"; changes: DiffChange[] }
-  | { kind: "grep"; matches: GrepMatch[]; truncated: boolean }
+  | {
+      kind: "grep";
+      matches: GrepMatch[];
+      truncated: boolean;
+      count: number;
+      files: AbsolutePath[];
+    }
   | CaptureValue
   | RestoreValue
   | StartHereValue;
@@ -80,6 +95,7 @@ export interface StartHereValue {
   kind: "startHere";
   principal: string;
   cwd: AbsolutePath;
+  now: string;
   mounts: MountSummary[];
   scoped: boolean;
   roots?: string[];

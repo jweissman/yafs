@@ -22,7 +22,7 @@ function matches(entry: TreeEntry, pattern?: string, type?: NodeType) {
   );
 }
 
-function wildcard(value: string, pattern: string) {
+export function wildcard(value: string, pattern: string) {
   const parts = pattern.split("*");
   return (
     begins(value, parts[0]) &&

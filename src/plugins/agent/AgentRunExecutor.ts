@@ -50,6 +50,7 @@ export class AgentRunExecutor {
   ) {
     const reply = await this.completion(target, context, request);
     await finishAgentRun(this.dependencies, context, request, reply);
+    logRun(context, "complete");
   }
 
   private completion(
@@ -83,12 +84,23 @@ export class AgentRunExecutor {
   }
 
   private fail(context: RunContext, error: unknown) {
+    logRun(context, "failed", error);
     return this.writeStatus(context, failedStatus(context.startedAt, error));
   }
 
   private writeStatus(context: RunContext, status: Status) {
     return this.dependencies.runs.writeStatus(context, status);
   }
+}
+
+// Run failures were previously silent server-side -- the only way to
+// notice one happened was to already know the runId and go read
+// status.json. A timeout or a rejected tool call should be visible in
+// `yafsd logs -f` as it happens, not just discoverable after the fact.
+function logRun(context: RunContext, state: "complete" | "failed", error?: unknown) {
+  const { mountId, personaName, runId } = context;
+  const detail = error instanceof Error ? `: ${error.message}` : "";
+  console.log(`agent run ${state}: persona=${mountId}/${personaName} runId=${runId}${detail}`);
 }
 
 function textDependencies(dependencies: AgentRunDependencies) {

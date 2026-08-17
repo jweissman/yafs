@@ -39,6 +39,9 @@ test("yafs.start_here reports principal, cwd, mounts, and an unscoped default", 
   }
   expect(Array.isArray(value.mounts)).toBe(true);
   expect(value.recommendedFirst.length).toBeGreaterThan(0);
+  // Without this, a persona could compare mount/PR timestamps to each
+  // other but never to "now," so it had no way to reason about staleness.
+  expect(value.now).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
 });
 
 test("a typed workspace operation returns a structured failure", () => {

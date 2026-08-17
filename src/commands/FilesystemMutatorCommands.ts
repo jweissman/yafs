@@ -4,6 +4,8 @@ import { RmCommand } from "./RmCommand";
 import { RmdirCommand } from "./RmdirCommand";
 import { LnCommand } from "./LnCommand";
 import { UnionCommand } from "./UnionCommand";
+import { CpCommand } from "./CpCommand";
+import { MvCommand } from "./MvCommand";
 
 export function filesystemMutatorCommands() {
   return [
@@ -12,6 +14,10 @@ export function filesystemMutatorCommands() {
     new RmCommand(),
     new RmdirCommand(),
     new LnCommand(),
-    new UnionCommand(),
+    ...moreMutatorCommands(),
   ];
+}
+
+function moreMutatorCommands() {
+  return [new UnionCommand(), new CpCommand(), new MvCommand()];
 }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { GitHubConfig } from "../../mounts/types";
+import { pullMetadata } from "./GitHubPullMetadata";
 
 export interface GitHubPull {
   number: number;
@@ -8,6 +9,18 @@ export interface GitHubPull {
   updatedAt: string;
   headSha: string;
   diff: string;
+  author?: string;
+  draft?: boolean;
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
+  body?: string;
+  createdAt?: string;
+  comments?: number;
+  reviewComments?: number;
+  mergeableState?: string;
+  labels?: string[];
+  htmlUrl?: string;
 }
 export interface GitHubClient {
   pulls(config: GitHubConfig): Promise<GitHubPull[]>;
@@ -66,13 +79,19 @@ export class GitHubCollectionSource {
       ]),
     );
   }
+  // Prefer GitHub's own html_url over constructing one from webUrl: GitHub
+  // is the authoritative source for its own URLs, so this can't drift out
+  // of sync with a real deployment's host the way a manually-constructed
+  // one already did once (github.com hardcoded against a real GHEC repo).
+  // The constructed form stays as a fallback for callers/fixtures that
+  // don't supply htmlUrl.
   private reference(
     config: GitHubConfig,
     pull: GitHubPull,
   ): GitHubResourceReference {
-    const { number, headSha, title } = pull;
+    const { number, headSha, title, htmlUrl } = pull;
     const { repository } = config;
-    const url = `${this.webUrl}/${repository}/pull/${String(number)}`;
+    const url = htmlUrl ?? `${this.webUrl}/${repository}/pull/${String(number)}`;
     return { kind: "github-pr", repository, number, headSha, title, url };
   }
   private revision(pulls: GitHubPull[]) {
@@ -90,11 +109,3 @@ export function pullFile(pull: GitHubPull, name: string): string | undefined {
   return undefined;
 }
 
-function pullMetadata(pull: GitHubPull) {
-  return {
-    number: pull.number,
-    title: pull.title,
-    updatedAt: pull.updatedAt,
-    headSha: pull.headSha,
-  };
-}

@@ -348,10 +348,11 @@ which is separately tracked, not implied by a milestone checkbox.
   recovery, since a half-sent Slack post may already have landed. See
   `SlackOutboxStore`/`SlackOutboxStatus`/`SlackOutboxRecovery` and
   `test/e2e/SlackOutboxRecovery.test.ts` for the exercised recovery paths.
-- M7's first stage (a bounded, explicit-invocation local conversation, plus a
-  one-way Slack bridge into it) is implemented; see the M7 checkpoint below
-  and the ADR's revised "M7 decision" section for what shipped versus the
-  original channel design.
+- M7.0 (a bounded, explicit-invocation, single-persona local conversation,
+  plus a one-way Slack bridge into it) is **complete** — full M7 (durable
+  multi-speaker semantics plus a deliberate orchestration decision) is not
+  yet begun; see the M7.0 checkpoint below and the ADR's "M7 decision"
+  section for what shipped versus the original channel design.
 - M6.5 (bounded agent evidence tools) is **implemented**: a tool-enabled
   persona's requests go through LM Studio's native `/api/v1/chat` +
   `integrations` mechanism (LM Studio drives its own tool loop; Yafs never
@@ -725,14 +726,14 @@ the same shape `agent send` already proved for run acceptance; a generic
 action-dispatch path shared between `agent send` and `slack send` is the
 target, not two parallel bespoke mechanisms.
 
-**Why this gated M7's Slack outbox:** M7's local channel adds a Slack "reply"
-action on top of `slack send`. Building that before this milestone would mean
-the reply path sat in front of a write that could still silently double-post
-or lose the record of what it sent — the durability has to exist under the
-mechanism before anything (a human approval, an automatic reply) is asked to
-trust an action built on top of it.
+**Why this gated M7.0's Slack outbox:** M7.0's local channel adds a Slack
+"reply" action on top of `slack send`. Building that before this milestone
+would mean the reply path sat in front of a write that could still silently
+double-post or lose the record of what it sent — the durability has to
+exist under the mechanism before anything (a human approval, an automatic
+reply) is asked to trust an action built on top of it.
 
-**Implemented.** Both `slack send` and the M7 inbound bridge's reply leg now
+**Implemented.** Both `slack send` and the M7.0 inbound bridge's reply leg now
 accept into a durable per-action outbox (`SlackOutboxStore`, entries at
 `outbox/<actionId>/{message.md,status.json}`) before the ctl write returns —
 the same accept-then-transition durability `AgentRunStore` already proved for
@@ -749,7 +750,18 @@ recovery coverage.
 across Yash, MCP, and future web adapters. L1's read/evidence toolbox may run
 in parallel. M7 does not require scripts, iteration, or pipelines.
 
-### M7 — Local conversation channel *(first stage prototype)*
+### M7.0 — Local conversation channel *(supervised single-persona spike, complete)*
+
+**Naming split, per review:** calling this milestone "M7" made the ADR's
+"exit criterion... is met" read as if M7 overall were done, when what
+shipped is a narrower, real thing — a supervised, single-persona,
+explicit-invocation spike. **"M7 complete"** is reserved for durable
+multi-speaker/message semantics (stable message IDs, structural
+attribution beyond a name-prefixed string, a real deduplication
+guarantee — see "First stage prototype" below) plus a deliberate
+orchestration decision (subscriptions, automatic turn scheduling,
+budgets, retries, agent-to-agent conversation) — neither of which this
+milestone attempted. Everything below describes what M7.0 actually is.
 
 Checkpoint: a human and named local personas use one durable, append-only
 channel — `agent send`/`agent chat`'s persona-scoped `chats/<chatId>/` history
@@ -887,7 +899,7 @@ rather than only replying to whatever text was pasted in.
 
 ### Later: a provider-neutral event/workflow boundary (not yet scoped)
 
-The M7 Slack bridge's cross-plugin coupling (flagged above) still points at
+The M7.0 Slack bridge's cross-plugin coupling (flagged above) still points at
 a real future need — Slack shouldn't own agent-routing policy, and the
 poller's bespoke dispatch-then-poll-then-reply shape shouldn't be the only
 way an event turns into a bounded action. But per review, this should not
@@ -989,6 +1001,37 @@ faith: the summary matched exactly. This is the fake-model e2e proof
 (`test/e2e/SlackToolEnabledReview.test.ts`) confirmed against a real model
 for the first time.
 
+### Review-radar product validation — next evidence, before broadening scope
+
+The live run proves feasibility once. It does **not** yet prove that Yafs is a
+better appliance than GitHub plus a chat bot. Before adding a broad provider
+catalog, run the same bounded review loop across several real queues and record
+the result in a small scorecard:
+
+| Measure | What to record | Why it matters |
+| --- | --- | --- |
+| Grounding | Candidate PR number, observed mount revision, exact files/tools read | Distinguishes evidence-backed triage from a plausible chat summary. |
+| Usefulness | Whether a human accepted, edited, deferred, or rejected the recommendation | Tests the actual user job, not tool-call completion. |
+| Efficiency | Tool calls, bytes read, elapsed time, and unnecessary full snapshots | Tells us whether `/world` and `start_here` improve discovery rather than merely add ceremony. |
+| Safety | Scope/budget rejection, stale revision, retry, or outbox recovery events | Makes the appliance's claimed control properties visible. |
+
+The first planned scheduled digest (M6.7) should emit the same record. Only
+after comparing it to the Slack-initiated path should Yafs generalize an event
+or workflow runtime. A second provider earns priority only when this scorecard
+identifies context that GitHub cannot supply — for example an incident/alert
+provider needed to explain why a failing PR matters — rather than because the
+plugin architecture has unused capacity.
+
+**Efficiency row is now fillable, not just aspirational:** each tool-enabled
+reply already carries a deterministic receipt (`AgentToolCitations.ts`) —
+tool-call count, elapsed wall-clock time, and which resources were actually
+read, with `runs/<runId>/status.json`'s `durationMs` giving the same number
+structurally. What's still missing for a real scorecard pass: nothing
+currently records byte counts per call, and Grounding/Usefulness/Safety
+still need a human to fill them in by hand (no accept/edit/reject signal
+exists yet — Slack reactions were disabled for missing scope, so that
+channel isn't available without a fresh token grant).
+
 ### `yafs.start_here` — implemented
 
 A single typed, read-only MCP operation (same shape as the existing
@@ -1058,6 +1101,16 @@ were deliberately deferred rather than folded into that work:
   call sites per plugin instead of one declarative registration point.
   Tolerable at four providers; each new plugin makes the seams more
   visible.
+- **Snapshot payload scaling.** A 100-PR GitHub collection has already
+  required a 2 MiB snapshot allowance. Raising a bounded limit is acceptable
+  for the live demo, but copying full provider bytes into every published VFS
+  snapshot and WAL record is not the data-plane shape to scale. The existing
+  blob store is the intended direction: a provider snapshot should become a
+  small immutable manifest/root record whose file bytes are durable,
+  content-addressed payloads. The payloads must be synced before the WAL
+  record that names them; recovery reads only those bytes and never refetches.
+  Compression may be a blob-storage implementation detail later, not the
+  primary scaling strategy or a substitute for deduplication.
 
 **Why before M7, not before this milestone:** M7 ("spaces" — multiple
 personas taking turns, invoking MCP tools mid-generation, per ADR.md's
@@ -1070,8 +1123,15 @@ default pathing, or the M6.5 tool loop, all of which ship first.
 
 **Decision gate, not yet designed:** this entry exists so the reviewer's
 two largest concerns are named and scheduled rather than silently dropped.
-Actual design (an explicit snapshot/overlay split; a single declarative
-plugin-registration surface) is deferred to when M7 work is scoped.
+Actual design (an explicit snapshot/overlay split; content-addressed provider
+payloads; and a single declarative plugin-registration surface) is deferred to
+when M7 work is scoped.
+
+**M6.6 exit evidence:** a repeated snapshot refresh does not duplicate an
+unchanged diff payload in the WAL; runtime writes do not republish provider
+content; and a restart can rebuild the same view from durable manifests and
+payloads with network disabled. This is a scalability/correctness change, not
+a license to make provider reads lazy during ordinary pathname resolution.
 
 ### M6.7 — Scheduled review digest *(second hand-built automation)*
 
@@ -1156,6 +1216,16 @@ trigger arbitrary provider API calls, and how/whether it's audited the
 same way mount activation already is. Scope this for real once M6.7 (or
 whatever next needs it) makes the "we want to check something specific,
 not the whole collection" shape concrete rather than hypothetical.
+
+**GitHub-specific direction, not a new provider yet:** enrich the existing
+repository projection before adding unrelated integrations. A bounded refresh
+can publish PR metadata, changed-file summaries, head-SHA check results, and a
+small recent-commit collection; these are ordinary collection resources with
+known bounds. Full Actions job logs are different: GitHub exposes them through
+a short-lived redirect and they can be large, so they must be fetched only by
+an explicitly authorized, bounded hydrate/capture action that produces a
+durable artifact tied to repository, job, and observed revision. `cat` must
+never become an ambient network call merely because a log-shaped path exists.
 
 ## M5 design gate
 

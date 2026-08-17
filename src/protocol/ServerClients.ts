@@ -23,7 +23,7 @@ function agentClients(options: StartOptions, toolServer: AgentToolServer) {
 
 function slackClients(options: StartOptions) {
   return {
-    slackClientFor: options.slackClientFor ?? (() => defaultSlackClient()),
+    slackClientFor: options.slackClientFor ?? defaultSlackClient,
   };
 }
 

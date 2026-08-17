@@ -4,9 +4,9 @@ import {
   treeTool,
   findTool,
   testTool,
-  grepTool,
   diffTool,
 } from "./LiteracyToolSchemas";
+import { grepTool } from "./LiteracyGrepToolSchema";
 import {
   Arguments,
   tree,

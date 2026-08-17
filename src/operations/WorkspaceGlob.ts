@@ -1,14 +1,21 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 import { CommandContext } from "../commands/CommandContext";
+import { wildcard } from "./WorkspaceFind";
+import { doubleStarMatches } from "./WorkspaceGlobDoubleStar";
+import { safeList, child } from "./WorkspaceGlobSupport";
 
-// Deliberately narrow: one "*" wildcard segment, matching exactly one
-// path component (e.g. "pulls/*/diff.patch"). No "**" (zero-or-more
-// segments) and no character classes/"?" -- those weren't needed yet.
-// "**" is the natural next extension if a caller needs to match across
-// a variable-depth subtree rather than one fixed level: add it as a
-// third branch in childrenMatching() that recurses into every descendant
-// (reusing WorkspaceWalker.all(), the same way filesUnder() already
-// does elsewhere in this operation) instead of just direct children.
+// Two wildcards: "*" matches any substring within exactly one path
+// component -- bare ("pulls/*/diff.patch") or partial, the same pattern
+// language yafs.find's own `pattern` argument already uses ("*.md",
+// "test_*"), reusing that exact matcher rather than a second one. "**"
+// matches zero or more whole components (e.g. "**/diff.patch" reaches any
+// depth). No character classes/"?" -- not needed yet.
+type Matcher = (
+  context: CommandContext,
+  base: AbsolutePath,
+  segment: string,
+) => AbsolutePath[];
+
 export function expandGlob(
   context: CommandContext,
   value: string,
@@ -44,10 +51,24 @@ function childrenMatching(
   base: AbsolutePath,
   segment: string,
 ): AbsolutePath[] {
-  if (segment !== "*") {
-    return fixedChild(context, base, segment);
+  return matcherFor(segment)(context, base, segment);
+}
+
+function matcherFor(segment: string): Matcher {
+  if (segment === "**") {
+    return doubleStarMatches;
   }
-  return safeList(context, base).map((name) => child(base, name));
+  return segment.includes("*") ? wildcardChildren : fixedChild;
+}
+
+function wildcardChildren(
+  context: CommandContext,
+  base: AbsolutePath,
+  segment: string,
+): AbsolutePath[] {
+  return safeList(context, base)
+    .filter((name) => wildcard(name, segment))
+    .map((name) => child(base, name));
 }
 
 function fixedChild(
@@ -59,14 +80,3 @@ function fixedChild(
   return context.exists(path) ? [path] : [];
 }
 
-function safeList(context: CommandContext, base: AbsolutePath): string[] {
-  try {
-    return context.list(base);
-  } catch {
-    return [];
-  }
-}
-
-function child(base: AbsolutePath, name: string): AbsolutePath {
-  return base === "/" ? `/${name}` : `${base}/${name}`;
-}

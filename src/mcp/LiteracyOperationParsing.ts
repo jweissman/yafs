@@ -1,4 +1,14 @@
-import { NodeType, WorkspaceOperation } from "../operations/WorkspaceOperation";
+import { WorkspaceOperation } from "../operations/WorkspaceOperation";
+import {
+  optionalBoolean,
+  optionalInteger,
+  optionalString,
+  optionalType,
+  pathValue,
+  paths,
+  predicate,
+  requiredString,
+} from "./LiteracyValueParsing";
 
 export type Arguments = Record<string, unknown>;
 
@@ -35,6 +45,16 @@ export function grep(input: Arguments): WorkspaceOperation {
     pattern: requiredString(input.pattern),
     paths: paths(input.paths),
     limit: optionalInteger(input.limit),
+    ...grepFlags(input),
+  };
+}
+
+function grepFlags(input: Arguments) {
+  return {
+    ignoreCase: optionalBoolean(input.ignoreCase),
+    invert: optionalBoolean(input.invert),
+    countOnly: optionalBoolean(input.countOnly),
+    filesOnly: optionalBoolean(input.filesOnly),
   };
 }
 
@@ -49,53 +69,4 @@ export function diff(input: Arguments): WorkspaceOperation {
 
 function path(input: Arguments) {
   return pathValue(input.path);
-}
-
-function pathValue(value: unknown) {
-  if (typeof value !== "string" || !value.startsWith("/")) {
-    throw new Error("path must be an absolute Yafs path");
-  }
-  return value;
-}
-
-function paths(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    throw new Error("paths must be an array");
-  }
-  return value.map(requiredString);
-}
-function requiredString(value: unknown): string {
-  if (typeof value !== "string") {
-    throw new Error("value must be a string");
-  }
-  return value;
-}
-
-function predicate(value: unknown): "-e" | "-f" | "-d" | "-L" {
-  if (value === "-e" || value === "-f" || value === "-d" || value === "-L") {
-    return value;
-  }
-  throw new Error("predicate must be one of -e, -f, -d, -L");
-}
-
-function optionalString(value: unknown): string | undefined {
-  if (value === undefined || typeof value === "string") {
-    return value;
-  }
-  throw new Error("value must be a string");
-}
-function optionalInteger(value: unknown): number | undefined {
-  if (value === undefined || Number.isInteger(value)) {
-    return value as number | undefined;
-  }
-  throw new Error("value must be an integer");
-}
-function optionalType(value: unknown): NodeType | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === "file" || value === "directory" || value === "symlink") {
-    return value;
-  }
-  throw new Error("type must be file, directory, or symlink");
 }

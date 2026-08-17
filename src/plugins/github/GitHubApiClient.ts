@@ -5,7 +5,7 @@ import {
 } from "./GitHubCollectionSource";
 import { GitHubConfig } from "../../mounts/types";
 import { GitHubSettings } from "./GitHubSettings";
-import { searchSummary } from "./GitHubApiSummary";
+import { pullFields, searchSummary } from "./GitHubApiSummary";
 import {
   Fetch,
   Pull,
@@ -43,7 +43,7 @@ export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
       number,
       title: details.title,
       updatedAt: details.updated_at,
-      headSha: details.head.sha,
+      ...pullFields(details),
     });
   }
 
@@ -53,7 +53,7 @@ export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
   ): Promise<GitHubPull> {
     const url = this.pullUrl(repository, item.number);
     const details = await this.json<Pull>(url);
-    return this.pullResult(url, searchSummary(item, details.head.sha));
+    return this.pullResult(url, searchSummary(item, details));
   }
 
   private pullUrl(repository: string, number: number) {

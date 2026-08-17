@@ -23,9 +23,9 @@ export class WorkspaceOperations {
           : this.readOperation(operation as ReadOperation);
   }
   private grep(operation: Extract<WorkspaceOperation, { name: "grep" }>) {
-    const { pattern, paths, limit } = operation;
-    const { matches, truncated } = grep(this.context(), pattern, paths, limit);
-    return { kind: "grep" as const, matches, truncated };
+    const { pattern, paths } = operation;
+    const found = grep(this.context(), pattern, paths, grepOptions(operation));
+    return { kind: "grep" as const, ...found };
   }
   private diff(operation: Extract<WorkspaceOperation, { name: "diff" }>) {
     const { left, right, limit } = operation;
@@ -62,3 +62,8 @@ type ReadOperation = Exclude<
   WorkspaceOperation,
   { name: "grep" | "diff" | "capture" | "restore" | "startHere" }
 >;
+
+function grepOptions(operation: Extract<WorkspaceOperation, { name: "grep" }>) {
+  const { limit, ignoreCase, invert, countOnly, filesOnly } = operation;
+  return { limit, ignoreCase, invert, countOnly, filesOnly };
+}

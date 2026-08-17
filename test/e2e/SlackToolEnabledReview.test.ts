@@ -44,7 +44,7 @@ test("a Slack message routed to a tool-enabled persona drives a real tool call b
   expect(state.posted).toEqual([
     {
       channel: "C123",
-      text: "Looks fine, no open PRs need review.\n\n---\n1 tool call(s) in 0s.",
+      text: "Looks fine, no open PRs need review.\n\n---\n1 tool call(s) this turn, in 0s.",
     },
   ]);
   expect(calls).toHaveLength(1);

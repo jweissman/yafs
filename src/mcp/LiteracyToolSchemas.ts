@@ -23,10 +23,14 @@ export function findTool(): Tool {
 }
 
 function findToolResult(properties: object): Tool {
-  return tool("yafs.find", "Find bounded virtual paths.", {
-    properties,
-    required: ["path"],
-  });
+  return tool(
+    "yafs.find",
+    "Find bounded virtual paths whose FILE NAME matches pattern (e.g. " +
+      '"*.md") -- pattern is matched against the name only, never file ' +
+      "content. To search inside files for a piece of text or a JSON " +
+      "field's value, use yafs.grep instead.",
+    { properties, required: ["path"] },
+  );
 }
 
 export function testTool(): Tool {
@@ -37,25 +41,12 @@ export function testTool(): Tool {
   });
 }
 
-export function grepTool(): Tool {
-  const properties = {
-    pattern: string(),
-    paths: { type: "array", items: string() },
-    limit: integer(),
-  };
-  return grepToolResult(properties);
-}
-
-function grepToolResult(properties: object): Tool {
-  return tool("yafs.grep", "Find literal text in virtual files.", {
-    properties,
-    required: ["pattern", "paths"],
-  });
-}
-
 export function diffTool(): Tool {
   const properties = { left: string(), right: string(), limit: integer() };
-  return tool("yafs.diff", diffDescription(), { properties, required: ["left", "right"] });
+  return tool("yafs.diff", diffDescription(), {
+    properties,
+    required: ["left", "right"],
+  });
 }
 
 function diffDescription(): string {
@@ -70,7 +61,7 @@ interface ToolSpec {
   required: string[];
 }
 
-function tool(name: string, description: string, spec: ToolSpec): Tool {
+export function tool(name: string, description: string, spec: ToolSpec): Tool {
   return { name, description, inputSchema: schema(spec) };
 }
 
@@ -83,9 +74,12 @@ function schema(spec: ToolSpec) {
   };
 }
 
-function string() {
+export function string() {
   return { type: "string" };
 }
-function integer() {
+export function integer() {
   return { type: "integer", minimum: 0 };
+}
+export function boolean() {
+  return { type: "boolean" };
 }

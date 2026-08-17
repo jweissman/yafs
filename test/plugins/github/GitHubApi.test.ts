@@ -20,6 +20,7 @@ test("the GitHub API client queries a bounded collection and fetches each immuta
       updatedAt: "2026-08-03T00:00:00Z",
       headSha: "abc123",
       diff: "diff --git",
+      labels: [],
     },
   ]);
   assertExpectedRequests(requests);
@@ -38,6 +39,76 @@ function assertExpectedRequests(requests: Request[]) {
   ).toBe(true);
 }
 
+// Regression coverage for real, useful data yafs was discarding: author,
+// draft status, and diff-size stats all come back on the same per-PR GET
+// already made for head.sha -- no extra request needed, just fields that
+// were being read past.
+test("the GitHub API client carries author, draft status, and diff-size stats through, at no extra request cost", async () => {
+  const requests: Request[] = [];
+  const client = new GitHubApiClient(
+    { apiUrl: "https://github.test", token: "secret" },
+    richFetch(requests),
+  );
+  const pulls = await client.pulls({
+    repository: "acme/widget",
+    query: "is:pr is:open",
+    max: 1,
+  });
+  expect(pulls).toEqual([
+    {
+      number: 42,
+      title: "Improve resolver",
+      updatedAt: "2026-08-03T00:00:00Z",
+      headSha: "abc123",
+      diff: "diff --git",
+      author: "octocat",
+      draft: true,
+      additions: 30,
+      deletions: 4,
+      changedFiles: 2,
+      body: "Fixes the thing.",
+      createdAt: "2026-08-01T00:00:00Z",
+      comments: 3,
+      reviewComments: 8,
+      mergeableState: "blocked",
+      labels: ["require-backend-approval"],
+      htmlUrl: "https://github.test/acme/widget/pull/42",
+    },
+  ]);
+  expect(requests).toHaveLength(3);
+});
+
+function richFetch(requests: Request[]) {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(new Request(input, init));
+    if (requests.length === 1) {
+      return json({
+        items: [
+          { number: 42, title: "Improve resolver", updated_at: "2026-08-03T00:00:00Z" },
+        ],
+      });
+    }
+    if (requests.length === 2) {
+      return json({
+        head: { sha: "abc123" },
+        user: { login: "octocat" },
+        draft: true,
+        additions: 30,
+        deletions: 4,
+        changed_files: 2,
+        body: "Fixes the thing.",
+        created_at: "2026-08-01T00:00:00Z",
+        comments: 3,
+        review_comments: 8,
+        mergeable_state: "blocked",
+        labels: [{ name: "require-backend-approval" }],
+        html_url: "https://github.test/acme/widget/pull/42",
+      });
+    }
+    return new Response("diff --git");
+  };
+}
+
 test("the GitHub API client fetches a single pull by number without a search", async () => {
   const requests: Request[] = [];
   const client = new GitHubApiClient(
@@ -51,6 +122,7 @@ test("the GitHub API client fetches a single pull by number without a search", a
     updatedAt: "2026-08-03T00:00:00Z",
     headSha: "abc123",
     diff: "diff --git",
+    labels: [],
   });
   expect(requests.map((request) => request.url)).toEqual([
     "https://github.test/repos/acme/widget/pulls/42",

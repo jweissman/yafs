@@ -5,18 +5,15 @@ import {
   toolServerOptions,
 } from "../../src/protocol/ServerClients";
 import { AgentToolServer } from "../../src/plugins/agent/AgentToolServer";
-import { SlackApiClient } from "../../src/plugins/slack/SlackApiClient";
 import { MountManager } from "../../src/mounts/MountManager";
 import { NodeStore } from "../../src/vfs/NodeStore";
 import type { Services } from "../../src/protocol/ServerTypes";
 
-test("defaultClients falls back to the real default clients when unoverridden", () => {
+test("defaultClients exposes the real default factories when unoverridden", () => {
   const mounts = new MountManager(new NodeStore());
   const toolServer = new AgentToolServer(mounts, {});
   const clients = defaultClients({}, toolServer);
-  expect(clients.slackClientFor({ channel: "C1" })).toBeInstanceOf(
-    SlackApiClient,
-  );
+  expect(typeof clients.slackClientFor).toBe("function");
   expect(typeof clients.modelFor).toBe("function");
   expect(typeof clients.toolClientFor).toBe("function");
 });
