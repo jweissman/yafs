@@ -6,7 +6,9 @@ export function linkTarget(
   pathOf: (node: FSNode) => string,
 ): string {
   const target = requiredTarget(link);
-  return target.startsWith("/") ? target : `${pathOf(link.parent ?? origin)}/${target}`;
+  return target.startsWith("/")
+    ? target
+    : `${pathOf(link.parent ?? origin)}/${target}`;
 }
 
 function requiredTarget(link: FSNode): string {

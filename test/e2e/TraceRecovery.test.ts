@@ -150,6 +150,9 @@ function isTrace(value: unknown): value is { entries: { digest: string }[] } {
 }
 
 function isTraceEntry(value: unknown): value is { digest: string } {
-  return typeof value === "object" && value !== null &&
-    typeof (value as Record<string, unknown>).digest === "string";
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).digest === "string"
+  );
 }

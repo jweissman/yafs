@@ -9,6 +9,7 @@ import { completeWithTools, ToolServerUrl } from "./AgentToolCompletion";
 import { ToolClientFor } from "./LmStudioMcpClient";
 import { ModelFor, textCompletion } from "./AgentTextCompletion";
 import { finishAgentRun } from "./AgentRunFinisher";
+import { logRun } from "./AgentRunLog";
 
 export interface AgentClients {
   modelFor: ModelFor;
@@ -91,16 +92,6 @@ export class AgentRunExecutor {
   private writeStatus(context: RunContext, status: Status) {
     return this.dependencies.runs.writeStatus(context, status);
   }
-}
-
-// Run failures were previously silent server-side -- the only way to
-// notice one happened was to already know the runId and go read
-// status.json. A timeout or a rejected tool call should be visible in
-// `yafsd logs -f` as it happens, not just discoverable after the fact.
-function logRun(context: RunContext, state: "complete" | "failed", error?: unknown) {
-  const { mountId, personaName, runId } = context;
-  const detail = error instanceof Error ? `: ${error.message}` : "";
-  console.log(`agent run ${state}: persona=${mountId}/${personaName} runId=${runId}${detail}`);
 }
 
 function textDependencies(dependencies: AgentRunDependencies) {

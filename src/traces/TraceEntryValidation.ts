@@ -15,9 +15,7 @@ export function parseTrace(content: string): Trace {
 }
 
 function assertManifest(trace: Trace) {
-  if (
-    !trace.capturedAt
-  ) {
+  if (!trace.capturedAt) {
     throw new Error("Invalid trace manifest");
   }
 }

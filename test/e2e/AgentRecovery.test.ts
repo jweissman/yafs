@@ -94,9 +94,9 @@ test("a malformed persisted agent record is visibly quarantined, not silently in
     modelFor: () => fakeMessageModel([]),
   });
   const client = await YashClient.connect(server.address());
-  const status = parseJson(
-    await client.exec("plugins status"),
-  ) as { active: unknown[] };
+  const status = parseJson(await client.exec("plugins status")) as {
+    active: unknown[];
+  };
   expect(status.active).toContainEqual({
     id: "agents",
     plugin: "agent",

@@ -43,9 +43,7 @@ function isReadLikeCall(
 
 function pathArgument(args: unknown): AbsolutePath | undefined {
   const path =
-    args && typeof args === "object" && "path" in args
-      ? args.path
-      : undefined;
+    args && typeof args === "object" && "path" in args ? args.path : undefined;
   return absolutePath(path);
 }
 

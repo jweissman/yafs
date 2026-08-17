@@ -159,8 +159,11 @@ function isStartHereResponse(value: unknown): value is StartHereResponse {
   if (!isRecord(value)) {
     return false;
   }
-  return Array.isArray(value.roots) && Array.isArray(value.rootMounts) &&
-    Array.isArray(value.mounts);
+  return (
+    Array.isArray(value.roots) &&
+    Array.isArray(value.rootMounts) &&
+    Array.isArray(value.mounts)
+  );
 }
 
 function treeResponse(source: string): { entries: { path: string }[] } {

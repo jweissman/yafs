@@ -100,7 +100,6 @@ export class AgentToolServer {
     await mcpServer(scoped).connect(transport);
     return transport.handleRequest(req, { parsedBody: body });
   }
-
 }
 
 function startFailure(error: unknown): false {

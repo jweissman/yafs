@@ -9,11 +9,20 @@ export function requestFor(value: unknown): McpRequest {
 }
 
 function validRequest(request: RawMcpRequest): request is ValidMcpRequest {
-  return request.jsonrpc === "2.0" && typeof request.method === "string" && validId(request.id);
+  return (
+    request.jsonrpc === "2.0" &&
+    typeof request.method === "string" &&
+    validId(request.id)
+  );
 }
 
 function validId(id: unknown): id is McpId | undefined {
-  return id === undefined || id === null || typeof id === "string" || typeof id === "number";
+  return (
+    id === undefined ||
+    id === null ||
+    typeof id === "string" ||
+    typeof id === "number"
+  );
 }
 
 function requestObject(value: unknown): RawMcpRequest {

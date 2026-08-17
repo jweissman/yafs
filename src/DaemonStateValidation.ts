@@ -17,10 +17,7 @@ function validState(state: DaemonState) {
 }
 
 function validAddress(state: DaemonState) {
-  return (
-    typeof state.host === "string" &&
-    Number.isInteger(state.port)
-  );
+  return typeof state.host === "string" && Number.isInteger(state.port);
 }
 
 function validIdentity(state: DaemonState) {

@@ -18,5 +18,8 @@ test("a socket error rejects every pending request synchronously", async () => {
 });
 
 function requests(_socket: Socket): PendingRequests {
-  return new PendingRequests(() => false, () => undefined);
+  return new PendingRequests(
+    () => false,
+    () => undefined,
+  );
 }

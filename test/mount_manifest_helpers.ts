@@ -8,10 +8,7 @@ export function fixtureManifest() {
 }
 
 export function auditSequences(source: string) {
-  return source
-    .trim()
-    .split("\n")
-    .map(auditSequence);
+  return source.trim().split("\n").map(auditSequence);
 }
 
 function auditSequence(line: string): number {

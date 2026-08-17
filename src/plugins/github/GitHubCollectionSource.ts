@@ -91,7 +91,8 @@ export class GitHubCollectionSource {
   ): GitHubResourceReference {
     const { number, headSha, title, htmlUrl } = pull;
     const { repository } = config;
-    const url = htmlUrl ?? `${this.webUrl}/${repository}/pull/${String(number)}`;
+    const url =
+      htmlUrl ?? `${this.webUrl}/${repository}/pull/${String(number)}`;
     return { kind: "github-pr", repository, number, headSha, title, url };
   }
   private revision(pulls: GitHubPull[]) {
@@ -108,4 +109,3 @@ export function pullFile(pull: GitHubPull, name: string): string | undefined {
   }
   return undefined;
 }
-

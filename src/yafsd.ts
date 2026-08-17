@@ -9,7 +9,7 @@ import { toolsPort } from "./plugins/agent/AgentToolServer";
 import { defaultMcpJsonPath } from "./plugins/agent/LmStudioMcpJson";
 import { statusOf, stopDaemon } from "./DaemonControl";
 import { serve } from "./DaemonServe";
-import { defaultSnapshotLimits } from "./mounts/SnapshotMaterializer";
+import { snapshotLimits } from "./DaemonSnapshotLimits";
 import { resetDaemon } from "./DaemonReset";
 
 const command = process.argv[2] ?? "serve";
@@ -23,18 +23,6 @@ const settings = {
   snapshotLimits: snapshotLimits(process.env),
 };
 
-// Override either bound via env (matching YAFS_HOST/YAFS_PORT/etc.'s
-// convention); unset means "use SnapshotMaterializer's own default."
-function snapshotLimits(env: NodeJS.ProcessEnv) {
-  const { YAFS_SNAPSHOT_MAX_BYTES: bytes, YAFS_SNAPSHOT_MAX_FILES: files } =
-    env;
-  return bytes || files
-    ? {
-        bytes: bytes ? Number(bytes) : defaultSnapshotLimits.bytes,
-        files: files ? Number(files) : defaultSnapshotLimits.files,
-      }
-    : undefined;
-}
 const statePaths = paths(settings.dataDir);
 const commands: Record<string, () => void | Promise<void>> = {
   serve: serveCommand,
@@ -46,7 +34,9 @@ const commands: Record<string, () => void | Promise<void>> = {
   reset,
 };
 await (commands[command] ?? usage)();
-function serveCommand() { return serve(settings, statePaths); }
+function serveCommand() {
+  return serve(settings, statePaths);
+}
 
 async function start(configPath = settings.configPath) {
   if (await managedState(statePaths.state)) {

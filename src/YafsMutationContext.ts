@@ -14,8 +14,7 @@ export function mutationContext(operations: YafsOperationQueue) {
 
 function afterCommit(operations: YafsOperationQueue) {
   return {
-    afterCommit: (effect: () => void) =>
-      operations.afterCommit(effect),
+    afterCommit: (effect: () => void) => operations.afterCommit(effect),
   };
 }
 

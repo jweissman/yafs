@@ -82,7 +82,7 @@ export class ServerConnection {
   private guardedExecute(session: Yafs, request: Request, socket: Socket) {
     return this.executeRequest(session, request, socket).catch(
       (error: unknown) => {
-      respond(socket, persistenceFailure(request.id, error));
+        respond(socket, persistenceFailure(request.id, error));
       },
     );
   }

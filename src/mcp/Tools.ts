@@ -34,10 +34,10 @@ async function attemptTool(client: McpClient, name: string, input: unknown) {
 function operation(name: string, input: Arguments) {
   return name === "yafs.query"
     ? queryCommand(input)
-    : literacyOperation(name, input) ??
+    : (literacyOperation(name, input) ??
         evidenceOperation(name, input) ??
         orientationOperation(name, input) ??
-        pathOperation(name, input);
+        pathOperation(name, input));
 }
 
 function requiredOperation(name: string, input: Arguments) {

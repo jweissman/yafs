@@ -82,7 +82,9 @@ test("unregistering a ctl handler restores ordinary write behavior for that path
 test("dispatchCtl invokes a registered control path directly", async () => {
   const server = await startedServer("yafs-ctl-dispatch-");
   let received = "";
-  server.registerCtl(ctlPath(), (payload) => { received = payload; });
+  server.registerCtl(ctlPath(), (payload) => {
+    received = payload;
+  });
   expect(await server.dispatchCtl(ctlPath(), "direct")).toBe(true);
   expect(received).toBe("direct");
   await server.close();

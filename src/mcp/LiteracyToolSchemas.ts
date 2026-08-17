@@ -50,10 +50,12 @@ export function diffTool(): Tool {
 }
 
 function diffDescription(): string {
-  return "Structurally compare two EXISTING virtual paths (both required) " +
+  return (
+    "Structurally compare two EXISTING virtual paths (both required) " +
     "and report what changed between them. Not for viewing a diff " +
     "that's already provided as a file (e.g. a PR's diff.patch) -- " +
-    "use yafs.read for that instead.";
+    "use yafs.read for that instead."
+  );
 }
 
 interface ToolSpec {

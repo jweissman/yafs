@@ -44,7 +44,10 @@ function root() {
 
 async function corrupt(path: string) {
   const stored = checksumRecord(await Bun.file(path).text());
-  await writeFile(path, JSON.stringify({ ...stored, checksum: "not-a-real-checksum" }));
+  await writeFile(
+    path,
+    JSON.stringify({ ...stored, checksum: "not-a-real-checksum" }),
+  );
 }
 
 function checksumRecord(source: string): Record<string, unknown> {

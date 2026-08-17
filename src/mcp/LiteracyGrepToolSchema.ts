@@ -40,8 +40,8 @@ function grepPathDescription(): string {
   return (
     "Find literal text in virtual files. A path may be a file, a " +
     "directory (searched recursively), or contain wildcard segments: " +
-    "\"*\" for exactly one path component (e.g. \"pulls/*/diff.patch\"), " +
-    "\"**\" for any depth (e.g. \"**/diff.patch\"). "
+    '"*" for exactly one path component (e.g. "pulls/*/diff.patch"), ' +
+    '"**" for any depth (e.g. "**/diff.patch"). '
   );
 }
 

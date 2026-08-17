@@ -46,4 +46,3 @@ function nextDescendants(
   budget.remaining -= 1;
   return descendantDirectories(context, path, budget);
 }
-

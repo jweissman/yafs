@@ -34,10 +34,12 @@ function totalsFor(context: CommandContext, path: AbsolutePath): Totals {
 }
 
 function directoryTotals(context: CommandContext, path: AbsolutePath): Totals {
-  return context.list(path).reduce(
-    (sum, name) => added(sum, totalsFor(context, child(path, name))),
-    { files: 0, bytes: 0 },
-  );
+  return context
+    .list(path)
+    .reduce((sum, name) => added(sum, totalsFor(context, child(path, name))), {
+      files: 0,
+      bytes: 0,
+    });
 }
 
 function leafTotals(context: CommandContext, path: AbsolutePath): Totals {

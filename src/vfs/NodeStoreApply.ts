@@ -35,28 +35,45 @@ function isLifecycleOnly(operation: VfsOperation) {
 }
 
 function applyAt(mutator: Mutator, operation: Replayed, at: Date) {
-  if (operation.type === "mkdir") {
-    mutator.mkdir(operation.path, at); return;
-  }
-  if (operation.type === "touch") {
-    mutator.touch(operation.path, at); return;
+  if (operation.type === "mkdir" || operation.type === "touch") {
+    applyCreate(mutator, operation, at);
+    return;
   }
   applyWrite(mutator, operation, at);
 }
 
-function applyWrite(mutator: Mutator, operation: Written, at: Date) {
-  if (operation.type === "write") {
-    mutator.write(operation.path, operation.content, at); return;
+type Created = Extract<Replayed, { type: "mkdir" | "touch" }>;
+
+function applyCreate(mutator: Mutator, operation: Created, at: Date) {
+  if (operation.type === "mkdir") {
+    mutator.mkdir(operation.path, at);
+    return;
   }
-  if (operation.type === "symlink") {
-    mutator.symlink(operation.target, operation.path, at); return;
+  mutator.touch(operation.path, at);
+}
+
+function applyWrite(mutator: Mutator, operation: Written, at: Date) {
+  if (operation.type === "write" || operation.type === "symlink") {
+    applyContent(mutator, operation, at);
+    return;
   }
   applyRemoval(mutator, operation, at);
 }
 
+type Content = Extract<Written, { type: "write" | "symlink" }>;
+
+function applyContent(mutator: Mutator, operation: Content, at: Date) {
+  if (operation.type === "write") {
+    mutator.write(operation.path, operation.content, at);
+    return;
+  }
+  mutator.symlink(operation.target, operation.path, at);
+}
+
 function applyRemoval(mutator: Mutator, operation: Removed, at: Date) {
   if (operation.type === "rmdir") {
-    mutator.rmdir(operation.path); return;
+    mutator.rmdir(operation.path);
+    return;
   }
   applyDeletion(mutator, operation, at);
 }
@@ -64,11 +81,19 @@ function applyRemoval(mutator: Mutator, operation: Removed, at: Date) {
 type Deletion = Exclude<Removed, { type: "rmdir" }>;
 
 function applyDeletion(mutator: Mutator, operation: Deletion, at: Date) {
-  if (operation.type === "removeTree") {
-    mutator.removeTreeChecked(operation.path); return;
-  }
-  if (operation.type === "union") {
-    mutator.union(operation.path, operation.layers, at); return;
+  if (operation.type === "removeTree" || operation.type === "union") {
+    applyKept(mutator, operation, at);
+    return;
   }
   mutator.remove(operation.path);
+}
+
+type Kept = Extract<Deletion, { type: "removeTree" | "union" }>;
+
+function applyKept(mutator: Mutator, operation: Kept, at: Date) {
+  if (operation.type === "removeTree") {
+    mutator.removeTreeChecked(operation.path);
+    return;
+  }
+  mutator.union(operation.path, operation.layers, at);
 }

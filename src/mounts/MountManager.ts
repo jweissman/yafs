@@ -22,8 +22,6 @@ import {
   MountManagerOptions,
 } from "./MountManagerDeps";
 
-export type { MountManagerOptions } from "./MountManagerDeps";
-
 export class MountManager {
   private records: PreparedMountRecord[] = [];
   private persistence: MountPersistence;
@@ -82,7 +80,9 @@ export class MountManager {
   prepareActivation(record: MountRecord, actor = "system") {
     return activationPrep(this.preparationState(), record, actor);
   }
-  mounts() { return [...this.records]; }
+  mounts() {
+    return [...this.records];
+  }
   plugins(name?: string) {
     return this.providers.describe(name);
   }

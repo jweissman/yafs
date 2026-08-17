@@ -84,7 +84,11 @@ function richFetch(requests: Request[]) {
     if (requests.length === 1) {
       return json({
         items: [
-          { number: 42, title: "Improve resolver", updated_at: "2026-08-03T00:00:00Z" },
+          {
+            number: 42,
+            title: "Improve resolver",
+            updated_at: "2026-08-03T00:00:00Z",
+          },
         ],
       });
     }

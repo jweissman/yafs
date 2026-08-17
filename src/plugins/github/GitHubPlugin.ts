@@ -44,7 +44,7 @@ export class GitHubPlugin extends Plugin {
       "GitHub PR collection: pulls/<number>/{metadata.json,diff.patch}. " +
       "This mount's own path names the owner/repo (/world/github/<owner>/" +
       "<repo>) -- cite a PR as https://github.com/<owner>/<repo>/pull/<number> " +
-      "(singular \"pull\", not the \"pulls/\" directory name)."
+      '(singular "pull", not the "pulls/" directory name).'
     );
   }
 

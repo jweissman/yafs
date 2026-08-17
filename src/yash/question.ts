@@ -5,9 +5,9 @@ export function question(
   prompt: string,
   interruption: AbortController,
 ): Promise<string | undefined> {
-  return readline.question(prompt, { signal: interruption.signal }).catch(
-    questionError(interruption),
-  );
+  return readline
+    .question(prompt, { signal: interruption.signal })
+    .catch(questionError(interruption));
 }
 
 function questionError(interruption: AbortController) {

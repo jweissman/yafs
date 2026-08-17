@@ -22,7 +22,9 @@ test("two review sessions share one GitHub revision and leave separate durable t
   await alice.exec("mkdir notes/42");
   await alice.exec("capture reviews/pulls/42 notes/42/alice");
   await bob.exec("capture /home/root/reviews/pulls/42 /home/root/notes/42/bob");
-  const aliceTrace = traceRecord(await alice.exec("cat notes/42/alice/trace.json"));
+  const aliceTrace = traceRecord(
+    await alice.exec("cat notes/42/alice/trace.json"),
+  );
   const bobTrace = traceRecord(
     await bob.exec("cat /home/root/notes/42/bob/trace.json"),
   );
@@ -36,9 +38,13 @@ test("two review sessions share one GitHub revision and leave separate durable t
 function traceRecord(source: string): { origin: { revision: string } } {
   const value = parseJson(source);
   if (
-    typeof value === "object" && value !== null && "origin" in value &&
-    typeof value.origin === "object" && value.origin !== null &&
-    "revision" in value.origin && typeof value.origin.revision === "string"
+    typeof value === "object" &&
+    value !== null &&
+    "origin" in value &&
+    typeof value.origin === "object" &&
+    value.origin !== null &&
+    "revision" in value.origin &&
+    typeof value.origin.revision === "string"
   ) {
     return { origin: { revision: value.origin.revision } };
   }

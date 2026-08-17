@@ -364,9 +364,10 @@ which is separately tracked, not implied by a milestone checkbox.
   met**: a real LM Studio persona, not a fake one, used the loop end to end
   against a live GitHub PR collection and returned an accurate,
   evidence-cited recommendation — see "Review radar proof — achieved"
-  below. M6.6 (runtime-overlay/registry consolidation) and M6.7 (scheduled
-  review digest, the reviewer's recommended "second flow") are both named
-  and scoped, not yet built.
+  below. M6.6 (runtime-overlay/registry consolidation), M6.65 (GitHub
+  provider depth: recent commits, plus an on-demand CI-fetch design), and
+  M6.7 (scheduled review digest, the reviewer's recommended "second flow")
+  are all named and scoped, not yet built.
 - `yafs-mcp` is a local stdio client of `yafsd`, not a provider or a second VFS
   implementation, and its surface is **bounded local operations, not purely
   read-only** — alongside the L0/L1 workspace operations (`yafs.list`/
@@ -1182,13 +1183,31 @@ built bespoke, on purpose, so the eventual comparison is honest.
   design, and is the evidence L2's own "second decision, earned only by
   repeated use" principle is waiting on.
 
-### Later: on-demand, single-resource provider fetch (not yet scoped)
+### M6.65 — GitHub provider depth: recent commits and an on-demand CI-fetch design *(before M6.7)*
 
-Named here so it isn't lost, not designed. Motivated by a concrete richer
-digest idea: alongside `pulls/`, capture `commits/` for the last 10-15
-`master` commits (CI status, run number, optionally diffs), and — the part
-that actually needs new architecture — let a persona ask a provider to
-fetch one specific thing on demand, e.g. a single GitHub Actions run's log
+Promoted from a "later, not designed" note to a scoped milestone because
+live validation surfaced a concrete gap it directly addresses: sampling 30
+real open PRs found `mergeable_state` is `"unknown"` for 29/30 (GitHub
+computes it lazily) and never `"clean"` in that sample, so the reviewer
+persona had almost no real readiness signal beyond draft status, diff
+size, and labels — see the `yafs.plugins.yaml` prompt fix from this same
+validation round. Recent-commit/CI visibility is what's actually missing,
+not a bigger prompt. Sequenced before M6.7 (scheduled digest) because the
+digest's whole job is surfacing "safe to merge," and it should inherit
+this signal rather than ship without it and need a second pass.
+
+**Phase 1 — bulk-fetchable, ships as part of this milestone:** alongside
+`pulls/`, capture a bounded `commits/` collection for the last 10-15
+`master` commits (SHA, author, message, and combined CI status where the
+same per-commit API call already returns it) — an ordinary bounded
+collection resource, same shape as `pulls/`, no new fetch primitive
+needed. Exit evidence: a live mount publishes `commits/` alongside
+`pulls/` and a reviewer persona prompt can cite a specific recent commit's
+CI status the same way it already cites a PR.
+
+**Phase 2 — on-demand, single-resource provider fetch: design only, not
+implemented this milestone.** Let a persona ask a provider to fetch one
+specific thing on demand, e.g. a single GitHub Actions run's full log
 (`actions/<runId>/...`), *only when requested*, not pre-fetched for every
 recent commit "just in case."
 

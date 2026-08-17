@@ -43,8 +43,7 @@ export class Journal {
     replay?: JournalReplayer,
   ): Promise<Journal> {
     this.sequence = await this.recoveredSequence(store, replay).catch(
-      (error: unknown) =>
-      this.closeThenRethrow(error),
+      (error: unknown) => this.closeThenRethrow(error),
     );
     return this;
   }

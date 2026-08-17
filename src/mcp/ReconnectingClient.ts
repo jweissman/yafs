@@ -3,7 +3,10 @@ import { ExecutionResult } from "../types/ExecutionResult";
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 import { McpClient } from "./types";
 
-interface Address { host: string; port: number }
+interface Address {
+  host: string;
+  port: number;
+}
 
 // yafs-mcp is a long-lived stdio process; the daemon it talks to routinely
 // gets stopped/restarted during normal development. A plain YashClient

@@ -52,8 +52,7 @@ export class LmStudioMcpClient {
 
   private async attempt(url: string, turn: LmStudioTurnRequest) {
     const response = await this.fetch(url, this.body(turn)).catch(
-      (error: unknown) =>
-      loggedFailure(url, error),
+      (error: unknown) => loggedFailure(url, error),
     );
     return parseTurn(await response.json());
   }

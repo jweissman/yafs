@@ -43,7 +43,10 @@ export class MountLifecycleController {
   private deps(): LifecycleDeps {
     const { persistence, snapshots, getRecords, setRecords } = this.state;
     return {
-      persistence, snapshots, getRecords, setRecords,
+      persistence,
+      snapshots,
+      getRecords,
+      setRecords,
       save: () => this.save(),
     };
   }

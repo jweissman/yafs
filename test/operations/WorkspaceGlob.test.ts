@@ -10,6 +10,8 @@ test("a wildcard skips an unreadable directory instead of failing the operation"
 function unreadableContext(): CommandContext {
   return {
     resolve: () => "/*",
-    list: () => { throw new Error("unreadable"); },
+    list: () => {
+      throw new Error("unreadable");
+    },
   } as unknown as CommandContext;
 }

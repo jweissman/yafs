@@ -23,7 +23,9 @@ export async function call(
 
 function checked(path: string, body: Record<string, unknown>) {
   if (body.ok !== true) {
-    throw new Error(`Slack API request failed: ${path} -> ${String(body.error)}`);
+    throw new Error(
+      `Slack API request failed: ${path} -> ${String(body.error)}`,
+    );
   }
   return body;
 }

@@ -12,12 +12,16 @@ export async function chatTurns(session: ChatSession) {
 }
 
 async function chatStep(session: ChatSession): Promise<boolean> {
-  const message = await question(session.readline, "you> ", session.interruption);
+  const message = await prompted(session);
   if (!shouldContinue(message)) {
     return false;
   }
   await turnIfNonEmpty(session, message);
   return true;
+}
+
+function prompted(session: ChatSession) {
+  return question(session.readline, "you> ", session.interruption);
 }
 
 function shouldContinue(message: string | undefined): message is string {
@@ -32,7 +36,9 @@ async function turn(session: ChatSession, message: string) {
   const runId = randomUUID();
   const payload = requestPayload(session, message, runId);
   await session.client.writeFile(`${session.personaPath}/ctl`, payload);
-  finishLine(await pollTurn(session.client, `${session.personaPath}/runs/${runId}`));
+  finishLine(
+    await pollTurn(session.client, `${session.personaPath}/runs/${runId}`),
+  );
 }
 
 function requestPayload(session: ChatSession, message: string, runId: string) {

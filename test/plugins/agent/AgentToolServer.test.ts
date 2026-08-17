@@ -181,6 +181,10 @@ function isStartHere(value: unknown): value is ReturnType<typeof startHere> {
     return false;
   }
   const record = value as Record<string, unknown>;
-  return typeof record.scoped === "boolean" && Array.isArray(record.roots) &&
-    Array.isArray(record.mounts) && Array.isArray(record.recommendedFirst);
+  return (
+    typeof record.scoped === "boolean" &&
+    Array.isArray(record.roots) &&
+    Array.isArray(record.mounts) &&
+    Array.isArray(record.recommendedFirst)
+  );
 }

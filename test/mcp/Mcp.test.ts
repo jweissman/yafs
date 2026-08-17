@@ -27,8 +27,14 @@ async function assertDiscovery(server: McpServer) {
 
 function toolNames(_response: unknown) {
   return [
-    "yafs.list", "yafs.read", "yafs.inspect", "yafs.query",
-    "yafs.grep", "yafs.diff", "yafs.capture", "yafs.restore",
+    "yafs.list",
+    "yafs.read",
+    "yafs.inspect",
+    "yafs.query",
+    "yafs.grep",
+    "yafs.diff",
+    "yafs.capture",
+    "yafs.restore",
   ];
 }
 

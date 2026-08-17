@@ -16,7 +16,12 @@ export function inspectedOrigin(source: string): Origin {
 }
 
 function hasOrigins(value: unknown): value is { origins: unknown[] } {
-  return typeof value === "object" && value !== null && "origins" in value && Array.isArray(value.origins);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "origins" in value &&
+    Array.isArray(value.origins)
+  );
 }
 
 function origin(value: unknown): Origin {
@@ -32,5 +37,7 @@ function origin(value: unknown): Origin {
 }
 
 function stringField(value: object, key: string): string | undefined {
-  return key in value && typeof value[key] === "string" ? value[key] : undefined;
+  return key in value && typeof value[key] === "string"
+    ? value[key]
+    : undefined;
 }

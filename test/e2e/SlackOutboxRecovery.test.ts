@@ -36,9 +36,11 @@ test("restart marks an accepted in-flight outbound Slack action unknown", async 
     slackClientFor: () => client_,
   });
   const recovered = await YashClient.connect(restarted.address());
-  const status = outboxStatus(parseJson(
-    await recovered.exec(`cat updates/outbox/${actionId}/status.json`),
-  ));
+  const status = outboxStatus(
+    parseJson(
+      await recovered.exec(`cat updates/outbox/${actionId}/status.json`),
+    ),
+  );
   expect(status.state).toBe("unknown");
   expect(status.error).toContain("Daemon restarted");
   await recovered.close();

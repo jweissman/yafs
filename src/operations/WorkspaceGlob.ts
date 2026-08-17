@@ -79,4 +79,3 @@ function fixedChild(
   const path = child(base, segment);
   return context.exists(path) ? [path] : [];
 }
-

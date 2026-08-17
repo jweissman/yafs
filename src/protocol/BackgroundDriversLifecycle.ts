@@ -26,7 +26,8 @@ export function syncAll(drivers: BackgroundDrivers) {
 
 export function recoverAll(drivers: BackgroundDrivers) {
   return Promise.all(
-    drivers.plugins
-      .flatMap((plugin) => (plugin.recover ? [plugin.recover()] : [])),
+    drivers.plugins.flatMap((plugin) =>
+      plugin.recover ? [plugin.recover()] : [],
+    ),
   );
 }

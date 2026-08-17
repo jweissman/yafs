@@ -35,9 +35,9 @@ test("cache expiry hides an entry and explicit collection reclaims its blob", as
   expect((await yafs.executeAsync("cache get brief")).stderr).toContain(
     "Cache miss: brief",
   );
-  expect(
-    reclaimed((await yafs.executeAsync("cache gc")).stdout),
-  ).toHaveLength(1);
+  expect(reclaimed((await yafs.executeAsync("cache gc")).stdout)).toHaveLength(
+    1,
+  );
 });
 
 test("cache replacement and deletion release prior values without exposing a stale entry", async () => {
@@ -45,13 +45,13 @@ test("cache replacement and deletion release prior values without exposing a sta
   await yafs.executeAsync("cache put --ttl 5m key first");
   await yafs.executeAsync("cache put --ttl 5m key second");
   expect((await yafs.executeAsync("cache get key")).stdout).toBe("second");
-  expect(
-    reclaimed((await yafs.executeAsync("cache gc")).stdout),
-  ).toHaveLength(1);
+  expect(reclaimed((await yafs.executeAsync("cache gc")).stdout)).toHaveLength(
+    1,
+  );
   await yafs.executeAsync("cache delete key");
-  expect(
-    reclaimed((await yafs.executeAsync("cache gc")).stdout),
-  ).toHaveLength(1);
+  expect(reclaimed((await yafs.executeAsync("cache gc")).stdout)).toHaveLength(
+    1,
+  );
 });
 
 test("cache rejects malformed TTLs and values larger than its bounded local contract", async () => {
@@ -148,6 +148,10 @@ function reclaimed(source: string): unknown[] {
 
 function cacheState(source: string): string | undefined {
   const value = JSON.parse(source) as unknown;
-  return typeof value === "object" && value !== null && "state" in value &&
-    typeof value.state === "string" ? value.state : undefined;
+  return typeof value === "object" &&
+    value !== null &&
+    "state" in value &&
+    typeof value.state === "string"
+    ? value.state
+    : undefined;
 }

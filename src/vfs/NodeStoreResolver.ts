@@ -102,8 +102,6 @@ export class NodeStoreResolver {
   }
 
   linkTarget(link: FSNode) {
-    return targetFor(link, this.state.origin, (node) =>
-      this.pathOf(node),
-    );
+    return targetFor(link, this.state.origin, (node) => this.pathOf(node));
   }
 }

@@ -57,10 +57,7 @@ async function lastDetail(
 
 function audit(directory: string) {
   return readFile(join(directory, "audit.ndjson"), "utf8").then((source) =>
-    source
-      .trim()
-      .split("\n")
-      .map(auditEvent),
+    source.trim().split("\n").map(auditEvent),
   );
 }
 

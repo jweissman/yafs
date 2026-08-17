@@ -31,9 +31,7 @@ async function sendTurn(client: YashClient, message: string) {
 
 async function waitForComplete(client: YashClient, runPath: string) {
   for (let i = 0; i < 100; i++) {
-    const status = runStatus(
-      await client.exec(`cat ${runPath}/status.json`),
-    );
+    const status = runStatus(await client.exec(`cat ${runPath}/status.json`));
     if (status.state === "complete") {
       return;
     }

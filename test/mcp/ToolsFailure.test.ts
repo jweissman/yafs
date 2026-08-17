@@ -21,7 +21,10 @@ function failingClient(): McpClient {
 
 function failure() {
   return {
-    stdout: "", stderr: "", status: 1, session: session(),
+    stdout: "",
+    stderr: "",
+    status: 1,
+    session: session(),
     error: { code: "read_failed", message: "read failed" },
   };
 }

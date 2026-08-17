@@ -79,9 +79,9 @@ test("a failed trace plan leaves blobs unretained for explicit collection", asyn
   expect(
     (await yafs.executeAsync("capture source missing/artifact")).error,
   ).toBeDefined();
-  expect(
-    reclaimed((await yafs.executeAsync("blobs gc")).stdout),
-  ).toHaveLength(1);
+  expect(reclaimed((await yafs.executeAsync("blobs gc")).stdout)).toHaveLength(
+    1,
+  );
 });
 
 test("command substitution rejects trace before it can retain blobs", async () => {
@@ -92,9 +92,9 @@ test("command substitution rejects trace before it can retain blobs", async () =
     (await yafs.executeAsync("echo $(trace source artifact)")).stderr,
   ).toContain("not read-only");
   expect(yafs.store.get("/home/root/artifact", false)).toBeUndefined();
-  expect(
-    reclaimed((await yafs.executeAsync("blobs gc")).stdout),
-  ).toHaveLength(0);
+  expect(reclaimed((await yafs.executeAsync("blobs gc")).stdout)).toHaveLength(
+    0,
+  );
 });
 
 function configuredYafs(pulls: GitHubPull[]) {

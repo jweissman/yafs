@@ -37,9 +37,7 @@ function foundMatches(
   paths: string[],
   options: GrepOptions,
 ): GrepMatch[] {
-  return paths.flatMap((value) =>
-    matchesAt(context, pattern, value, options),
-  );
+  return paths.flatMap((value) => matchesAt(context, pattern, value, options));
 }
 
 // count/files reflect every match found (before `limit` truncates the
