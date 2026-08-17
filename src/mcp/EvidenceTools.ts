@@ -1,7 +1,11 @@
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 type Arguments = Record<string, unknown>;
-type Tool = { name: string; description: string; inputSchema: object };
+interface Tool {
+  name: string;
+  description: string;
+  inputSchema: object;
+}
 
 export function evidenceTools(): Tool[] {
   return [captureTool(), restoreTool()];
@@ -31,7 +35,10 @@ function restoreTool(): Tool {
   });
 }
 
-type ToolSpec = { properties: object; required: string[] };
+interface ToolSpec {
+  properties: object;
+  required: string[];
+}
 
 function tool(name: string, description: string, spec: ToolSpec): Tool {
   return { name, description, inputSchema: schema(spec) };

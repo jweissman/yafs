@@ -7,7 +7,9 @@ export function canonicalUnionLayers(
   layers: AbsolutePath[],
 ) {
   const resolved = layers.map((layer) => PathResolver.resolve(layer, "/"));
-  resolved.forEach((path) => assertDirectory(resolver, path));
+  resolved.forEach((path) => {
+    assertDirectory(resolver, path);
+  });
   return resolved;
 }
 

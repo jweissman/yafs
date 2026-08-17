@@ -1,16 +1,16 @@
 import { SlackMessage } from "../../src/plugins/slack/SlackApiClient";
 
-export type Reaction = {
+export interface Reaction {
   action: "add" | "remove";
   channel: string;
   ts: string;
-};
-export type FakeState = {
+}
+export interface FakeState {
   messages: SlackMessage[];
-  posted: Array<{ channel: string; text: string }>;
+  posted: { channel: string; text: string }[];
   reactions: Reaction[];
   failNextHistory?: boolean;
-};
+}
 
 export function fakeState(messages: SlackMessage[]): FakeState {
   return { messages, posted: [], reactions: [] };

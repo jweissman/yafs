@@ -5,7 +5,10 @@ import { PreparedMountRecord } from "../../mounts/types";
 import { ChatMessage, historyEntry, historyFrom } from "./AgentChatHistory";
 import { threadEntry, threadResponseId } from "./AgentToolThread";
 
-export type PersonaRef = { mountId: string; personaName: string };
+export interface PersonaRef {
+  mountId: string;
+  personaName: string;
+}
 
 export class AgentChatStore {
   constructor(
@@ -32,14 +35,16 @@ export class AgentChatStore {
   }
 
   recordResponseId(ref: PersonaRef, chatId: string, responseId: string) {
-    return this.enqueue(() => this.applyResponseId(ref, chatId, responseId));
+    const update = { ref, chatId, responseId };
+    return this.enqueue(() => this.applyResponseId(update));
   }
 
-  private applyResponseId(ref: PersonaRef, chatId: string, responseId: string) {
-    const record = this.record(ref.mountId);
+  private async applyResponseId(update: ResponseUpdate): Promise<void> {
+    const record = this.record(update.ref.mountId);
     if (record) {
+      const { ref, chatId, responseId } = update;
       const entry = threadEntry(ref.personaName, chatId, responseId);
-      return publishEntries(this.deps(), { record, updates: [entry] });
+      await publishEntries(this.deps(), { record, updates: [entry] });
     }
   }
 
@@ -82,4 +87,10 @@ export class AgentChatStore {
   private record(mountId: string) {
     return this.mounts.mounts().find((item) => item.id === mountId);
   }
+}
+
+interface ResponseUpdate {
+  ref: PersonaRef;
+  chatId: string;
+  responseId: string;
 }

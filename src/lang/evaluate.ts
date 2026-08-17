@@ -2,10 +2,10 @@ import { Expression } from "../types/Expression";
 import { Word } from "./Word";
 import { Command } from "../types/Command";
 
-export type Evaluators<T> = {
+export interface Evaluators<T> {
   variable: (name: string) => string;
   substitute: (command: Command) => T;
-};
+}
 
 export function evaluateExpression(expression: Expression): number {
   if (expression.kind === "number") {

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { lmStudioMcpClientFor } from "../../../src/plugins/agent/LmStudioClientFactory";
 import { LmStudioMcpClient } from "../../../src/plugins/agent/LmStudioMcpClient";
+import { parseJson } from "../../json";
 
 const TOOLS = { roots: ["/home/root/traces/pr"] };
 
@@ -52,8 +53,7 @@ test("lmStudioMcpClientFor falls back to YAFS_LMSTUDIO_MODEL when neither person
   } finally {
     globalThis.fetch = originalFetch;
   }
-  const body = JSON.parse(calls[0].body as string);
-  expect(body.model).toBe("qwen2.5-7b-instruct");
+  expect(modelOf(calls[0])).toBe("qwen2.5-7b-instruct");
 });
 
 test("lmStudioMcpClientFor threads YAFS_LMSTUDIO_ACCESS_TOKEN into the Authorization header", async () => {
@@ -70,13 +70,26 @@ test("lmStudioMcpClientFor threads YAFS_LMSTUDIO_ACCESS_TOKEN into the Authoriza
   } finally {
     globalThis.fetch = originalFetch;
   }
-  const headers = calls[0].headers as Record<string, string>;
+  const headers = calls[0]?.headers as Record<string, string>;
   expect(headers.authorization).toBe("Bearer tok");
 });
 
 function fakeFetch(calls: RequestInit[]) {
   return async (_input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push(init!);
+    if (!init) {
+      throw new Error("Expected fetch options");
+    }
+    calls.push(init);
     return new Response(JSON.stringify({ output: [] }));
   };
+}
+
+function modelOf(request: RequestInit | undefined): unknown {
+  if (typeof request?.body !== "string") {
+    throw new Error("Expected body");
+  }
+  const value = parseJson(request.body);
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>).model
+    : undefined;
 }

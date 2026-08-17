@@ -1,11 +1,17 @@
-type ChatDelta = { choices?: Array<{ delta?: { content?: string } }> };
-type StreamState = { buffer: string; raw: string; full: string };
-type Pump = {
+interface ChatDelta {
+  choices?: { delta?: { content?: string } }[];
+}
+interface StreamState {
+  buffer: string;
+  raw: string;
+  full: string;
+}
+interface Pump {
   reader: ReadableStreamDefaultReader<Uint8Array>;
   decoder: TextDecoder;
   state: StreamState;
   onDelta?: (delta: string) => void;
-};
+}
 
 export async function readStream(
   body: ReadableStream<Uint8Array>,
@@ -49,7 +55,9 @@ function applyChunk(
 function applyEvents(state: StreamState, onDelta?: (delta: string) => void) {
   const { events, rest } = splitEvents(state.buffer);
   state.buffer = rest;
-  events.forEach((event) => applyEvent(state, event, onDelta));
+  events.forEach((event) => {
+    applyEvent(state, event, onDelta);
+  });
 }
 
 function splitEvents(buffer: string) {

@@ -12,9 +12,9 @@ test("planUnmount rejects an unknown mount id", () => {
 
 test("unmount rejects an unknown mount id", () => {
   const manager = new MountManager(new NodeStore());
-  expect(() => manager.unmount("nope", "test")).toThrow(
-    "No active mount: nope",
-  );
+  expect(() => {
+    manager.unmount("nope", "test");
+  }).toThrow("No active mount: nope");
 });
 
 test("activateDesired rejects an id with no matching declared mount", async () => {

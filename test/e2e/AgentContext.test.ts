@@ -4,7 +4,7 @@ import { fakeExchangeModel, manifest, waitForRun } from "../agent_test_helpers";
 import { startedHostConfigServer } from "../desired_mount_helpers";
 
 test("agent send records and supplies an explicit virtual-file context", async () => {
-  const calls: Array<{ system: string; message: string }> = [];
+  const calls: { system: string; message: string }[] = [];
   const { server, client } = await startedHostConfigServer(
     "yafs-agent-context-",
     manifest({ reviewer: "review carefully" }),

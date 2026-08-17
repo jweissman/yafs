@@ -3,7 +3,9 @@ import { NodeStore } from "../vfs/NodeStore";
 import { TraceService } from "./TraceService";
 
 export function retainTraces(store: NodeStore, traces: TraceService) {
-  tracePaths(store, "/").forEach((path) => retain(store, traces, path));
+  tracePaths(store, "/").forEach((path) => {
+    retain(store, traces, path);
+  });
 }
 
 function retain(store: NodeStore, traces: TraceService, path: AbsolutePath) {

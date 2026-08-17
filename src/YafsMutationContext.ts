@@ -14,7 +14,8 @@ export function mutationContext(operations: YafsOperationQueue) {
 
 function afterCommit(operations: YafsOperationQueue) {
   return {
-    afterCommit: (effect: () => void) => operations.afterCommit(effect),
+    afterCommit: (effect: () => void) =>
+      operations.afterCommit(effect),
   };
 }
 
@@ -23,6 +24,8 @@ function simpleMutations(operations: YafsOperationQueue) {
     ...fileMutations(operations),
     remove: (path: AbsolutePath) => operations.add({ type: "remove", path }),
     rmdir: (path: AbsolutePath) => operations.add({ type: "rmdir", path }),
+    removeTree: (path: AbsolutePath) =>
+      operations.add({ type: "removeTree", path }),
   };
 }
 
@@ -43,5 +46,5 @@ function union(
   if (!layers.length) {
     throw new Error("union requires at least one layer");
   }
-  operations.add({ type: "union", path, layers });
+  return operations.add({ type: "union", path, layers });
 }

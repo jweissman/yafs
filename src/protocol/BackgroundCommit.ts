@@ -15,6 +15,8 @@ export class BackgroundCommit {
 
   private async apply(operations: VfsOperation[]) {
     await this.journal.commit(operations);
-    operations.forEach((operation) => this.store.apply(operation));
+    operations.forEach((operation) => {
+      this.store.apply(operation);
+    });
   }
 }

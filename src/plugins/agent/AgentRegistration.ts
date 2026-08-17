@@ -2,28 +2,16 @@ import { AbsolutePath } from "../../core/AbsolutePath";
 import { CtlHandler } from "../../protocol/CtlDispatch";
 import { MountManager } from "../../mounts/MountManager";
 import { AgentConfig, PreparedMountRecord } from "../../mounts/types";
-import { QuarantineInfo } from "../../mounts/MountAudit";
-import { agentConfig } from "./AgentManifest";
+import { quarantineInfo, validAgentConfig } from "./AgentConfigValidation";
 
 type RegisterCtl = (path: AbsolutePath, handler: CtlHandler) => void;
 type UnregisterCtl = (path: AbsolutePath) => void;
-type Invoke = (mountId: string, personaName: string, payload: string) => void;
-
-function quarantineInfo(id: string): QuarantineInfo {
-  return {
-    actor: "system",
-    action: "quarantine",
-    detail: `Invalid persisted agent configuration: ${id}`,
-  };
-}
-
-export function validAgentConfig(config: unknown): AgentConfig | undefined {
-  try {
-    return agentConfig(config);
-  } catch {
-    return undefined;
-  }
-}
+type Paths = Set<AbsolutePath>;
+type Invoke = (
+  mountId: string,
+  personaName: string,
+  payload: string,
+) => Promise<void>;
 
 export class AgentRegistration {
   private registered = new Set<AbsolutePath>();
@@ -37,41 +25,57 @@ export class AgentRegistration {
   ) {}
 
   close() {
-    this.registered.forEach((path) => this.unregisterCtl(path));
+    this.registered.forEach((path) => {
+      this.unregisterCtl(path);
+    });
     this.registered.clear();
   }
 
   sync() {
     const paths = new Set<AbsolutePath>();
-    this.mounts.mounts().forEach((record) => this.registerAgent(record, paths));
+    this.registerAll(paths);
+    this.unregisterMissing(paths);
+    this.registered = paths;
+  }
+
+  private registerAll(paths: Paths) {
+    this.mounts.mounts().forEach((record) => {
+      this.registerAgent(record, paths);
+    });
+  }
+
+  private unregisterMissing(paths: Paths) {
     this.registered.forEach((path) => {
       if (!paths.has(path)) {
         this.unregisterCtl(path);
       }
     });
-    this.registered = paths;
   }
 
-  private registerAgent(record: PreparedMountRecord, paths: Set<AbsolutePath>) {
-    if (record.provider !== "agent") {
+  private registerAgent(record: PreparedMountRecord, paths: Paths) {
+    if (record.provider === "agent") {
+      this.registerAgentRecord(record, paths);
+    }
+  }
+
+  private registerAgentRecord(record: PreparedMountRecord, paths: Paths) {
+    const config = validAgentConfig(record.config);
+    if (config) {
+      this.registerValid(record, config, paths);
       return;
     }
-    const config = validAgentConfig(record.config);
-    if (!config) {
-      return this.registerInvalid(record);
-    }
-    this.registerValid(record, config, paths);
+    this.registerInvalid(record);
   }
 
   private registerValid(
     record: PreparedMountRecord,
     config: AgentConfig,
-    paths: Set<AbsolutePath>,
+    paths: Paths,
   ) {
     this.quarantined.delete(record.id);
-    Object.keys(config.personas).forEach((name) =>
-      this.registerPersona(record, name, paths),
-    );
+    Object.keys(config.personas).forEach((name) => {
+      this.registerPersona(record, name, paths);
+    });
   }
 
   private registerInvalid(record: PreparedMountRecord) {
@@ -85,7 +89,7 @@ export class AgentRegistration {
   private registerPersona(
     record: PreparedMountRecord,
     name: string,
-    paths: Set<AbsolutePath>,
+    paths: Paths,
   ) {
     const path = `${record.path}/${name}/ctl` as AbsolutePath;
     this.registerCtl(path, (payload) => this.invoke(record.id, name, payload));

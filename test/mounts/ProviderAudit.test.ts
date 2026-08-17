@@ -9,6 +9,14 @@ import { MountManager } from "../../src/mounts/MountManager";
 import { ProviderRegistry } from "../../src/mounts/ProviderRegistry";
 import { NodeStore } from "../../src/vfs/NodeStore";
 import { activateDesired } from "../desired_mount_helpers";
+import { parseJson } from "../json";
+
+interface AuditEvent {
+  action: string;
+  correlationId: string;
+  outcome: string;
+  detail?: string;
+}
 
 test("provider audit links a persisted fetch attempt to its published snapshot", async () => {
   const directory = await mkdtemp(join(tmpdir(), "yafs-provider-audit-"));
@@ -73,6 +81,6 @@ function audit(directory: string) {
     source
       .trim()
       .split("\n")
-      .map((line) => JSON.parse(line)),
+      .map((line) => parseJson(line) as AuditEvent),
   );
 }

@@ -1,6 +1,7 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 import { PathResolver } from "../core/PathResolver";
 import { FSNode } from "./FSNode";
+import { linkTarget as targetFor } from "./NodeStoreLinkTarget";
 import { NodeStoreState } from "./NodeStoreState";
 import { NodeStoreUnion } from "./NodeStoreUnion";
 
@@ -42,8 +43,8 @@ export class NodeStoreResolver {
 
   pathOf(node: FSNode): string {
     const names: string[] = [];
-    let current: FSNode | undefined = node;
-    while (current?.parent) {
+    let current = node;
+    while (current.parent) {
       names.unshift(current.name);
       current = current.parent;
     }
@@ -101,12 +102,8 @@ export class NodeStoreResolver {
   }
 
   linkTarget(link: FSNode) {
-    const target = link.symlinkTarget!;
-    return target.startsWith("/")
-      ? target
-      : `${this.pathOf(this.parent(link))}/${target}`;
-  }
-  private parent(link: FSNode) {
-    return link.parent || this.state.origin;
+    return targetFor(link, this.state.origin, (node) =>
+      this.pathOf(node),
+    );
   }
 }

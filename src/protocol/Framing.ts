@@ -6,33 +6,41 @@ import { CacheRequest } from "../cache/CacheRequest";
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 import { RequestError, verifyRequest } from "./FramingValidation";
 
-export type CommandRequest = { version: number; id: number; command: string };
-export type WriteRequest = {
+export interface CommandRequest {
+  version: number;
+  id: number;
+  command: string;
+}
+export interface WriteRequest {
   version: number;
   id: number;
   write: { path: string; content: string };
-};
-export type CacheProtocolRequest = {
+}
+export interface CacheProtocolRequest {
   version: number;
   id: number;
   cache: CacheRequest;
-};
-export type OperationProtocolRequest = {
+}
+export interface OperationProtocolRequest {
   version: number;
   id: number;
   operation: WorkspaceOperation;
-};
+}
 export type Request =
   | CommandRequest
   | WriteRequest
   | CacheProtocolRequest
   | OperationProtocolRequest;
-export type Response = { version: number; id: number; result: ExecutionResult };
-export type ProtocolFailure = {
+export interface Response {
+  version: number;
+  id: number;
+  result: ExecutionResult;
+}
+export interface ProtocolFailure {
   version: number;
   id: number;
   error: { code: string; message: string };
-};
+}
 
 export function parseRequest(line: string): Request {
   const request = JSON.parse(line) as Request;
@@ -66,14 +74,12 @@ export function respond(socket: Socket, response: Response | ProtocolFailure) {
   }
 }
 
-export function requestOrReject(
-  line: string,
-  socket: Socket,
-): Request | undefined {
+function requestOrReject(line: string, socket: Socket): Request | undefined {
   try {
     return parseRequest(line);
   } catch (error) {
-    return rejectRequest(error, socket);
+    rejectRequest(error, socket);
+    return;
   }
 }
 
@@ -96,6 +102,7 @@ export function persistenceFailure(
 }
 
 export { attachLines } from "./SocketLines";
+export { requestOrReject };
 
 function failure(id: number, code: string, message: string): ProtocolFailure {
   return { version: PROTOCOL_VERSION, id, error: { code, message } };

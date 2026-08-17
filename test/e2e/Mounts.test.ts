@@ -16,12 +16,13 @@ import {
   activateDesired,
   startedHostConfigServer,
 } from "../desired_mount_helpers";
+import { inspectedOrigin } from "../inspection_helpers";
 
 test("a validated manifest activates a read-only fixture mount with provenance", async () => {
   const yafs = new Yafs();
   await activateDesired(yafs, fixtureManifest());
   verifyFixture(yafs);
-  const origin = JSON.parse(yafs.exec("inspect fixture/hello.txt")).origins[0];
+  const origin = inspectedOrigin(yafs.exec("inspect fixture/hello.txt"));
   expect(origin).toMatchObject({
     kind: "provider",
     mountId: "demo",
@@ -70,7 +71,9 @@ test("mount manifests reject unknown fields and unmount removes the provider vie
 });
 
 test("mount manifests reject duplicate keys, YAML tags, aliases, and anchors", () => {
-  invalidManifests().forEach((manifest) => expectInvalidManifest(manifest));
+  invalidManifests().forEach((manifest) => {
+    expectInvalidManifest(manifest);
+  });
 });
 
 test("fixture snapshots participate in links, unions, and provenance", async () => {
@@ -82,7 +85,7 @@ test("fixture snapshots participate in links, unions, and provenance", async () 
   yafs.exec("union review notes fixture");
   expect(yafs.exec("cat latest")).toBe("hello");
   expect(yafs.exec("ls review")).toBe("alice.md\nhello.txt");
-  const origin = JSON.parse(yafs.exec("inspect review/hello.txt")).origins[0];
+  const origin = inspectedOrigin(yafs.exec("inspect review/hello.txt"));
   expect(origin).toMatchObject({
     kind: "provider",
     mountId: "demo",

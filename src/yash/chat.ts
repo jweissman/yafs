@@ -43,9 +43,11 @@ export async function runChat(
   readline: Readline,
   rest: string,
 ) {
-  await chat(client, readline, rest)
-    .then(report)
-    .catch((error: unknown) => report(errorMessage(error)));
+  await chat(client, readline, rest).then(report).catch(reportError);
+}
+
+function reportError(error: unknown) {
+  report(errorMessage(error));
 }
 
 function errorMessage(error: unknown) {

@@ -11,9 +11,9 @@ test("a malformed SSE data line is ignored rather than throwing", async () => {
 function rawSse(chunks: string[]) {
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      chunks.forEach((chunk) =>
-        controller.enqueue(new TextEncoder().encode(chunk)),
-      );
+      chunks.forEach((chunk) => {
+        controller.enqueue(new TextEncoder().encode(chunk));
+      });
       controller.close();
     },
   });

@@ -16,11 +16,11 @@ export type {
   TraceReifier,
 } from "./TraceTypes";
 
-export type CaptureOptions = {
+export interface CaptureOptions {
   origin?: Provenance;
   capturedAt?: string;
   limit?: number;
-};
+}
 
 function resolvedOptions(options: CaptureOptions) {
   return {
@@ -81,10 +81,14 @@ export class TraceService {
   }
 
   retain(trace: Trace, owner: string) {
-    trace.entries.forEach((entry) => this.blobs.retain(entry.digest, owner));
+    trace.entries.forEach((entry) => {
+      this.blobs.retain(entry.digest, owner);
+    });
   }
   release(trace: Trace, owner: string) {
-    trace.entries.forEach((entry) => this.blobs.release(entry.digest, owner));
+    trace.entries.forEach((entry) => {
+      this.blobs.release(entry.digest, owner);
+    });
   }
   gc() {
     return this.blobs.gc();

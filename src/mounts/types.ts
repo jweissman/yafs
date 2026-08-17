@@ -1,52 +1,64 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 
 export type MountState = "active" | "failed";
-export type StreamSpec = { chunks: string[]; intervalMs: number };
-export type FixtureConfig = {
+export interface StreamSpec {
+  chunks: string[];
+  intervalMs: number;
+}
+export interface FixtureConfig {
   files: Record<string, string>;
   streams?: Record<string, StreamSpec>;
-};
-export type GitHubConfig = { repository: string; query: string; max: number };
+}
+export interface GitHubConfig {
+  repository: string;
+  query: string;
+  max: number;
+}
 // Declares this persona has bounded MCP tool access. Yafs runs its own
 // scoped MCP HTTP server (AgentToolServer) and points LM Studio at it via
 // an `ephemeral_mcp` integration computed automatically per request — the
 // operator never edits LM Studio's mcp.json or hand-authors an
 // `integrations` list; `roots`/budgets here are the whole contract.
-export type PersonaToolsConfig = {
+export interface PersonaToolsConfig {
   roots: string[];
   maxResultBytes?: number;
   maxCalls?: number;
   deadlineMs?: number;
-};
-export type PersonaConfig = {
+}
+export interface PersonaConfig {
   prompt: string;
   endpoint?: string;
   model?: string;
   tools?: PersonaToolsConfig;
-};
-export type AgentConfig = {
+}
+export interface AgentConfig {
   personas: Record<string, PersonaConfig>;
   endpoint?: string;
   model?: string;
-};
-export type SlackConfig = {
+}
+export interface SlackConfig {
   channel: string;
   max?: number;
   persona?: string;
   requireMention?: boolean;
   replyTimeoutMs?: number;
-};
+  // Adding/removing the "working" reaction needs a separate OAuth scope
+  // (reactions:write) beyond posting/reading messages. Default true to
+  // match existing behavior; set false for a bot token that doesn't have
+  // that scope, instead of failing (and logging) on every message.
+  reactions?: boolean;
+}
 export type MountProvider = "fixture" | "github" | "agent" | "slack";
 export type MountConfig =
   FixtureConfig | GitHubConfig | AgentConfig | SlackConfig;
-export type PublishedSnapshot = {
+export interface PublishedSnapshot {
   entries: [string, string][];
   fileCount: number;
   byteCount: number;
   resourceReferences?: Record<string, object>;
-};
+}
 
-export type MountRecord = {
+export interface MountRecord {
   id: string;
   path: AbsolutePath;
   provider: MountProvider;
@@ -60,20 +72,23 @@ export type MountRecord = {
   refreshIntervalMs?: number;
   fetchedAt?: string;
   capabilities: string[];
-};
+}
 export type PreparedMountRecord = MountRecord & { snapshot: PublishedSnapshot };
 
-export type ManifestMount = {
+export interface ManifestMount {
   id: string;
   path: string;
   provider: MountProvider;
   config: MountConfig;
   capabilities: string[];
   refreshIntervalMs?: number;
-};
-export type Manifest = { version: 1; mounts: ManifestMount[] };
+}
+export interface Manifest {
+  version: 1;
+  mounts: ManifestMount[];
+}
 
-export type Provenance = {
+export interface Provenance {
   kind: "local" | "provider";
   path: string;
   mountId?: string;
@@ -81,4 +96,4 @@ export type Provenance = {
   revision?: string;
   activatedAt?: string;
   fetchedAt?: string;
-};
+}

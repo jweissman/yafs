@@ -3,22 +3,36 @@ import { expect, test } from "bun:test";
 import { parseManifest } from "../../src/mounts/Manifest";
 
 test("a manifest rejects an unsupported version and non-array declarations", () => {
-  assertInvalid("{version: 2, mounts: []}", "Invalid .yafsmeta manifest");
+  assertInvalid("{version: 2, mounts: []}", "Invalid manifest: expected");
   assertInvalid(
     "{version: 1, mounts: not-an-array}",
-    "Invalid .yafsmeta manifest",
+    "Invalid manifest: expected",
   );
 });
 
-test("a manifest rejects a plugin with a bad id, path, or provider", () => {
-  assertInvalid(entry("id: demo", "id: 1"), "Invalid .yafsmeta plugin");
+test("a manifest names the position of a non-object mount entry, which has no id to report", () => {
+  assertInvalid("{version: 1, mounts: [1]}", "Invalid mount at position 1");
+});
+
+test("a manifest rejects a mount id of --all, reserved by plugin deactivate --all", () => {
+  assertInvalid(
+    entry("id: demo", "id: --all"),
+    'id must not be "--all" (reserved by plugin deactivate)',
+  );
+});
+
+test("a manifest rejects a plugin with a bad id, path, or provider, naming the mount", () => {
+  assertInvalid(
+    entry("id: demo", "id: 1"),
+    "Invalid mount at position 1: id must be a string",
+  );
   assertInvalid(
     entry("path: fixture", "path: /absolute"),
-    "Invalid .yafsmeta plugin",
+    'Invalid mount "demo" (position 1): path must be a relative path',
   );
   assertInvalid(
     entry("provider: fixture", "provider: bogus"),
-    "Invalid .yafsmeta plugin",
+    'Invalid mount "demo" (position 1): unknown provider: "bogus"',
   );
 });
 
@@ -28,7 +42,7 @@ test("a github mount with no path: defaults under /world/github/<owner>/<repo>",
     'config: {repository: acme/widget, query: "is:pr", max: 2}, ' +
     "capabilities: [network.github-api]}]}";
   const { manifest: parsed } = parseManifest(manifest);
-  expect(parsed.mounts[0].path).toBe("world/github/acme/widget");
+  expect(parsed.mounts[0].path).toBe("/world/github/acme/widget");
 });
 
 test("an explicit path: still overrides the github default", () => {
@@ -46,19 +60,25 @@ test("a slack mount with no path: defaults under /world/slack/channels/<channel>
     "config: {channel: C123}, " +
     "capabilities: [network.slack-api, secret.slack-token]}]}";
   const { manifest: parsed } = parseManifest(manifest);
-  expect(parsed.mounts[0].path).toBe("world/slack/channels/C123");
+  expect(parsed.mounts[0].path).toBe("/world/slack/channels/C123");
 });
 
 test("a fixture mount with no path: is rejected, since fixture has no default", () => {
   const manifest =
     "{version: 1, mounts: [{id: demo, provider: fixture, " +
     "config: {files: {}}, capabilities: []}]}";
-  assertInvalid(manifest, "Invalid .yafsmeta plugin");
+  assertInvalid(
+    manifest,
+    "fixture mounts have no default path for this config — path: is required",
+  );
 });
 
 test("a manifest rejects non-array or non-string capabilities", () => {
-  assertInvalid(entry("[]", "not-an-array"), "Invalid .yafsmeta capabilities");
-  assertInvalid(entry("[]", "[1]"), "Invalid .yafsmeta capabilities");
+  assertInvalid(
+    entry("[]", "not-an-array"),
+    "capabilities must be an array of strings",
+  );
+  assertInvalid(entry("[]", "[1]"), "capabilities must be an array of strings");
 });
 
 test("a manifest rejects a malformed refresh interval", () => {

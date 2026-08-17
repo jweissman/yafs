@@ -3,6 +3,9 @@
 default:
     @just --list
 
+gh:
+    gh repo view --web
+
 # Full CI-equivalent gate: tests + coverage, lint, typecheck.
 check:
     bun run check
@@ -94,3 +97,11 @@ coverage-detail:
 # behind when docs are renamed/restructured or headings are reworded.
 check-doc-links:
     python3 script/check-doc-links.py docs/*.md README.md
+
+# Print a mount's full activation/refresh/unmount history from a daemon's
+# audit.ndjson, in order, for diagnosing why a mount's live VFS state
+# doesn't match `mounts`/`plugins status`. Usage:
+#   just audit-timeline demo
+#   just audit-timeline demo .yafs/audit.ndjson
+audit-timeline ID DATADIR=".yafs":
+    jq -c 'select(.mountId == "{{ID}}") | {sequence, at, action, outcome, beforeRevision, afterRevision, actor}' {{DATADIR}}/audit.ndjson

@@ -229,8 +229,9 @@ it is out of scope for the first review provider.
 
 **Delivered, M5-era proof — not the current active experiment.** This demo
 shipped and is still true today, but it is not what near-term work is being
-judged against; that's [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md#next-proof-review-radar)'s
-"review radar," a materially different shape (one scoped agent exploring
+judged against; that's [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md#review-radar-proof-achieved)'s
+"review radar" (now live-validated against a real model, not just a
+hypothesis), a materially different shape (one scoped agent exploring
 live, proposing one candidate, human-approved) that grew out of what this
 demo taught. Read this section as "what M5 proved," not "what to expect
 next." The first useful proof should be small enough to explain in one screen:

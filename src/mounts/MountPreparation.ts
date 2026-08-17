@@ -3,11 +3,11 @@ import { ProviderRegistry } from "./ProviderRegistry";
 import { SnapshotMaterializer } from "./SnapshotMaterializer";
 import { MountRecord, PreparedMountRecord } from "./types";
 
-export type PrepareServices = {
+export interface PrepareServices {
   providers: ProviderRegistry;
   persistence: MountPersistence;
   snapshots: SnapshotMaterializer;
-};
+}
 
 export function servicesFor(
   providers: ProviderRegistry,
@@ -17,11 +17,11 @@ export function servicesFor(
   return { providers, persistence, snapshots };
 }
 
-export type PrepareRequest = {
+export interface PrepareRequest {
   record: MountRecord;
   current: PreparedMountRecord | undefined;
   actor: string;
-};
+}
 
 export function prepareRecord(
   services: PrepareServices,

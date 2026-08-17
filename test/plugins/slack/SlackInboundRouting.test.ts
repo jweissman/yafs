@@ -24,7 +24,7 @@ test("waitFor times out when the condition never becomes true", async () => {
 // path (when dispatchCtl itself rejects), this fakes MountManager/dispatchCtl
 // directly rather than going through the real Slack/agent plugin stack.
 test("a dispatchCtl failure while posting the reply is logged, not left as an unhandled rejection", async () => {
-  const entries: Array<[string, string]> = [];
+  const entries: [string, string][] = [];
   const mounts = fakeMounts(entries);
   const personaCtlPath = "/home/root/agents/reviewer/ctl" as AbsolutePath;
   const slackCtlPath = "/home/root/updates/ctl" as AbsolutePath;
@@ -36,13 +36,14 @@ test("a dispatchCtl failure while posting the reply is logged, not left as an un
     slackCtlPath,
     botUserId: "BOT",
     replyTimeoutMs: 2000,
+    reactionsEnabled: true,
     channel: "C123",
     client: {
       history: async () => [],
       identity: async () => "BOT",
       postMessage: async () => "9.0",
-      addReaction: async () => {},
-      removeReaction: async () => {},
+      addReaction: async () => undefined,
+      removeReaction: async () => undefined,
     },
   };
 

@@ -19,20 +19,17 @@ async function assertDiscovery(server: McpServer) {
   expect(await request(server, 1, "initialize")).toMatchObject({
     result: { capabilities: { tools: {} } },
   });
-  expect(await request(server, 2, "tools/list")).toMatchObject({
-    result: {
-      tools: expect.arrayContaining([
-        expect.objectContaining({ name: "yafs.list" }),
-        expect.objectContaining({ name: "yafs.read" }),
-        expect.objectContaining({ name: "yafs.inspect" }),
-        expect.objectContaining({ name: "yafs.query" }),
-        expect.objectContaining({ name: "yafs.grep" }),
-        expect.objectContaining({ name: "yafs.diff" }),
-        expect.objectContaining({ name: "yafs.capture" }),
-        expect.objectContaining({ name: "yafs.restore" }),
-      ]),
-    },
+  const listed = await request(server, 2, "tools/list");
+  toolNames(listed).forEach((name) => {
+    expect(JSON.stringify(listed)).toContain(`"name":"${name}"`);
   });
+}
+
+function toolNames(_response: unknown) {
+  return [
+    "yafs.list", "yafs.read", "yafs.inspect", "yafs.query",
+    "yafs.grep", "yafs.diff", "yafs.capture", "yafs.restore",
+  ];
 }
 
 async function assertLiteracy(server: McpServer) {
@@ -63,7 +60,7 @@ async function assertLiteracy(server: McpServer) {
       paths: ["/home/root/work/brief.md"],
       limit: 0,
     }),
-  ).toContain("Result limit exceeded");
+  ).toContain('"truncated":true');
   expect(
     await toolText(server, 25, "yafs.diff", {
       left: "/home/root/work/brief.md",

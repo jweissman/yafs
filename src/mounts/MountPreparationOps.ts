@@ -5,12 +5,12 @@ import { assertDesiredAvailable } from "./MountRestore";
 import { prepareRecord, PrepareServices } from "./MountPreparation";
 import { ManifestMount, MountRecord, PreparedMountRecord } from "./types";
 
-export type PrepareDeps = {
+export interface PrepareDeps {
   planner: MountPlanner;
   persistence: MountPersistence;
   prepareServices: PrepareServices;
   records: () => PreparedMountRecord[];
-};
+}
 
 export function planDesiredMount(
   deps: PrepareDeps,

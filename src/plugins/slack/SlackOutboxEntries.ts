@@ -1,6 +1,9 @@
 import { OutboxStatus } from "./SlackOutboxStatus";
 
-export type OutboxId = { mountId: string; actionId: string };
+export interface OutboxId {
+  mountId: string;
+  actionId: string;
+}
 export type Entry = [string, string];
 
 export function messageEntry(id: OutboxId, message: string): Entry {

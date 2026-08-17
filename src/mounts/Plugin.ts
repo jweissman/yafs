@@ -11,37 +11,36 @@ import {
   PreparedMountRecord,
 } from "./types";
 
-export type PluginActionDefinition = {
+export interface PluginActionDefinition {
   name: string;
   capability: string;
   transport: "ctl";
   pseudobinary?: string;
-};
-export type PluginExposureDefinition = {
+}
+export interface PluginExposureDefinition {
   name: string;
   protocol: "http" | "resp" | "s3";
   status: "designed";
-};
+}
 
-export type Wiring = {
+export interface Wiring {
   mounts: MountManager;
   journal: Journal;
   enqueue: (work: () => Promise<void>) => Promise<void>;
   registerCtl: (path: AbsolutePath, handler: CtlHandler) => void;
   unregisterCtl: (path: AbsolutePath) => void;
   dispatchCtl: (path: AbsolutePath, payload: string) => Promise<boolean>;
-};
+}
 
-export type PluginDriver = {
+export interface PluginDriver {
   start?(): void;
   close(): void;
   sync(): void;
   recover?(): Promise<unknown>;
-};
+}
 
 export abstract class Plugin {
   constructor() {}
-
   abstract readonly name: MountProvider;
   abstract capabilities(): string[];
   abstract parseConfig(value: unknown): MountConfig;

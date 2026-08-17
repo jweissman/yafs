@@ -5,7 +5,10 @@ import { specialLine } from "./specialLine";
 import type { Readline, Repl } from "./repl";
 import type { AbsolutePath } from "../core/AbsolutePath";
 
-type Session = { user: string; cwd: AbsolutePath };
+interface Session {
+  user: string;
+  cwd: AbsolutePath;
+}
 type Client = Repl["client"];
 
 export async function replLoop(repl: Repl) {
@@ -34,7 +37,9 @@ function exitCommand(line: string | undefined) {
 
 function interruptionFor(readline: Readline) {
   const interruption = new AbortController();
-  readline.on("SIGINT", () => interruption.abort());
+  readline.on("SIGINT", () => {
+    interruption.abort();
+  });
   return interruption;
 }
 

@@ -10,7 +10,6 @@ class SlackCommand {
   readonly access = "mutate";
 
   constructor() {}
-
   execute(context: CommandContext, args: string[]) {
     if (args[0] !== "send") {
       throw new Error("slack expects send");

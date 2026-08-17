@@ -9,6 +9,7 @@ import {
   sleep,
 } from "../agent_test_helpers";
 import { startedHostConfigServer } from "../desired_mount_helpers";
+import { parseJson } from "../json";
 
 test("an operator plugin refresh keeps run history durable and still picks up a changed prompt", async () => {
   const { configPath, server, client } = await startedHostConfigServer(
@@ -59,6 +60,15 @@ function audit(directory: string) {
     source
       .trim()
       .split("\n")
-      .map((line) => JSON.parse(line)),
+      .map(auditEvent),
   );
+}
+
+function auditEvent(line: string): { detail?: string } {
+  const value = parseJson(line);
+  if (typeof value !== "object" || value === null) {
+    return {};
+  }
+  const { detail } = value as Record<string, unknown>;
+  return typeof detail === "string" ? { detail } : {};
 }

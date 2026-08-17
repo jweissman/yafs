@@ -6,10 +6,10 @@ import { PersonaConfig } from "../../mounts/types";
 // Studio's SSRF guard rejects loopback URLs for that per-request/dynamic
 // integration type; only mcp.json-declared `plugin` servers are exempt,
 // since registering one requires local filesystem access to begin with.
-export type PluginIntegration = {
+export interface PluginIntegration {
   type: "plugin";
   id: string;
-};
+}
 
 export type LmStudioOutputItem =
   | { type: "message"; content: string }
@@ -17,28 +17,28 @@ export type LmStudioOutputItem =
   | { type: "reasoning"; content: string }
   | { type: "invalid_tool_call"; reason: string; metadata: unknown };
 
-export type LmStudioTurn = {
+export interface LmStudioTurn {
   output: LmStudioOutputItem[];
   responseId?: string;
-};
+}
 
-export type LmStudioTurnRequest = {
+export interface LmStudioTurnRequest {
   input: string;
   systemPrompt: string;
   integrations: PluginIntegration[];
   previousResponseId?: string;
-};
+}
 
-export type ToolClient = {
+export interface ToolClient {
   respond(turn: LmStudioTurnRequest): Promise<LmStudioTurn>;
-};
+}
 export type ToolClientFor = (
   persona: PersonaConfig,
   mount: { endpoint?: string; model?: string },
 ) => ToolClient;
 
-export type LmStudioSettings = {
+export interface LmStudioSettings {
   apiUrl: string;
   model?: string;
   accessToken?: string;
-};
+}

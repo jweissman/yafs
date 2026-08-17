@@ -9,13 +9,13 @@ import {
 } from "./MountLifecycleOps";
 import { auditUnmount } from "./MountAudit";
 
-export type LifecycleState = {
+export interface LifecycleState {
   persistence: MountPersistence;
   snapshots: SnapshotMaterializer;
   getRecords: () => PreparedMountRecord[];
   setRecords: (records: PreparedMountRecord[]) => void;
   planUnmount: (id: string) => PreparedMountRecord;
-};
+}
 
 export class MountLifecycleController {
   constructor(private readonly state: LifecycleState) {}
@@ -35,16 +35,15 @@ export class MountLifecycleController {
   }
 
   save() {
-    this.state.persistence.save(this.state.getRecords());
+    const records = this.state.getRecords();
+    this.state.persistence.save(records);
+    return records;
   }
 
   private deps(): LifecycleDeps {
     const { persistence, snapshots, getRecords, setRecords } = this.state;
     return {
-      persistence,
-      snapshots,
-      getRecords,
-      setRecords,
+      persistence, snapshots, getRecords, setRecords,
       save: () => this.save(),
     };
   }

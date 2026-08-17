@@ -4,7 +4,10 @@ import { MountManager } from "../mounts/MountManager";
 import { Wiring } from "../mounts/Plugin";
 import { PreparedMountRecord } from "../mounts/types";
 
-export type ServerRefreshTiming = { now?: () => number; intervalMs?: number };
+export interface ServerRefreshTiming {
+  now?: () => number;
+  intervalMs?: number;
+}
 
 export class ServerRefresh {
   private readonly scheduler: MountRefreshScheduler;

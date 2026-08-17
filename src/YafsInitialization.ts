@@ -13,20 +13,20 @@ import type Yafs from "./index";
 import type { YafsOptions } from "./index";
 
 export function initializeYafs(yafs: Yafs, options: YafsOptions) {
-  yafs.clock = options.clock || systemClock;
-  yafs.store = options.store || new NodeStore(yafs.clock);
+  yafs.clock = options.clock ?? systemClock;
+  yafs.store = options.store ?? new NodeStore(yafs.clock);
   initializeTraces(yafs, options);
   configure(yafs, options);
 }
 
 function initializeTraces(yafs: Yafs, options: YafsOptions) {
-  yafs.blobs = options.blobs || memoryBlobStore();
-  yafs.traces = options.traces || new TraceService(yafs.blobs);
-  yafs.cache = options.cache || new CacheService(yafs.blobs);
+  yafs.blobs = options.blobs ?? memoryBlobStore();
+  yafs.traces = options.traces ?? new TraceService(yafs.blobs);
+  yafs.cache = options.cache ?? new CacheService(yafs.blobs);
 }
 
 function configure(yafs: Yafs, options: YafsOptions) {
-  yafs.user = options.user || { name: "root" };
+  yafs.user = options.user ?? { name: "root" };
   configureMounts(yafs, options);
   initializeShell(yafs);
   initializeWorkspace(yafs);
@@ -34,7 +34,7 @@ function configure(yafs: Yafs, options: YafsOptions) {
 }
 
 function configureMounts(yafs: Yafs, options: YafsOptions) {
-  yafs.mounts = options.mounts || new MountManager(yafs.store);
+  yafs.mounts = options.mounts ?? new MountManager(yafs.store);
   yafs.desired = options.desired;
 }
 

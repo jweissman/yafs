@@ -8,12 +8,12 @@ import { McpClient } from "./types";
 import { scopedStartHere } from "./ScopedStartHere";
 import { pathsOf, Scopable } from "./ScopedMcpPaths";
 
-export type ScopedMcpConfig = {
+export interface ScopedMcpConfig {
   roots: string[];
   maxResultBytes: number;
   maxCalls: number;
   deadlineMs: number;
-};
+}
 
 export class ScopedMcpClient implements McpClient {
   private calls = 0;
@@ -27,8 +27,10 @@ export class ScopedMcpClient implements McpClient {
     this.deadline = now() + config.deadlineMs;
   }
 
-  async execute(_command: string): Promise<ExecutionResult> {
-    throw new Error("yafs.query is not permitted for a scoped agent tool");
+  execute(_command: string): Promise<ExecutionResult> {
+    return Promise.reject(
+      new Error("yafs.query is not permitted for a scoped agent tool"),
+    );
   }
 
   async operation(request: WorkspaceOperation): Promise<ExecutionResult> {

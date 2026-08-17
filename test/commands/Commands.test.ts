@@ -91,6 +91,7 @@ function commandContext(): CommandContext {
     provenance: () => [],
     mounts: () => [],
     mountSummaries: () => [],
+    activeMountIds: () => [],
     plugins: () => [],
     ...mountContext(),
     ...writeContext(),
@@ -142,6 +143,7 @@ function writeContext() {
     write: () => undefined,
     remove: () => undefined,
     rmdir: () => undefined,
+    removeTree: () => undefined,
     symlink: () => undefined,
     union: () => undefined,
   };

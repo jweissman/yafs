@@ -75,10 +75,14 @@ function stat(context: CommandContext, key: string) {
 function remove(context: CommandContext, key: string) {
   const item = requiredEntry(context, key);
   context.remove(cacheMetadataPath(key));
-  context.afterCommit(() => context.cache.release(item));
+  context.afterCommit(() => {
+    context.cache.release(item);
+  });
   return "";
 }
 async function gc(context: CommandContext) {
-  expired(context).forEach((item) => context.cache.release(item));
+  expired(context).forEach((item) => {
+    context.cache.release(item);
+  });
   return JSON.stringify(await context.cache.gc());
 }

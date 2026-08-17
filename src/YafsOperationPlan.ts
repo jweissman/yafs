@@ -1,4 +1,3 @@
-import { AbsolutePath } from "./core/AbsolutePath";
 import { errorCode } from "./core/errors";
 import Yafs from "./index";
 import { WorkspaceOperation } from "./operations/WorkspaceOperation";
@@ -56,5 +55,5 @@ export function failure(yafs: Yafs, error: unknown): ExecutionResult {
 }
 
 function session(yafs: Yafs) {
-  return { user: yafs.user.name, cwd: yafs.shell.pwd as AbsolutePath };
+  return { user: yafs.user.name, cwd: yafs.shell.pwd };
 }

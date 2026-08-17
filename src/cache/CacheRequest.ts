@@ -23,7 +23,7 @@ function validOperation(request: Partial<CacheRequest>) {
 
 function validKeyedOperation(request: { operation?: string; key?: unknown }) {
   return (
-    ["get", "stat", "delete"].includes(request.operation || "") &&
+    ["get", "stat", "delete"].includes(request.operation ?? "") &&
     typeof request.key === "string"
   );
 }

@@ -21,7 +21,7 @@ export class NodeStoreInspection {
     if (node.dir) {
       throw new Error(`Is a directory: ${path}`);
     }
-    return node.content || "";
+    return node.content ?? "";
   }
   readlink(path: AbsolutePath): string {
     const node = this.resolver.get(path, false);
@@ -54,7 +54,7 @@ export class NodeStoreInspection {
     return [...new Set(this.resolver.entries(node).map((child) => child.name))];
   }
   private names(node: FSNode) {
-    return (node.children || []).map((child) => child.name).sort();
+    return (node.children ?? []).map((child) => child.name).sort();
   }
   origins(path: AbsolutePath): string[] {
     return this.originsFor.origins(path);
@@ -71,9 +71,11 @@ export class NodeStoreInspection {
     if (node.unionLayers) {
       mounts.push(this.mount(node));
     }
-    node.children?.forEach((child) => this.collect(child, mounts));
+    node.children?.forEach((child) => {
+      this.collect(child, mounts);
+    });
   }
   private mount(node: FSNode) {
-    return { path: this.resolver.pathOf(node), layers: node.unionLayers || [] };
+    return { path: this.resolver.pathOf(node), layers: node.unionLayers ?? [] };
   }
 }

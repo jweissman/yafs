@@ -8,7 +8,9 @@ export function withTerminalHandoff<T>(
   action: () => Promise<T>,
 ): Promise<T> {
   release(readline);
-  return action().finally(() => reclaim(readline));
+  return action().finally(() => {
+    reclaim(readline);
+  });
 }
 
 function release(readline: Readline) {

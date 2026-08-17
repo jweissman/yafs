@@ -7,10 +7,10 @@ import { githubConfig } from "./GitHubManifest";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
 import { GitHubConfig, MountConfig, MountRecord } from "../../mounts/types";
 
-type Sources = {
+interface Sources {
   github?: GitHubCollectionSource;
   authenticatedGithub?: GitHubCollectionSource;
-};
+}
 
 export class GitHubPlugin extends Plugin {
   readonly name = "github" as const;
@@ -30,12 +30,22 @@ export class GitHubPlugin extends Plugin {
     return githubConfig(value);
   }
 
+  // Absolute (leading slash), not relative to the activating session's
+  // home — /world is one shared, top-level namespace visible to every
+  // principal, not nested under whoever happened to run `plugins apply`.
+  // PathResolver.resolve treats a leading-slash path as already-final and
+  // ignores the session root entirely, so this is the whole mechanism.
   defaultPath(config: MountConfig): string {
-    return `world/github/${(config as GitHubConfig).repository}`;
+    return `/world/github/${(config as GitHubConfig).repository}`;
   }
 
   worldDescription(): string {
-    return "GitHub PR collection: pulls/<number>/{metadata.json,diff.patch}";
+    return (
+      "GitHub PR collection: pulls/<number>/{metadata.json,diff.patch}. " +
+      "This mount's own path names the owner/repo (/world/github/<owner>/" +
+      "<repo>) -- cite a PR as https://github.com/<owner>/<repo>/pull/<number> " +
+      "(singular \"pull\", not the \"pulls/\" directory name)."
+    );
   }
 
   unavailableCapability(record: Pick<MountRecord, "id">, capability: string) {

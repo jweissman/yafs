@@ -33,8 +33,11 @@ export class SlackPlugin extends Plugin {
   // SlackConfig has no workspace/team field — only a bare channel id. An
   // explicit path: is required once more than one Slack mount is active;
   // see PRODUCT-SPEC.md's "Namespace: three concepts" section.
+  // Absolute (leading slash) for the same reason as GitHubPlugin's
+  // defaultPath: /world is one shared top-level namespace, not nested
+  // under the activating session's own home.
   defaultPath(config: MountConfig): string {
-    return `world/slack/channels/${(config as SlackConfig).channel}`;
+    return `/world/slack/channels/${(config as SlackConfig).channel}`;
   }
 
   worldDescription(): string {

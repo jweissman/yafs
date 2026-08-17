@@ -9,6 +9,7 @@ import { GitHubCollectionSource } from "../../src/plugins/github/GitHubCollectio
 import { GitHubTraceReifier } from "../../src/plugins/github/GitHubTraceReifier";
 import { ProviderRegistry } from "../../src/mounts/ProviderRegistry";
 import { startedHostConfigServer } from "../desired_mount_helpers";
+import { parseJson } from "../json";
 
 test("a durable trace survives restart, retains its blobs, and reifies without its source", async () => {
   const directory = await mkdtemp(join(tmpdir(), "yafs-trace-recovery-"));
@@ -38,7 +39,7 @@ test("a daemon reifies a missing pinned GitHub trace only through its provider h
   await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
   await client.exec("capture reviews/pulls/42 artifacts/one");
-  const trace = JSON.parse(await client.exec("cat artifacts/one/trace.json"));
+  const trace = traceRecord(await client.exec("cat artifacts/one/trace.json"));
   await client.close();
   await server.close();
   await unlink(blobPath(directory, trace.entries[0].digest));
@@ -65,7 +66,7 @@ test("a daemon reifies a missing pinned GitHub trace by refetching the pull thro
   await restored.exec("restore artifacts/one restored");
   expect(await restored.exec("cat restored/diff.patch")).toBe("diff --git");
   expect(
-    JSON.parse(await restored.exec("cat restored/metadata.json")),
+    parseJson(await restored.exec("cat restored/metadata.json")),
   ).toMatchObject({
     number: 42,
     headSha: "abc123",
@@ -83,7 +84,7 @@ async function capturedGitHubTrace() {
   await client.exec("plugins apply");
   await client.exec("mkdir artifacts");
   await client.exec("capture reviews/pulls/42 artifacts/one");
-  const trace = JSON.parse(await client.exec("cat artifacts/one/trace.json"));
+  const trace = traceRecord(await client.exec("cat artifacts/one/trace.json"));
   await client.close();
   await server.close();
   return { directory, trace };
@@ -130,4 +131,25 @@ function reifier() {
   return {
     reify: async (trace: { resourceReference?: object }) => recovered(trace),
   };
+}
+
+function traceRecord(source: string): { entries: { digest: string }[] } {
+  const value = parseJson(source);
+  if (!isTrace(value)) {
+    throw new Error("Expected a trace with blob entries");
+  }
+  return value;
+}
+
+function isTrace(value: unknown): value is { entries: { digest: string }[] } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const { entries } = value as Record<string, unknown>;
+  return Array.isArray(entries) && entries.every(isTraceEntry);
+}
+
+function isTraceEntry(value: unknown): value is { digest: string } {
+  return typeof value === "object" && value !== null &&
+    typeof (value as Record<string, unknown>).digest === "string";
 }

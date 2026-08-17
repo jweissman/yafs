@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 
 import { YashClient } from "../../src/protocol/client";
 import { startedHostConfigServer } from "../desired_mount_helpers";
+import { inspectedOrigin } from "../inspection_helpers";
 
 test("a manifest-declared fixture stream delivers chunks into a live mount without blocking other clients", async () => {
   const { server, client } = await startedFixtureClient(
@@ -19,8 +20,8 @@ test("a manifest-declared fixture stream delivers chunks into a live mount witho
   );
   expect("one-two-three".startsWith(partial)).toBe(true);
   await waitForExact(client, "demo/output.txt", "one-two-three");
-  const inspected = JSON.parse(await client.exec("inspect demo/output.txt"));
-  expect(inspected.origins[0].revision).toMatch(/:3$/);
+  const origin = inspectedOrigin(await client.exec("inspect demo/output.txt"));
+  expect(origin.revision).toMatch(/:3$/);
   await client.close();
   await other.close();
   await server.close();

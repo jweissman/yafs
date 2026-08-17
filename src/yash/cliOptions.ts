@@ -11,18 +11,18 @@ export function cliOptions() {
 
 function connectionDefaults() {
   return {
-    host: process.env.YAFS_HOST || "127.0.0.1",
-    port: Number(process.env.YAFS_PORT || 7337),
+    host: process.env.YAFS_HOST ?? "127.0.0.1",
+    port: Number(process.env.YAFS_PORT ?? 7337),
   };
 }
 
 function replDefaults() {
   return {
     promptTemplate:
-      process.env.PROMPT ||
+      process.env.PROMPT ??
       "\x1b[36m{user}@{server}\x1b[0m:\x1b[34m{cwd}\x1b[0m$ ",
     historyPath:
-      process.env.YAFS_HISTORY ||
+      process.env.YAFS_HISTORY ??
       join(homedir(), ".local", "state", "yafs", "history"),
   };
 }

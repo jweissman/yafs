@@ -23,7 +23,7 @@ export class MountRefreshScheduler {
       return false;
     }
     return (
-      Date.parse(record.fetchedAt || record.activatedAt) + interval <=
+      Date.parse(record.fetchedAt ?? record.activatedAt) + interval <=
       this.now()
     );
   }

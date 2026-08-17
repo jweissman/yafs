@@ -66,7 +66,9 @@ test("printLogs --tail follows appended content until aborted", async () => {
   const output = await captured(async () => {
     const run = printLogs(path, ["--tail"], controller.signal);
     await writeFile(path, "start\nappended\n");
-    setTimeout(() => controller.abort(), 350);
+    setTimeout(() => {
+      controller.abort();
+    }, 350);
     await run;
   });
   expect(output).toContain("appended\n");
@@ -81,11 +83,15 @@ async function logFile(content: string): Promise<string> {
 
 async function captured(run: () => Promise<void>): Promise<string> {
   const chunks: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
-  process.stdout.write = ((chunk: unknown) => {
+  // Bun types `bind()` here as any; this captures stdout before the test swap.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const original: typeof process.stdout.write = process.stdout.write.bind(
+    process.stdout,
+  );
+  process.stdout.write = (chunk: unknown) => {
     chunks.push(String(chunk));
     return true;
-  }) as typeof process.stdout.write;
+  };
   try {
     await run();
   } finally {

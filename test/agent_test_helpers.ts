@@ -1,14 +1,15 @@
 import { YashClient } from "../src/protocol/client";
+import { parseJson } from "./json";
 
 export * from "./agent_model_fakes";
 
 type StatusMatcher = (status: { state: string }) => boolean;
-type PollState = {
+interface PollState {
   client: YashClient;
   runsDir: string;
   matches: StatusMatcher;
   deadline: number;
-};
+}
 
 export function waitForRun(
   client: YashClient,
@@ -62,7 +63,7 @@ async function firstRunId(state: PollState) {
   const listing = await state.client
     .exec(`ls ${state.runsDir}`)
     .catch(() => "");
-  return listing?.split("\n")[0];
+  return listing.split("\n")[0];
 }
 
 // A freshly listed run/action directory entry can momentarily precede its
@@ -71,8 +72,22 @@ async function firstRunId(state: PollState) {
 async function readStatus(client: YashClient, runsDir: string, runId: string) {
   return client
     .exec(`cat ${runsDir}/${runId}/status.json`)
-    .then((raw) => JSON.parse(raw))
+    .then(parseStatus)
     .catch(() => undefined);
+}
+
+function parseStatus(raw: string): { state: string } | undefined {
+  const value = parseJson(raw);
+  return validStatus(value) ? value : undefined;
+}
+
+function validStatus(value: unknown): value is { state: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "state" in value &&
+    typeof value.state === "string"
+  );
 }
 
 export function manifest(personas: Record<string, string>) {

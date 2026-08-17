@@ -7,7 +7,7 @@ import { TraceService } from "./traces/TraceService";
 import { DesiredMounts } from "./mounts/DesiredMounts";
 import { CacheService } from "./cache/CacheService";
 
-export type YafsOptions = {
+export interface YafsOptions {
   store?: NodeStore;
   user?: User;
   clock?: Clock;
@@ -16,4 +16,4 @@ export type YafsOptions = {
   traces?: TraceService;
   cache?: CacheService;
   desired?: DesiredMounts;
-};
+}

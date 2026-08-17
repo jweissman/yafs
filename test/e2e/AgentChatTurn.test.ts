@@ -5,7 +5,7 @@ import { manifest, recordingModel, sleep } from "../agent_test_helpers";
 import { startedHostConfigServer } from "../desired_mount_helpers";
 
 test("--chat turns accumulate structured history and each call sees prior turns", async () => {
-  const calls: Array<{ role: string; content: string }[]> = [];
+  const calls: { role: string; content: string }[][] = [];
   const model = recordingModel(["reply one", "reply two"], calls);
   const { server, client } = await startedHostConfigServer(
     "yafs-agent-chat-",
@@ -31,7 +31,9 @@ async function sendTurn(client: YashClient, message: string) {
 
 async function waitForComplete(client: YashClient, runPath: string) {
   for (let i = 0; i < 100; i++) {
-    const status = JSON.parse(await client.exec(`cat ${runPath}/status.json`));
+    const status = runStatus(
+      await client.exec(`cat ${runPath}/status.json`),
+    );
     if (status.state === "complete") {
       return;
     }
@@ -40,7 +42,7 @@ async function waitForComplete(client: YashClient, runPath: string) {
   throw new Error(`Timed out waiting for ${runPath} to complete`);
 }
 
-function assertCalls(calls: Array<{ role: string; content: string }[]>) {
+function assertCalls(calls: { role: string; content: string }[][]) {
   expect(calls[0]).toEqual([
     { role: "system", content: "prompt" },
     { role: "user", content: "msg1" },
@@ -58,11 +60,19 @@ async function assertHistory(client: YashClient) {
     await client.exec("cat agents/reviewer/chats/abc/messages.ndjson")
   )
     .split("\n")
-    .map((line) => JSON.parse(line));
+    .map(chatMessage);
   expect(lines).toEqual([
     { role: "user", content: "msg1" },
     { role: "assistant", content: "reply one" },
     { role: "user", content: "msg2" },
     { role: "assistant", content: "reply two" },
   ]);
+}
+
+function runStatus(raw: string): { state: string } {
+  return JSON.parse(raw) as { state: string };
+}
+
+function chatMessage(raw: string): { role: string; content: string } {
+  return JSON.parse(raw) as { role: string; content: string };
 }

@@ -14,7 +14,10 @@ import {
   writeRequest,
 } from "./ClientTransport";
 
-type Address = { host: string; port: number };
+interface Address {
+  host: string;
+  port: number;
+}
 
 export class YashClient {
   private lines = new LineBuffer();
@@ -23,7 +26,9 @@ export class YashClient {
   private constructor(private readonly socket: Socket) {
     this.requests = new PendingRequests(
       () => socket.destroyed,
-      (id, payload) => writeRequest(socket, id, payload),
+      (id, payload) => {
+        writeRequest(socket, id, payload);
+      },
     );
     socket.setEncoding("utf8");
     attachSocketEvents(socket, this.lines, this.requests);

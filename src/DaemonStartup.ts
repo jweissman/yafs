@@ -4,12 +4,15 @@ import { currentState } from "./daemon";
 import { delay } from "./DaemonHealth";
 import { startupError } from "./DaemonStartupError";
 
-type StatePaths = { state: string; log: string };
-type Attempt = {
+interface StatePaths {
+  state: string;
+  log: string;
+}
+interface Attempt {
   child: ChildProcess;
   statePaths: StatePaths;
   logOffset: number;
-};
+}
 
 export async function waitForState(
   child: ChildProcess,
@@ -22,8 +25,16 @@ export async function waitForState(
   }
 }
 
+// 3s (the old 30x100ms budget) is too tight once startup reconciles a
+// mount that fetches real content over the network (observed live: a
+// 100-PR GitHub mount's reconcile outlasted it, so the CLI reported a
+// generic timeout instead of the real error already sitting in the log
+// a moment later). Poll interval stays short so a normal fast boot still
+// reports promptly; only a genuinely slow reconcile eats the longer cap.
+const STARTUP_POLL_BUDGET = 600;
+
 async function pollForState(attempt: Attempt) {
-  for (let count = 0; count < 30; count++) {
+  for (let count = 0; count < STARTUP_POLL_BUDGET; count++) {
     if (await tick(attempt)) {
       return true;
     }
@@ -45,7 +56,7 @@ async function tick(attempt: Attempt) {
 async function startupFailure(attempt: Attempt) {
   const line = await errorLine(attempt);
   return new Error(
-    line || `yafsd failed to start; see ${attempt.statePaths.log}`,
+    line ?? `yafsd failed to start; see ${attempt.statePaths.log}`,
   );
 }
 

@@ -1,3 +1,4 @@
+import { AbsolutePath } from "../core/AbsolutePath";
 import { PreparedMountRecord } from "./types";
 import { SnapshotMaterializer } from "./SnapshotMaterializer";
 import {
@@ -28,7 +29,7 @@ export class MountReplayer {
     this.commit(restoredRefresh(this.snapshots(), this.records(), record));
   }
 
-  unmount(id: string) {
-    this.commit(restoredUnmount(this.snapshots(), this.records(), id));
+  unmount(id: string, path: AbsolutePath) {
+    this.commit(restoredUnmount(this.snapshots(), this.records(), id, path));
   }
 }

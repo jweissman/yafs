@@ -62,8 +62,9 @@ function tree(
   path: AbsolutePath,
   operation: TreeOperation,
 ): WorkspaceValue {
-  const entries = walker(context, operation).tree(path);
-  return { kind: "tree", path, entries };
+  const instance = walker(context, operation);
+  const entries = instance.tree(path);
+  return { kind: "tree", path, entries, truncated: instance.wasTruncated() };
 }
 
 function find(
@@ -71,9 +72,18 @@ function find(
   path: AbsolutePath,
   operation: FindOperation,
 ): WorkspaceValue {
-  const entries = walker(context, { ...operation, limit: undefined }).all(path);
+  const instance = walker(context, { ...operation, limit: undefined });
+  const entries = instance.all(path);
   const matches = findEntries(entries, operation.pattern, operation.type);
-  return { kind: "find", paths: boundedPaths(matches, operation.limit) };
+  return findValue(matches, operation);
+}
+
+function findValue(
+  matches: AbsolutePath[],
+  operation: FindOperation,
+): WorkspaceValue {
+  const paths = boundedPaths(matches, operation.limit);
+  return { kind: "find", paths, truncated: paths.length < matches.length };
 }
 
 function walker(
@@ -82,5 +92,5 @@ function walker(
 ) {
   const depth = operation.name === "tree" ? (operation.depth ?? 3) : 10;
   const limit = operation.limit ?? 1000;
-  return new WorkspaceWalker(context, depth, limit);
+  return new WorkspaceWalker(context, depth, limit, false);
 }

@@ -12,7 +12,9 @@ import { daemonDesiredMounts } from "../mounts/daemonDesiredMounts";
 import { reconcileDesired } from "./ReconcileDesired";
 import { ServerConnection } from "./ServerConnection";
 import { Services, StartOptions } from "./ServerTypes";
-import { driversFor, ServerBindings } from "./ServerWiring";
+import Yafs from "../index";
+import { driversFor, serverBindings } from "./ServerWiring";
+import { closeServer } from "./ServerClose";
 
 export type { StartOptions } from "./ServerTypes";
 
@@ -23,22 +25,17 @@ export class YafsServer {
   private background!: BackgroundDrivers;
   private constructor(private readonly services: Services) {
     this.connection = new ServerConnection(services, () => this.background);
-    this.server = createServer((socket) => this.connection.attach(socket));
+    this.server = createServer((socket) => {
+      this.connection.attach(socket);
+    });
     const options = toolServerOptions(services);
     this.toolServer = new AgentToolServer(services.mounts, options);
   }
   private driversFor(options: StartOptions) {
     return driversFor(this.bindings(), options);
   }
-  private bindings(): ServerBindings {
-    return {
-      services: this.services,
-      connection: this.connection,
-      toolServer: this.toolServer,
-      registerCtl: this.registerCtl.bind(this),
-      unregisterCtl: this.unregisterCtl.bind(this),
-      dispatchCtl: this.dispatchCtl.bind(this),
-    };
+  private bindings() {
+    return serverBindings(this.services, this.connection, this.toolServer);
   }
   static async start(options: StartOptions): Promise<YafsServer> {
     const s = YafsServer.construct(await openServices(options), options);
@@ -51,7 +48,8 @@ export class YafsServer {
     return s;
   }
   private reconcile() {
-    const commit = this.connection.commit.bind(this.connection);
+    const commit = (current: Yafs, operations: VfsOperation[]) =>
+      this.connection.commit(current, operations);
     return reconcileDesired(
       this.services.desired,
       () => this.connection.session(),
@@ -77,9 +75,7 @@ export class YafsServer {
     this.toolServer.close();
     closeAll(this.background);
     this.connection.closeSockets();
-    await new Promise<void>((ok, no) =>
-      this.server.close((error) => (error ? no(error) : ok())),
-    );
+    await closeServer(this.server);
     await this.services.journal.close();
   }
 

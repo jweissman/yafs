@@ -10,6 +10,12 @@ import {
 } from "./ClientProtocol";
 
 type Write = (id: number, payload: Payload) => void;
+interface RequestSetup {
+  id: number;
+  payload: Payload;
+  resolve: ResultResolver;
+  reject: ErrorResolver;
+}
 
 export class PendingRequests {
   private nextId = 1;
@@ -22,28 +28,28 @@ export class PendingRequests {
 
   send(payload: Payload): Promise<ExecutionResult> {
     const id = this.nextId++;
-    return new Promise((resolve, reject) =>
-      this.request(id, payload, resolve, reject),
-    );
+    return new Promise((resolve, reject) => {
+      this.request({ id, payload, resolve, reject });
+    });
   }
 
-  private request(
-    id: number,
-    payload: Payload,
-    resolve: ResultResolver,
-    reject: ErrorResolver,
-  ) {
-    return this.isClosed()
-      ? reject(new Error("Connection closed"))
-      : this.registerAndSend(id, payload, resolve, reject);
+  private request(request: RequestSetup) {
+    if (this.rejectIfClosed(request.reject)) {
+      return;
+    }
+    this.registerAndSend(request);
   }
 
-  private registerAndSend(
-    id: number,
-    payload: Payload,
-    resolve: ResultResolver,
-    reject: ErrorResolver,
-  ) {
+  private rejectIfClosed(reject: ErrorResolver) {
+    if (!this.isClosed()) {
+      return false;
+    }
+    reject(new Error("Connection closed"));
+    return true;
+  }
+
+  private registerAndSend(request: RequestSetup) {
+    const { id, payload, resolve, reject } = request;
     this.pending.set(id, { resolve, reject });
     this.write(id, payload);
   }
@@ -62,7 +68,8 @@ export class PendingRequests {
     response: Response | ProtocolFailure,
   ) {
     if (response.version !== PROTOCOL_VERSION) {
-      return pending.reject(new Error("Unsupported protocol version"));
+      pending.reject(new Error("Unsupported protocol version"));
+      return;
     }
     this.settleVersioned(pending, response);
   }
@@ -72,7 +79,8 @@ export class PendingRequests {
     response: Response | ProtocolFailure,
   ) {
     if ("error" in response) {
-      return pending.reject(new Error(response.error.message));
+      pending.reject(new Error(response.error.message));
+      return;
     }
     pending.resolve(response.result);
   }

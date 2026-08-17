@@ -7,13 +7,13 @@ import { installReverseSearch, historyInterface } from "./reverseSearch";
 import type { Client } from "./connect";
 
 export type Readline = ReturnType<typeof createInterface>;
-export type Repl = {
+export interface Repl {
   client: Client;
   readline: Readline;
   history: CommandHistory;
   promptTemplate: string;
   serverName: string;
-};
+}
 
 export async function setupRepl(
   client: Client,

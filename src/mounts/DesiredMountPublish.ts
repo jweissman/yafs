@@ -3,13 +3,22 @@ import { MountManager } from "./MountManager";
 import { Change } from "./DesiredMountChanges";
 import { ManifestMount, PreparedMountRecord } from "./types";
 
-export type Mutations = {
+export interface Mutations {
   mount(record: PreparedMountRecord): void;
   refresh(record: PreparedMountRecord): void;
-  unmount(id: string): void;
-};
+  unmount(id: string, path: AbsolutePath): void;
+}
 
-export type Target = { mounts: MountManager; root: AbsolutePath };
+export interface Target {
+  mounts: MountManager;
+  root: AbsolutePath;
+}
+
+interface PreparedPublish {
+  change: Change;
+  mutations: Mutations;
+  record: PreparedMountRecord;
+}
 
 export function applyChange(
   target: Target,
@@ -18,8 +27,17 @@ export function applyChange(
   mutations: Mutations,
 ) {
   return change.action === "unmount"
-    ? Promise.resolve(mutations.unmount(change.id))
+    ? unmount(target, mutations, change.id)
     : publish(target, change, declarations, mutations);
+}
+
+function unmount(
+  target: Target,
+  mutations: Mutations,
+  id: string,
+): Promise<void> {
+  mutations.unmount(id, target.mounts.planUnmount(id).path);
+  return Promise.resolve();
 }
 
 async function publish(
@@ -30,7 +48,7 @@ async function publish(
 ) {
   const record = recordFor(target, declarations, change.id);
   const prepared = await target.mounts.prepareActivation(record, "system");
-  publishPrepared(change, mutations, prepared);
+  publishPrepared({ change, mutations, record: prepared });
 }
 
 function recordFor(target: Target, declarations: ManifestMount[], id: string) {
@@ -38,14 +56,12 @@ function recordFor(target: Target, declarations: ManifestMount[], id: string) {
   return target.mounts.planDesired(mount, digest(declarations), target.root);
 }
 
-function publishPrepared(
-  change: Change,
-  mutations: Mutations,
-  record: PreparedMountRecord,
-) {
-  const publish =
-    change.action === "activate" ? mutations.mount : mutations.refresh;
-  publish(record);
+function publishPrepared({ change, mutations, record }: PreparedPublish) {
+  if (change.action === "activate") {
+    mutations.mount(record);
+  } else {
+    mutations.refresh(record);
+  }
 }
 
 function declaration(declarations: ManifestMount[], id: string) {

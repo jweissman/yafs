@@ -27,16 +27,25 @@ export async function callTool(
 }
 
 async function attemptTool(client: McpClient, name: string, input: unknown) {
-  return result(await run(client, operation(name, argumentsFor(input))));
+  const operation = requiredOperation(name, argumentsFor(input));
+  return result(await run(client, operation));
 }
 
 function operation(name: string, input: Arguments) {
   return name === "yafs.query"
     ? queryCommand(input)
-    : literacyOperation(name, input) ||
-        evidenceOperation(name, input) ||
-        orientationOperation(name, input) ||
+    : literacyOperation(name, input) ??
+        evidenceOperation(name, input) ??
+        orientationOperation(name, input) ??
         pathOperation(name, input);
+}
+
+function requiredOperation(name: string, input: Arguments) {
+  const selected = operation(name, input);
+  if (!selected) {
+    throw new Error(`Unknown tool: ${name}`);
+  }
+  return selected;
 }
 
 function argumentsFor(input: unknown): Arguments {

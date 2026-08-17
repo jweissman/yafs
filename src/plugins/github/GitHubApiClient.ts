@@ -17,9 +17,14 @@ import { apiJson, apiText, ApiRequest } from "./GitHubApiFetch";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+// Only apiUrl/token are used for making requests -- webUrl exists
+// purely for building human-facing citation links elsewhere and has no
+// bearing on this client, so it isn't required here.
+type ClientSettings = Pick<GitHubSettings, "apiUrl" | "token">;
+
 export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
   constructor(
-    private readonly settings: GitHubSettings,
+    private readonly settings: ClientSettings,
     private readonly request: Fetch = fetch,
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
   ) {}

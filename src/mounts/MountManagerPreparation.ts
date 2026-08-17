@@ -9,12 +9,12 @@ import {
 } from "./MountPreparationOps";
 import { prepDepsFor } from "./MountManagerDeps";
 
-export type PreparationState = {
+export interface PreparationState {
   planner: MountPlanner;
   persistence: MountPersistence;
   prepareServices: PrepareServices;
   getRecords: () => PreparedMountRecord[];
-};
+}
 
 export function desiredPlan(
   state: PreparationState,

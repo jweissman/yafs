@@ -27,7 +27,9 @@ test("shell navigation delegates to the local node store", () => {
   store.mkdir("/home/root/docs");
   shell.cd("docs");
   expect(shell.pwd).toBe("/home/root/docs");
-  expect(() => shell.cd("missing")).toThrow("No such directory");
+  expect(() => {
+    shell.cd("missing");
+  }).toThrow("No such directory");
 });
 
 test("fixture providers report missing paths and enumerate configured files", () => {
@@ -47,7 +49,7 @@ test("the composed node store façade delegates every filesystem operation", () 
   store.write("/home/root/lower/item", "lower");
   store.write("/home/root/upper/item", "upper");
   store.union("/home/root/view", ["/home/root/upper", "/home/root/lower"]);
-  expect(store.getNode(1)?.name).toBe("/");
+  expect(store.getNode(1).name).toBe("/");
   expect(store.read("/home/root/view/item")).toBe("upper");
   store.symlink("/home/root/lower/item", "/home/root/link");
   expect(store.readlink("/home/root/link")).toContain("item");
@@ -79,9 +81,9 @@ function assertSnapshotRestoreAndReplay(store: NodeStore) {
 
 test("setProviderOrigin rejects a path with no node", () => {
   const store = new NodeStore();
-  expect(() =>
-    store.setProviderOrigin("/home/root/missing", providerOrigin()),
-  ).toThrow("No such file: /home/root/missing");
+  expect(() => {
+    store.setProviderOrigin("/home/root/missing", providerOrigin());
+  }).toThrow("No such file: /home/root/missing");
 });
 
 test("provider metadata survives snapshots and protects composed paths", () => {
@@ -93,20 +95,20 @@ test("provider metadata survives snapshots and protects composed paths", () => {
   expect(
     store.provenance("/home/root/provider/nested/item")[0].origin?.mountId,
   ).toBe("demo");
-  expect(() =>
-    store.write("/home/root/provider/nested/item", "changed"),
-  ).toThrow("Read-only mount");
+  expect(() => {
+    store.write("/home/root/provider/nested/item", "changed");
+  }).toThrow("Read-only mount");
   store.mkdir("/home/root/local");
   store.union("/home/root/view", ["/home/root/local"]);
-  expect(() => store.write("/home/root/view/new", "blocked")).toThrow(
-    "Read-only union mount",
-  );
+  expect(() => {
+    store.write("/home/root/view/new", "blocked");
+  }).toThrow("Read-only union mount");
   const snapshot = store.snapshot(1);
   const restored = new NodeStore();
   restored.restore(snapshot);
-  expect(() =>
-    restored.write("/home/root/provider/nested/item", "changed"),
-  ).toThrow("Read-only mount");
+  expect(() => {
+    restored.write("/home/root/provider/nested/item", "changed");
+  }).toThrow("Read-only mount");
 });
 
 test("path helpers resolve and normalize absolute paths", () => {

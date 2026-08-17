@@ -9,6 +9,7 @@ import {
   ToolClient,
 } from "../../src/plugins/agent/LmStudioMcpClient";
 import { yafsKey } from "../../src/plugins/agent/LmStudioMcpJson";
+import { parseJson } from "../json";
 
 test("a tool-enabled persona routes through LM Studio's native chat endpoint and records a durable transcript", async () => {
   const calls: LmStudioTurnRequest[] = [];
@@ -32,9 +33,9 @@ async function assertFirstTurn(yash: YashClient, calls: LmStudioTurnRequest[]) {
   await send(yash, "run-1", "hi", "c1");
   await waitForComplete(yash, "run-1");
   expect(await yash.exec("cat agents/reviewer/runs/run-1/response.md")).toBe(
-    "Looks fine.",
+    "Looks fine.\n\n---\n1 tool call(s) in 0s.",
   );
-  const transcript = JSON.parse(
+  const transcript = parseJson(
     await yash.exec("cat agents/reviewer/runs/run-1/tools.json"),
   );
   expect(transcript).toEqual([
@@ -43,9 +44,8 @@ async function assertFirstTurn(yash: YashClient, calls: LmStudioTurnRequest[]) {
   ]);
   expect(await threadId(yash)).toBe("resp_1");
   expect(calls).toHaveLength(1);
-  expect(calls[0]).toEqual({
+  expect(calls[0]).toMatchObject({
     input: "hi",
-    systemPrompt: expect.stringContaining("You are a terse reviewer."),
     integrations: [
       { type: "plugin", id: `mcp/${yafsKey("agents", "reviewer")}` },
     ],

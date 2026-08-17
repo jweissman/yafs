@@ -10,16 +10,36 @@ export function attachSocketEvents(
   lines: LineBuffer,
   requests: PendingRequests,
 ) {
-  socket.on("data", (chunk) => receive(String(chunk), lines, requests));
-  socket.on("error", (error) => requests.failAll(error));
-  socket.on("close", () => requests.failAll(new Error("Connection closed")));
+  attachData(socket, lines, requests);
+  attachError(socket, requests);
+  attachClose(socket, requests);
+}
+
+function attachData(
+  socket: Socket,
+  lines: LineBuffer,
+  requests: PendingRequests,
+) {
+  socket.on("data", (chunk) => {
+    receive(String(chunk), lines, requests);
+  });
+}
+function attachError(socket: Socket, requests: PendingRequests) {
+  socket.on("error", (error) => {
+    requests.failAll(error);
+  });
+}
+function attachClose(socket: Socket, requests: PendingRequests) {
+  socket.on("close", () => {
+    requests.failAll(new Error("Connection closed"));
+  });
 }
 
 function receive(chunk: string, lines: LineBuffer, requests: PendingRequests) {
   lines.push(chunk);
-  lines
-    .lines()
-    .forEach((line) => requests.resolve(JSON.parse(line) as Response));
+  lines.lines().forEach((line) => {
+    requests.resolve(JSON.parse(line) as Response);
+  });
 }
 
 export function writeRequest(socket: Socket, id: number, payload: Payload) {

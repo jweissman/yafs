@@ -80,7 +80,7 @@ function predicate(value: unknown): "-e" | "-f" | "-d" | "-L" {
 
 function optionalString(value: unknown): string | undefined {
   if (value === undefined || typeof value === "string") {
-    return value as string | undefined;
+    return value;
   }
   throw new Error("value must be a string");
 }

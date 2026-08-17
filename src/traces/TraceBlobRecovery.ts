@@ -1,17 +1,17 @@
 import { BlobStore } from "../protocol/BlobStore";
 import { Trace, TraceReifier } from "./TraceTypes";
 
-export type RecoveryTarget = {
+export interface RecoveryTarget {
   blobs: BlobStore;
   reifier?: TraceReifier;
-};
+}
 
 export async function bytesFor(
   target: RecoveryTarget,
   trace: Trace,
   digest: string,
 ) {
-  return (await target.blobs.get(digest)) || recover(target, trace, digest);
+  return (await target.blobs.get(digest)) ?? recover(target, trace, digest);
 }
 
 async function recover(target: RecoveryTarget, trace: Trace, digest: string) {
@@ -36,7 +36,7 @@ async function recoverBytes(
   trace: Trace,
   digest: string,
 ) {
-  return (await reifier.reify(trace, digest)) || missingBlob(digest);
+  return (await reifier.reify(trace, digest)) ?? missingBlob(digest);
 }
 
 function missingBlob(digest: string): never {

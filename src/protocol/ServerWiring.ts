@@ -7,14 +7,47 @@ import { backgroundDrivers, BackgroundDrivers } from "./BackgroundDrivers";
 import { ServerConnection } from "./ServerConnection";
 import { Services, StartOptions } from "./ServerTypes";
 
-export type ServerBindings = {
+export interface ServerBindings {
   services: Services;
   connection: ServerConnection;
   toolServer: AgentToolServer;
   registerCtl: (path: AbsolutePath, handler: CtlHandler) => void;
   unregisterCtl: (path: AbsolutePath) => void;
   dispatchCtl: (path: AbsolutePath, payload: string) => Promise<boolean>;
-};
+}
+
+export function serverBindings(
+  services: Services,
+  connection: ServerConnection,
+  toolServer: AgentToolServer,
+): ServerBindings {
+  return { services, connection, toolServer, ...ctlBindings(connection) };
+}
+
+function ctlBindings(connection: ServerConnection) {
+  return {
+    registerCtl: registerCtl(connection),
+    unregisterCtl: unregisterCtl(connection),
+    dispatchCtl: dispatchCtl(connection),
+  };
+}
+
+function registerCtl(connection: ServerConnection) {
+  return (path: AbsolutePath, handler: CtlHandler) => {
+    connection.ctl.register(path, handler);
+  };
+}
+
+function unregisterCtl(connection: ServerConnection) {
+  return (path: AbsolutePath) => {
+    connection.ctl.unregister(path);
+  };
+}
+
+function dispatchCtl(connection: ServerConnection) {
+  return (path: AbsolutePath, payload: string) =>
+    connection.ctl.invoke(path, payload);
+}
 
 export function driversFor(
   bindings: ServerBindings,
@@ -37,7 +70,7 @@ function wiring(bindings: ServerBindings): Wiring {
   return {
     mounts: bindings.services.mounts,
     journal: bindings.services.journal,
-    enqueue: bindings.connection.enqueueWork.bind(bindings.connection),
+    enqueue: (work) => bindings.connection.enqueueWork(work),
     registerCtl: bindings.registerCtl,
     unregisterCtl: bindings.unregisterCtl,
     dispatchCtl: bindings.dispatchCtl,

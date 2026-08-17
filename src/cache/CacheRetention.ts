@@ -2,14 +2,19 @@ import { NodeStore } from "../vfs/NodeStore";
 import { cacheMetadataRoot } from "./CachePaths";
 import { CacheService } from "./CacheService";
 
-type Retention = { store: NodeStore; cache: CacheService };
+interface Retention {
+  store: NodeStore;
+  cache: CacheService;
+}
 
 export function retainCaches(deps: Retention, now = new Date()) {
   if (!deps.store.get(cacheMetadataRoot, false)) {
     return;
   }
   const names = deps.store.list(cacheMetadataRoot);
-  names.forEach((name) => retain(deps, name, now));
+  names.forEach((name) => {
+    retain(deps, name, now);
+  });
 }
 
 function retain(deps: Retention, name: string, now: Date) {

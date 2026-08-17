@@ -1,6 +1,8 @@
 import { SlackMessage } from "./SlackApiClient";
 
-export type Cursor = { lastTs?: string };
+export interface Cursor {
+  lastTs?: string;
+}
 
 // A fresh (post-restart) or newly-configured cursor has no lastTs, so
 // isAfter alone would treat the entire fetched history window as new.

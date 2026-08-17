@@ -10,13 +10,13 @@ import {
 } from "./BlobDigest";
 import { writeBlob } from "./BlobWrite";
 
-export type BlobStore = {
+export interface BlobStore {
   put(bytes: Uint8Array): Promise<string>;
   get(digest: string): Promise<Uint8Array | undefined>;
   retain(digest: string, ownerId: string): void;
   release(digest: string, ownerId: string): void;
   gc(): Promise<{ reclaimed: string[] }>;
-};
+}
 
 export function openBlobStore(_directory: string): BlobStore {
   return new LocalBlobStore(_directory);
@@ -39,7 +39,7 @@ class LocalBlobStore implements BlobStore {
   private async exists(path: string) {
     return readFile(path)
       .then(() => true)
-      .catch((error) => assertMissing(error));
+      .catch((error: unknown) => assertMissing(error));
   }
   async get(digest: string) {
     try {
@@ -69,7 +69,7 @@ class LocalBlobStore implements BlobStore {
   }
   private ownerSet(digest: string) {
     assertDigest(digest);
-    return this.owners.get(digest) || this.addOwners(digest);
+    return this.owners.get(digest) ?? this.addOwners(digest);
   }
   private addOwners(digest: string) {
     const owners = new Set<string>();

@@ -1,18 +1,18 @@
 import { MountRecord } from "./types";
 
-export type AuditOutcome = {
+export interface AuditOutcome {
   outcome: string;
   before?: string;
   after?: string;
   detail?: string;
-};
+}
 
-export type AuditEvent = {
+export interface AuditEvent {
   record: MountRecord;
   actor: string;
   action: string;
   outcome: AuditOutcome;
-};
+}
 
 export function auditLine(event: AuditEvent, sequence: number): string {
   return `${JSON.stringify(auditEnvelope(event, sequence))}\n`;

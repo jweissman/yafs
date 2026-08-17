@@ -6,7 +6,7 @@ const units: Record<string, number> = {
 };
 
 export function duration(value: string) {
-  const matched = value.match(/^(\d+)(ms|s|m|h)$/);
+  const matched = /^(\d+)(ms|s|m|h)$/.exec(value);
   if (!matched) {
     throw new Error("Invalid cache TTL");
   }

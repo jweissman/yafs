@@ -22,7 +22,7 @@ export type DispatchCtl = (
 // existing outbound handling rather than opening a second call site.
 // Reactions go direct through `client` instead — they're a best-effort UI
 // indicator, not a durable delivery, so they don't need the outbox.
-export type RouteOptions = {
+export interface RouteOptions {
   mounts: MountManager;
   dispatchCtl: DispatchCtl;
   persona: string;
@@ -31,7 +31,8 @@ export type RouteOptions = {
   replyTimeoutMs?: number;
   client: SlackChannelClient;
   channel: string;
-};
+  reactionsEnabled: boolean;
+}
 
 export async function routeMessage(
   options: RouteOptions,
@@ -53,12 +54,12 @@ function dispatchRequest(
   return { personaPath: target.personaPath, chatId, message, runId };
 }
 
-type DispatchRequest = {
+interface DispatchRequest {
   personaPath: AbsolutePath;
   chatId: string;
   message: SlackMessage;
   runId: string;
-};
+}
 
 function dispatch(options: RouteOptions, request: DispatchRequest) {
   const { personaPath, chatId, message, runId } = request;

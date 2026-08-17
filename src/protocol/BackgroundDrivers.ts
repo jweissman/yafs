@@ -10,16 +10,16 @@ import { ServerRefresh } from "./ServerRefresh";
 
 export type { Wiring, ModelFor, SlackClientFor, ToolClientFor, ToolServerUrl };
 
-export type BackgroundDrivers = {
+export interface BackgroundDrivers {
   refreshes: ServerRefresh;
   plugins: PluginDriver[];
-};
+}
 
-export type RefreshTiming = {
+export interface RefreshTiming {
   now?: () => number;
   refreshIntervalMs?: number;
   slackPollIntervalMs?: number;
-};
+}
 
 function refreshDriver(wiring: Wiring, timing: RefreshTiming) {
   return new ServerRefresh(wiring, {
@@ -28,13 +28,13 @@ function refreshDriver(wiring: Wiring, timing: RefreshTiming) {
   });
 }
 
-export type Clients = {
+export interface Clients {
   modelFor: ModelFor;
   toolClientFor: ToolClientFor;
   toolServerUrl: ToolServerUrl;
   slackClientFor: SlackClientFor;
   mcpJsonPath?: string;
-};
+}
 
 export function backgroundDrivers(
   wiring: Wiring,

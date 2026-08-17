@@ -1,4 +1,7 @@
-type Identity = { mountId: string; personaName: string };
+interface Identity {
+  mountId: string;
+  personaName: string;
+}
 
 export function logSession(identity: Identity, found: boolean) {
   if (found) {

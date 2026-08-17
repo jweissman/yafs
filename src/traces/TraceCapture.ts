@@ -3,7 +3,10 @@ import { PathResolver } from "../core/PathResolver";
 import { BlobStore } from "../protocol/BlobStore";
 import { TraceEntry, TraceFilesystem } from "./TraceTypes";
 
-type Source = { blobs: BlobStore; files: TraceFilesystem };
+interface Source {
+  blobs: BlobStore;
+  files: TraceFilesystem;
+}
 
 export function assertEntryLimit(
   files: TraceFilesystem,

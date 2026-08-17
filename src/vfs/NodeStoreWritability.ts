@@ -5,7 +5,11 @@ import { nodeStoreWriteGuard } from "./NodeStoreWriteGuard";
 import { NodeStoreResolver } from "./NodeStoreResolver";
 import { NodeStoreState } from "./NodeStoreState";
 
-type Walk = { parts: string[]; path: AbsolutePath; depth: number };
+interface Walk {
+  parts: string[];
+  path: AbsolutePath;
+  depth: number;
+}
 
 export class NodeStoreWritability {
   private readonly guard = nodeStoreWriteGuard;
@@ -36,7 +40,8 @@ export class NodeStoreWritability {
 
   private writableChild(child: FSNode, walk: Walk) {
     if (child.symlinkTarget) {
-      return this.writableLink(child, walk.parts.slice(1), walk.depth);
+      this.writableLink(child, walk.parts.slice(1), walk.depth);
+      return;
     }
     this.writableDescendant(child, walk);
   }
@@ -44,7 +49,8 @@ export class NodeStoreWritability {
   private writableDescendant(child: FSNode, walk: Walk) {
     if (walk.parts.length > 1) {
       const rest = { ...walk, parts: walk.parts.slice(1) };
-      return this.writable(child, rest);
+      this.writable(child, rest);
+      return;
     }
     this.guard.assertWritable(child, walk.path);
   }

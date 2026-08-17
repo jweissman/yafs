@@ -5,11 +5,11 @@ import { Trace, TraceEntry, TraceFilesystem, TraceReifier } from "./TraceTypes";
 import { assertEntry, assertPath } from "./TraceEntryValidation";
 import { bytesFor } from "./TraceBlobRecovery";
 
-type Materializer = {
+interface Materializer {
   files: TraceFilesystem;
   blobs: BlobStore;
   reifier?: TraceReifier;
-};
+}
 
 export async function writeEntry(
   target: Materializer,

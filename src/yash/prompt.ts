@@ -1,4 +1,7 @@
-export type PromptSession = { user: string; cwd: string };
+export interface PromptSession {
+  user: string;
+  cwd: string;
+}
 
 export function renderPrompt(
   template: string,

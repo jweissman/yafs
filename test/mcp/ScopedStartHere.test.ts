@@ -6,24 +6,22 @@ import { StartHereValue } from "../../src/operations/WorkspaceOperation";
 test("maps a configured root to the mount it falls under, preferring the longest match", () => {
   const value = baseValue();
   value.mounts.unshift({
-    path: "/home/root/world/github",
+    path: "/world/github",
     provider: "github",
     revision: "1",
     capabilities: [],
   });
-  const result = scopedStartHere(value, [
-    "/home/root/world/github/acme/widget",
-  ]);
+  const result = scopedStartHere(value, ["/world/github/acme/widget"]);
   expect(result.scoped).toBe(true);
   expect(result.rootMounts).toEqual([
     {
-      root: "/home/root/world/github/acme/widget",
-      mount: "/home/root/world/github/acme/widget",
+      root: "/world/github/acme/widget",
+      mount: "/world/github/acme/widget",
       provider: "github",
     },
   ]);
   expect(result.recommendedFirst).toEqual([
-    "yafs.tree on /home/root/world/github/acme/widget (your configured root)",
+    "yafs.tree on /world/github/acme/widget (your configured root)",
     "yafs.read on a specific file once you've found it via tree/find",
   ]);
 });
@@ -37,17 +35,15 @@ test("omits a root that falls under no known mount", () => {
 test("does not leak mounts outside the scoped session's own roots", () => {
   const value = baseValue();
   value.mounts.push({
-    path: "/home/root/world/slack/channels/updates",
+    path: "/world/slack/channels/updates",
     provider: "slack",
     revision: "1",
     capabilities: [],
   });
-  const result = scopedStartHere(value, [
-    "/home/root/world/github/acme/widget",
-  ]);
+  const result = scopedStartHere(value, ["/world/github/acme/widget"]);
   expect(result.mounts).toEqual([
     {
-      path: "/home/root/world/github/acme/widget",
+      path: "/world/github/acme/widget",
       provider: "github",
       revision: "1",
       capabilities: [],
@@ -64,7 +60,7 @@ function baseValue(): StartHereValue {
     recommendedFirst: [],
     mounts: [
       {
-        path: "/home/root/world/github/acme/widget",
+        path: "/world/github/acme/widget",
         provider: "github",
         revision: "1",
         capabilities: [],

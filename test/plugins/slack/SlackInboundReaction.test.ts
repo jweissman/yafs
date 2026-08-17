@@ -13,12 +13,12 @@ import {
 } from "./slack_inbound_routing_helpers";
 
 test("a successful reply adds and removes the working reaction", async () => {
-  const entries: Array<[string, string]> = [];
+  const entries: [string, string][] = [];
   const mounts = fakeMounts(entries);
   const personaCtlPath = "/home/root/agents/reviewer/ctl" as AbsolutePath;
   const slackCtlPath = "/home/root/updates/ctl" as AbsolutePath;
   const dispatchCtl = fakeDispatch(personaCtlPath, slackCtlPath, entries, true);
-  const reactions: Array<[string, string, string]> = [];
+  const reactions: [string, string, string][] = [];
   const options: RouteOptions = {
     mounts,
     dispatchCtl,
@@ -26,6 +26,7 @@ test("a successful reply adds and removes the working reaction", async () => {
     slackCtlPath,
     botUserId: "BOT",
     replyTimeoutMs: 2000,
+    reactionsEnabled: true,
     channel: "C123",
     client: fakeClient(reactions),
   };
@@ -39,7 +40,7 @@ test("a successful reply adds and removes the working reaction", async () => {
 });
 
 test("a reaction API failure is logged and does not block the reply", async () => {
-  const entries: Array<[string, string]> = [];
+  const entries: [string, string][] = [];
   const mounts = fakeMounts(entries);
   const personaCtlPath = "/home/root/agents/reviewer/ctl" as AbsolutePath;
   const slackCtlPath = "/home/root/updates/ctl" as AbsolutePath;
@@ -51,6 +52,7 @@ test("a reaction API failure is logged and does not block the reply", async () =
     slackCtlPath,
     botUserId: "BOT",
     replyTimeoutMs: 2000,
+    reactionsEnabled: true,
     channel: "C123",
     client: failingReactionClient(),
   };
@@ -66,9 +68,31 @@ test("a reaction API failure is logged and does not block the reply", async () =
   }
 });
 
-function fakeClient(
-  reactions: Array<[string, string, string]>,
-): SlackChannelClient {
+test("reactionsEnabled: false never calls the reaction API", async () => {
+  const entries: [string, string][] = [];
+  const mounts = fakeMounts(entries);
+  const personaCtlPath = "/home/root/agents/reviewer/ctl" as AbsolutePath;
+  const slackCtlPath = "/home/root/updates/ctl" as AbsolutePath;
+  const dispatchCtl = fakeDispatch(personaCtlPath, slackCtlPath, entries, true);
+  const reactions: [string, string, string][] = [];
+  const options: RouteOptions = {
+    mounts,
+    dispatchCtl,
+    persona: "reviewer",
+    slackCtlPath,
+    botUserId: "BOT",
+    replyTimeoutMs: 2000,
+    reactionsEnabled: false,
+    channel: "C123",
+    client: fakeClient(reactions),
+  };
+
+  await routeMessage(options, "chat1", { user: "U1", text: "hi", ts: "1.0" });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(reactions).toEqual([]);
+});
+
+function fakeClient(reactions: [string, string, string][]): SlackChannelClient {
   return {
     history: async () => [],
     identity: async () => "BOT",

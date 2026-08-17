@@ -36,7 +36,7 @@ test("cache expiry hides an entry and explicit collection reclaims its blob", as
     "Cache miss: brief",
   );
   expect(
-    JSON.parse((await yafs.executeAsync("cache gc")).stdout).reclaimed,
+    reclaimed((await yafs.executeAsync("cache gc")).stdout),
   ).toHaveLength(1);
 });
 
@@ -46,11 +46,11 @@ test("cache replacement and deletion release prior values without exposing a sta
   await yafs.executeAsync("cache put --ttl 5m key second");
   expect((await yafs.executeAsync("cache get key")).stdout).toBe("second");
   expect(
-    JSON.parse((await yafs.executeAsync("cache gc")).stdout).reclaimed,
+    reclaimed((await yafs.executeAsync("cache gc")).stdout),
   ).toHaveLength(1);
   await yafs.executeAsync("cache delete key");
   expect(
-    JSON.parse((await yafs.executeAsync("cache gc")).stdout).reclaimed,
+    reclaimed((await yafs.executeAsync("cache gc")).stdout),
   ).toHaveLength(1);
 });
 
@@ -82,7 +82,7 @@ test("a restarted daemon retains an active cache blob from journaled metadata", 
   const second = await YafsServer.start({ dataDir: directory });
   const restored = await YashClient.connect(second.address());
   expect(await restored.exec("cache get durable")).toBe("value");
-  expect(JSON.parse(await restored.exec("cache gc")).reclaimed).toEqual([]);
+  expect(reclaimed(await restored.exec("cache gc"))).toEqual([]);
   await restored.close();
   await second.close();
 });
@@ -96,9 +96,9 @@ test("the local protocol exposes typed cache operations without shell quoting", 
   const value = '"quoted" $ text';
   expect((await client.cachePut(key, value, 3_600_000)).error).toBeUndefined();
   expect(await client.exec("ls cache/metadata")).toBe("review-42.json");
-  expect(JSON.parse((await client.cacheStat(key)).stdout).state).toBe("active");
+  expect(cacheState((await client.cacheStat(key)).stdout)).toBe("active");
   expect((await client.cacheGet(key)).stdout).toBe(value);
-  expect(JSON.parse((await client.cacheGc()).stdout).reclaimed).toEqual([]);
+  expect(reclaimed((await client.cacheGc()).stdout)).toEqual([]);
   expect(JSON.parse((await client.cacheStat(key)).stdout)).toMatchObject({
     key,
     state: "active",
@@ -122,7 +122,7 @@ test("concurrent cache replacements serialize without retaining a stale value", 
   expect(["first", "second"]).toContain(
     (await first.cacheGet("shared")).stdout,
   );
-  expect(JSON.parse((await first.cacheGc()).stdout).reclaimed).toHaveLength(1);
+  expect(reclaimed((await first.cacheGc()).stdout)).toHaveLength(1);
   await first.close();
   await second.close();
   await server.close();
@@ -136,4 +136,18 @@ function clock(value: string): Clock & { set(value: string): void } {
       current = new Date(next);
     },
   };
+}
+
+function reclaimed(source: string): unknown[] {
+  const value = JSON.parse(source) as unknown;
+  if (typeof value === "object" && value !== null && "reclaimed" in value) {
+    return Array.isArray(value.reclaimed) ? value.reclaimed : [];
+  }
+  throw new Error("Expected cache GC output");
+}
+
+function cacheState(source: string): string | undefined {
+  const value = JSON.parse(source) as unknown;
+  return typeof value === "object" && value !== null && "state" in value &&
+    typeof value.state === "string" ? value.state : undefined;
 }

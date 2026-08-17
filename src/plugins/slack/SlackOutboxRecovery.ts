@@ -4,12 +4,12 @@ import { SlackOutboxStore } from "./SlackOutboxStore";
 import { unknownStatus } from "./SlackOutboxStatus";
 
 type Store = SlackOutboxStore;
-type RecoverInput = {
+interface RecoverInput {
   mountId: string;
   path: string;
   content: string;
   store: Store;
-};
+}
 
 export async function recoverSlackOutbox(mounts: MountManager, store: Store) {
   for (const record of mounts.mounts()) {

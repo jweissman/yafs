@@ -46,7 +46,7 @@ export class ProviderRegistry {
   ) {
     const definition = this.definition(record.provider);
     const fallback = `Capabilities are not granted: ${denied.join(", ")}`;
-    return definition.unavailableCapability(record, denied[0]) || fallback;
+    return definition.unavailableCapability(record, denied[0]) ?? fallback;
   }
 
   prepare(

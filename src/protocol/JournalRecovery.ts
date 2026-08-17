@@ -7,7 +7,10 @@ import { JournalReplayer } from "./JournalTypes";
 import { checksum, notFound, VERSION } from "./JournalChecksum";
 import { discardTornFinalRecord, replay } from "./JournalReplayRecords";
 
-type StoredSnapshot = VfsSnapshot & { checksum: string };
+type StoredSnapshot = Omit<VfsSnapshot, "version"> & {
+  version: number;
+  checksum: string;
+};
 
 export async function restoreJournal(
   wal: string,
@@ -55,7 +58,9 @@ function applySnapshot(store: NodeStore, snapshot: StoredSnapshot): number {
   return snapshot.sequence;
 }
 
-function verifySnapshot(snapshot: StoredSnapshot) {
+function verifySnapshot(
+  snapshot: StoredSnapshot,
+): asserts snapshot is VfsSnapshot & { checksum: string } {
   if (
     snapshot.version !== VERSION ||
     snapshot.checksum !== checksum(snapshotData(snapshot))

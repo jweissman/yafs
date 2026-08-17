@@ -40,7 +40,7 @@ export class YafsWorkspace {
   }
 
   provenance(path: AbsolutePath): Provenance[] {
-    return this.store.provenance(path).map(this.provenanceItem);
+    return this.store.provenance(path).map((item) => this.provenanceItem(item));
   }
 
   mountLines() {
@@ -49,7 +49,7 @@ export class YafsWorkspace {
 
   mountSummaries() {
     return this.mounts().map((mount) => ({
-      path: mount.path as AbsolutePath,
+      path: mount.path,
       provider: mount.provider,
       revision: mount.revision,
       fetchedAt: mount.fetchedAt,

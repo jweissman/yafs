@@ -1,11 +1,11 @@
 import { agentError } from "../agent/AgentError";
 
-export type OutboxStatus = {
+export interface OutboxStatus {
   state: "queued" | "running" | "succeeded" | "failed" | "unknown";
   startedAt: string;
   completedAt?: string;
   error?: string;
-};
+}
 
 export function queuedStatus(startedAt: string): OutboxStatus {
   return { state: "queued", startedAt };

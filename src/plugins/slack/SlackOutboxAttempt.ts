@@ -6,7 +6,7 @@ import {
   succeededStatus,
 } from "./SlackOutboxStatus";
 
-export type AttemptDeps = {
+export interface AttemptDeps {
   outbox: SlackOutboxStore;
   post: (mountId: string, message: string) => Promise<void>;
   commitRefresh: (mountId: string) => Promise<void>;
@@ -15,9 +15,13 @@ export type AttemptDeps = {
     message: string,
     error: unknown,
   ) => Promise<void>;
-};
+}
 
-export type Attempt = { id: OutboxId; message: string; startedAt: string };
+export interface Attempt {
+  id: OutboxId;
+  message: string;
+  startedAt: string;
+}
 
 export async function attemptDelivery(deps: AttemptDeps, attempt: Attempt) {
   const { id, message, startedAt } = attempt;

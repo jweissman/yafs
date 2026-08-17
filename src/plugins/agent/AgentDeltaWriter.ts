@@ -2,12 +2,20 @@ import { AgentRunStore } from "./AgentRunStore";
 import { RunContext } from "./AgentTarget";
 
 const DELTA_COMMIT_INTERVAL_MS = 100;
-type Deps = { runs: AgentRunStore; context: RunContext };
-type DeltaState = { lastCommitAt: number; buffer: string };
+interface Deps {
+  runs: AgentRunStore;
+  context: RunContext;
+}
+interface DeltaState {
+  lastCommitAt: number;
+  buffer: string;
+}
 
 export function deltaWriter(runs: AgentRunStore, context: RunContext) {
   const state: DeltaState = { lastCommitAt: 0, buffer: "" };
-  return (delta: string) => onDelta({ runs, context }, state, delta);
+  return (delta: string) => {
+    onDelta({ runs, context }, state, delta);
+  };
 }
 
 function onDelta(deps: Deps, state: DeltaState, delta: string) {

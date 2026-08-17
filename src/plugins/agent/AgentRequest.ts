@@ -2,19 +2,19 @@ import { PersonaConfig } from "../../mounts/types";
 import { ModelClient } from "./ChatCompletionClient";
 import { ChatMessage } from "./AgentChatHistory";
 
-export type AgentRequest = {
+export interface AgentRequest {
   message: string;
   context?: string;
   runId?: string;
   chatId?: string;
-};
+}
 
-type RawRequest = {
+interface RawRequest {
   message?: unknown;
   context?: unknown;
   runId?: unknown;
   chatId?: unknown;
-};
+}
 
 export function parseAgentRequest(payload: string): AgentRequest {
   const value = JSON.parse(payload) as RawRequest;
@@ -24,9 +24,9 @@ export function parseAgentRequest(payload: string): AgentRequest {
 }
 
 function assertOptionalStrings(value: RawRequest, payload: string) {
-  [value.context, value.runId, value.chatId].forEach((v) =>
-    assertOptionalString(v, payload),
-  );
+  [value.context, value.runId, value.chatId].forEach((v) => {
+    assertOptionalString(v, payload);
+  });
 }
 
 function assertMessage(
@@ -44,10 +44,10 @@ function assertOptionalString(value: unknown, payload: string) {
   }
 }
 
-export type CompletionExtras = {
+export interface CompletionExtras {
   onDelta?: (delta: string) => void;
   history?: ChatMessage[];
-};
+}
 
 export function completeAgent(
   model: ModelClient,

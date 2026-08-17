@@ -37,7 +37,7 @@ function contentAt(record: PreparedMountRecord, path: string): string {
   const found = record.snapshot.entries.find(
     ([entryPath]) => entryPath === path,
   );
-  return found?.[1] || "";
+  return found?.[1] ?? "";
 }
 
 export function deliveredCount(content: string, chunks: string[]): number {
@@ -64,15 +64,15 @@ function due(
   record: PreparedMountRecord,
   intervalMs: number,
 ): boolean {
-  const baseline = record.fetchedAt || record.activatedAt;
+  const baseline = record.fetchedAt ?? record.activatedAt;
   return !baseline || now() - Date.parse(baseline) >= intervalMs;
 }
 
-type DeliveryTarget = {
+interface DeliveryTarget {
   record: PreparedMountRecord;
   path: string;
   content: string;
-};
+}
 
 function nextDelivery(
   target: DeliveryTarget,

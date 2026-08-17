@@ -20,8 +20,8 @@ export class LocalYashClient {
     }
     return plan.result;
   }
-  async writeFile(path: string, content: string): Promise<ExecutionResult> {
-    return this.yafs.executeWrite(path, content);
+  writeFile(path: string, content: string): Promise<ExecutionResult> {
+    return Promise.resolve(this.yafs.executeWrite(path, content));
   }
 
   async exec(command: string): Promise<string> {
@@ -43,5 +43,7 @@ export class LocalYashClient {
           .map(target.format);
   }
 
-  async close() {}
+  close() {
+    return Promise.resolve();
+  }
 }

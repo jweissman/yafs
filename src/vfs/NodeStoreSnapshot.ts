@@ -13,7 +13,9 @@ export class NodeStoreSnapshot {
   validate(operations: VfsOperation[]) {
     const copy = this.copy();
     copy.restore(this.snapshot(0));
-    operations.forEach((item) => copy.mutate.apply(item));
+    operations.forEach((item) => {
+      copy.mutate.apply(item);
+    });
   }
 
   private copy() {

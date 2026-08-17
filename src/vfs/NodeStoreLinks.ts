@@ -1,12 +1,16 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 import { ProviderOrigin } from "./FSNode";
 import { assertAbsent, parentOf } from "./NodeStoreParent";
+import { removeTreeChild } from "./NodeStoreRemove";
 import { NodeStoreResolver } from "./NodeStoreResolver";
 import { NodeStoreState } from "./NodeStoreState";
 import { nodeStoreWriteGuard } from "./NodeStoreWriteGuard";
 import { canonicalUnionLayers } from "./UnionLayers";
 
-export type LinkDeps = { state: NodeStoreState; resolver: NodeStoreResolver };
+export interface LinkDeps {
+  state: NodeStoreState;
+  resolver: NodeStoreResolver;
+}
 
 export function setProviderOrigin(
   resolver: NodeStoreResolver,
@@ -47,4 +51,16 @@ function newNodeParent(deps: LinkDeps, path: AbsolutePath) {
   const { parent, name } = parentOf(deps.resolver, path);
   assertAbsent(parent, name, path);
   return { parent, name };
+}
+
+// Unchecked on purpose: mount lifecycle (SnapshotMaterializer) uses this
+// on a private candidate-store copy to remove a provider-owned subtree it
+// is about to republish — that subtree is marked read-only for regular
+// users, but the system managing that very mount must still be able to
+// rewrite it. User-initiated recursive removal must assert writability
+// first (see NodeStoreMutation.removeTreeChecked), or a user could delete
+// inside a read-only provider mount.
+export function removeTree(deps: LinkDeps, path: AbsolutePath) {
+  const { parent, name } = parentOf(deps.resolver, path);
+  removeTreeChild(parent, name);
 }

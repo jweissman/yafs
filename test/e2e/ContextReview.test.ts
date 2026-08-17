@@ -4,7 +4,7 @@ import { fakeExchangeModel, waitForRun } from "../agent_test_helpers";
 import { startedHostConfigServer } from "../desired_mount_helpers";
 
 test("a review run consumes a reified trace and preserves the exact diff context", async () => {
-  const calls: Array<{ system: string; message: string }> = [];
+  const calls: { system: string; message: string }[] = [];
   const { server, client } = await startedHostConfigServer(
     "yafs-context-review-",
     manifest(),

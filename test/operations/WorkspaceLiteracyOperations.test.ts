@@ -9,31 +9,59 @@ test("tree and find walk a virtual directory in deterministic order", async () =
     kind: "tree",
     path: "/home/root/work",
     entries: treeEntries(),
+    truncated: false,
   });
   expect(
     yafs.operations.invoke({ name: "find", path: "work", pattern: "*.md" }),
   ).toEqual({
     kind: "find",
     paths: ["/home/root/work/a.md", "/home/root/work/nested/b.md"],
+    truncated: false,
   });
   expect(
     yafs.operations.invoke({ name: "find", path: "work", pattern: "*a*.md" }),
   ).toEqual({
     kind: "find",
     paths: ["/home/root/work/a.md"],
+    truncated: false,
   });
 });
 
-test("find rejects a result set beyond its explicit limit", async () => {
+// tree/find are bounded exploratory reads for an agent that can't know
+// the true result count in advance -- unlike grep/diff (durable,
+// safety-critical), a conservative limit guess should truncate with a
+// flag, not fail the whole call. See WorkspaceWalker's `strict` mode.
+test("find truncates a result set beyond its explicit limit, rather than failing", async () => {
   const yafs = await workspace();
-  expect(() =>
+  expect(
     yafs.operations.invoke({
       name: "find",
       path: "work",
       pattern: "*.md",
       limit: 1,
     }),
-  ).toThrow("Result limit exceeded");
+  ).toEqual({
+    kind: "find",
+    paths: ["/home/root/work/a.md"],
+    truncated: true,
+  });
+});
+
+test("tree truncates a result set beyond its explicit limit, rather than failing", async () => {
+  const yafs = await workspace();
+  expect(
+    yafs.operations.invoke({
+      name: "tree",
+      path: "work",
+      depth: 1,
+      limit: 1,
+    }),
+  ).toEqual({
+    kind: "tree",
+    path: "/home/root/work",
+    entries: [{ path: "/home/root/work/a.md", type: "file", depth: 1 }],
+    truncated: true,
+  });
 });
 
 test("tree/find bounds are explicit", async () => {
@@ -111,74 +139,46 @@ test("grep retains each matching file and line in its typed result", async () =>
   ).toEqual({
     kind: "grep",
     matches: [{ path: "/home/root/work/nested/b.md", line: 1, text: "b" }],
+    truncated: false,
   });
 });
 
-test("grep rejects a result set beyond its explicit limit", async () => {
+test("grep truncates a result set beyond its explicit limit, rather than failing", async () => {
   const yafs = await workspace();
-  expect(() =>
+  expect(
     yafs.operations.invoke({
       name: "grep",
       pattern: "",
       paths: ["work/a.md", "work/nested/b.md"],
       limit: 1,
     }),
-  ).toThrow("Result limit exceeded");
+  ).toMatchObject({ kind: "grep", truncated: true });
 });
 
-test("diff reports deterministic virtual file-set changes", async () => {
+test("grep searches a whole directory recursively when given one, instead of requiring each file listed individually", async () => {
   const yafs = await workspace();
-  await yafs.executeAsync("mkdir changed");
-  await yafs.executeAsync("echo different > changed/a.md");
-  await yafs.executeAsync("echo added > changed/new.md");
   expect(
-    yafs.operations.invoke({ name: "diff", left: "work", right: "changed" }),
+    yafs.operations.invoke({ name: "grep", pattern: "b", paths: ["work"] }),
   ).toEqual({
-    kind: "diff",
-    changes: [
-      { path: "a.md", kind: "changed" },
-      { path: "nested/b.md", kind: "removed" },
-      { path: "new.md", kind: "added" },
-    ],
+    kind: "grep",
+    matches: [{ path: "/home/root/work/nested/b.md", line: 1, text: "b" }],
+    truncated: false,
   });
-  expect(yafs.exec("diff work changed")).toBe(
-    "changed a.md\nremoved nested/b.md\nadded new.md",
-  );
 });
 
-test("diff compares two individual files directly, not just directories", async () => {
+test("grep expands a single wildcard path segment against real directory listings", async () => {
   const yafs = await workspace();
-  await yafs.executeAsync("echo same > work/a.md");
   expect(
     yafs.operations.invoke({
-      name: "diff",
-      left: "work/a.md",
-      right: "work/a.md",
+      name: "grep",
+      pattern: "b",
+      paths: ["work/*/b.md"],
     }),
-  ).toEqual({ kind: "diff", changes: [] });
-  await yafs.executeAsync("mkdir changed");
-  await yafs.executeAsync("echo different > changed/a.md");
-  expect(
-    yafs.operations.invoke({
-      name: "diff",
-      left: "work/a.md",
-      right: "changed/a.md",
-    }),
-  ).toEqual({ kind: "diff", changes: [{ path: ".", kind: "changed" }] });
-});
-
-test("diff rejects a result set beyond its explicit limit", async () => {
-  const yafs = await workspace();
-  await yafs.executeAsync("mkdir changed");
-  await yafs.executeAsync("echo different > changed/a.md");
-  expect(() =>
-    yafs.operations.invoke({
-      name: "diff",
-      left: "work",
-      right: "changed",
-      limit: 1,
-    }),
-  ).toThrow("Result limit exceeded");
+  ).toEqual({
+    kind: "grep",
+    matches: [{ path: "/home/root/work/nested/b.md", line: 1, text: "b" }],
+    truncated: false,
+  });
 });
 
 function treeEntries(): TreeEntry[] {

@@ -16,7 +16,6 @@ export class FixturePlugin extends Plugin {
   constructor() {
     super();
   }
-
   capabilities() {
     return [];
   }

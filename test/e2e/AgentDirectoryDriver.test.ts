@@ -14,7 +14,7 @@ import {
 import { startedHostConfigServer } from "../desired_mount_helpers";
 
 test("a ctl message runs through pending -> complete status and durably records the exchange", async () => {
-  const calls: Array<{ system: string; message: string }> = [];
+  const calls: { system: string; message: string }[] = [];
   const modelFor = () => fakeExchangeModel("Looks fine to me.", calls);
   const { server, client } = await startedHostConfigServer(
     "yafs-agents-",
@@ -35,9 +35,9 @@ test("a ctl message runs through pending -> complete status and durably records 
 async function assertCompleteExchange(
   client: YashClient,
   runId: string,
-  calls: Array<{ system: string; message: string }>,
+  calls: { system: string; message: string }[],
 ) {
-  const status = JSON.parse(
+  const status = runStatus(
     await client.exec(`cat agents/reviewer/runs/${runId}/status.json`),
   );
   expect(status.state).toBe("complete");
@@ -71,7 +71,7 @@ test("a failed call leaves a visible failed status instead of vanishing silently
     "agents/reviewer/runs",
     (status) => status.state === "failed",
   );
-  const status = JSON.parse(
+  const status = runStatus(
     await client.exec(`cat agents/reviewer/runs/${runId}/status.json`),
   );
   expect(status.error).toBe("connection refused");
@@ -82,13 +82,27 @@ test("a failed call leaves a visible failed status instead of vanishing silently
   await server.close();
 });
 
+function runStatus(raw: string): {
+  state: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+} {
+  return JSON.parse(raw) as {
+    state: string;
+    startedAt?: string;
+    completedAt?: string;
+    error?: string;
+  };
+}
+
 test("one mount can host multiple personas, each with its own endpoint", async () => {
   const calls: Record<string, string[]> = {
     "http://alpha.test": [],
     "http://beta.test": [],
   };
   const modelFor = (persona: PersonaConfig) =>
-    fakeMessageModel(calls[persona.endpoint || ""]);
+    fakeMessageModel(calls[persona.endpoint ?? ""]);
   const { server, client } = await startedHostConfigServer(
     "yafs-agents-multi-",
     multiPersonaManifest(),

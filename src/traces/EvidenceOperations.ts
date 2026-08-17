@@ -3,7 +3,7 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { CaptureValue } from "../operations/WorkspaceOperation";
 import { traceFilesystem } from "./TraceContextFilesystem";
 import { Trace } from "./TraceService";
-import { manifest } from "./TraceManifestPath";
+import { manifest, traceOwner } from "./TraceManifestPath";
 
 export { restore } from "./EvidenceRestore";
 
@@ -62,7 +62,25 @@ function publish(
   artifact: AbsolutePath,
   trace: Trace,
 ) {
-  context.afterCommit(() => context.traces.retain(trace, owner(artifact)));
+  retainAfterCommit(context, artifact, trace);
+  writeManifest(context, artifact, trace);
+}
+
+function retainAfterCommit(
+  context: CommandContext,
+  artifact: AbsolutePath,
+  trace: Trace,
+) {
+  context.afterCommit(() => {
+    context.traces.retain(trace, traceOwner(artifact));
+  });
+}
+
+function writeManifest(
+  context: CommandContext,
+  artifact: AbsolutePath,
+  trace: Trace,
+) {
   context.mkdir(artifact);
   context.write(manifest(artifact), JSON.stringify(trace));
 }
@@ -89,8 +107,4 @@ function assertAbsent(
 
 function providerOrigin(context: CommandContext, path: AbsolutePath) {
   return context.provenance(path).find((origin) => origin.kind === "provider");
-}
-
-function owner(path: AbsolutePath) {
-  return `trace:${path}`;
 }

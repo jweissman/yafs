@@ -1,6 +1,6 @@
 import { MountManager } from "../../mounts/MountManager";
 import { AgentConfig, PreparedMountRecord } from "../../mounts/types";
-import { validAgentConfig } from "./AgentRegistration";
+import { validAgentConfig } from "./AgentConfigValidation";
 import {
   McpJsonDocument,
   McpServerEntry,
@@ -34,7 +34,9 @@ export class AgentToolMcpSync {
     private readonly path?: string,
   ) {}
 
-  close() {}
+  close() {
+    return undefined;
+  }
 
   sync() {
     if (this.path) {
@@ -45,7 +47,8 @@ export class AgentToolMcpSync {
   private async reconcile(path: string) {
     const existing = await readMcpJson(path);
     if (!existing) {
-      return logUnreadable(path);
+      logUnreadable(path);
+      return;
     }
     await this.writeIfChanged(path, existing);
   }

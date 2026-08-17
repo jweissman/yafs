@@ -3,7 +3,9 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 
-export type McpServerEntry = { url: string };
+export interface McpServerEntry {
+  url: string;
+}
 export type McpJsonDocument = {
   mcpServers: Record<string, unknown>;
 } & Record<string, unknown>;

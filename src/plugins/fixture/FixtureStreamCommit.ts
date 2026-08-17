@@ -3,12 +3,12 @@ import { MountManager } from "../../mounts/MountManager";
 import { publishEntries } from "../../mounts/MountEntryPublish";
 import { PreparedMountRecord } from "../../mounts/types";
 
-export type Delivery = {
+export interface Delivery {
   record: PreparedMountRecord;
   path: string;
   content: string;
   count: number;
-};
+}
 
 export async function commitDelivery(
   mounts: MountManager,

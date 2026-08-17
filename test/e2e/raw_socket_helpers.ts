@@ -28,5 +28,9 @@ export function address(server: ReturnType<typeof createServer>) {
 }
 
 export function close(server: ReturnType<typeof createServer>) {
-  return new Promise<void>((resolve) => server.close(() => resolve()));
+  return new Promise<void>((resolve) =>
+    server.close(() => {
+      resolve();
+    }),
+  );
 }

@@ -1,12 +1,17 @@
-export type RunId = { mountId: string; personaName: string; runId: string };
+export interface RunId {
+  mountId: string;
+  personaName: string;
+  runId: string;
+}
 export type Entry = [string, string];
-export type Status = {
+export interface Status {
   state:
     "queued" | "running" | "complete" | "failed" | "interrupted" | "cancelled";
   startedAt: string;
   completedAt?: string;
+  durationMs?: number;
   error?: string;
-};
+}
 
 export function detail(id: RunId, status: Status): string {
   return `persona=${id.personaName} run=${id.runId} state=${status.state}`;

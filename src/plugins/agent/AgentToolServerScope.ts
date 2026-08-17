@@ -4,7 +4,10 @@ import { ScopedMcpConfig } from "../../mcp/ScopedMcpClient";
 import { agentTarget } from "./AgentTarget";
 import { budgetsFor } from "./AgentToolServerBudgets";
 
-export type Identity = { mountId: string; personaName: string };
+export interface Identity {
+  mountId: string;
+  personaName: string;
+}
 
 export function identityFrom(pathname: string): Identity | undefined {
   const match = /^\/mcp\/([^/]+)\/([^/]+)$/.exec(pathname);

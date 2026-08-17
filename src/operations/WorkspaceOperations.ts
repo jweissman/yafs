@@ -24,8 +24,8 @@ export class WorkspaceOperations {
   }
   private grep(operation: Extract<WorkspaceOperation, { name: "grep" }>) {
     const { pattern, paths, limit } = operation;
-    const matches = grep(this.context(), pattern, paths, limit);
-    return { kind: "grep" as const, matches };
+    const { matches, truncated } = grep(this.context(), pattern, paths, limit);
+    return { kind: "grep" as const, matches, truncated };
   }
   private diff(operation: Extract<WorkspaceOperation, { name: "diff" }>) {
     const { left, right, limit } = operation;

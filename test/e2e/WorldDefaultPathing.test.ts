@@ -9,6 +9,7 @@ import { ProviderRegistry } from "../../src/mounts/ProviderRegistry";
 import { NodeStore } from "../../src/vfs/NodeStore";
 import { activateDesired } from "../desired_mount_helpers";
 import { fakeClient, fakeState } from "./slack_inbound_fakes";
+import { parseJson } from "../json";
 import {
   connectedClient,
   textOf,
@@ -42,10 +43,10 @@ test("a persona scoped to a pathless GitHub mount's default /world path discover
   server.close();
 });
 
-const WORLD_ROOT = "/home/root/world/github/acme/widget";
+const WORLD_ROOT = "/world/github/acme/widget";
 
 async function assertStartHere(client: Client) {
-  const startHere = JSON.parse(
+  const startHere = startHereResponse(
     textOf(await client.callTool({ name: "yafs.start_here", arguments: {} })) ??
       "{}",
   );
@@ -57,16 +58,17 @@ async function assertStartHere(client: Client) {
   // scoped to the github root alone — the other two must not leak into an
   // orientation response it receives over MCP.
   expect(startHere.mounts).toHaveLength(1);
-  expect(startHere.mounts[0]).toMatchObject({
+  expect(startHere.mounts.at(0)).toMatchObject({
     path: WORLD_ROOT,
     provider: "github",
-    resourceShape:
-      "GitHub PR collection: pulls/<number>/{metadata.json,diff.patch}",
   });
+  expect(startHere.mounts.at(0)?.resourceShape).toContain(
+    "https://github.com/<owner>/<repo>/pull/<number>",
+  );
 }
 
 async function assertTree(client: Client) {
-  const tree = JSON.parse(
+  const tree = treeResponse(
     textOf(
       await client.callTool({
         name: "yafs.tree",
@@ -74,7 +76,7 @@ async function assertTree(client: Client) {
       }),
     ) ?? "{}",
   );
-  expect(tree.entries.map((entry: { path: string }) => entry.path)).toContain(
+  expect(tree.entries.map((entry) => entry.path)).toContain(
     `${WORLD_ROOT}/pulls/42/diff.patch`,
   );
 }
@@ -88,16 +90,16 @@ async function assertRead(client: Client) {
 }
 
 function assertGithubPublishedUnderWorld(yafs: Yafs) {
-  expect(yafs.exec("cat world/github/acme/widget/pulls/42/diff.patch")).toBe(
+  expect(yafs.exec("cat /world/github/acme/widget/pulls/42/diff.patch")).toBe(
     "diff --git",
   );
 }
 
 function assertSlackPublishedUnderWorld(yafs: Yafs) {
   const lines = yafs
-    .exec("cat world/slack/channels/C123/messages.ndjson")
+    .exec("cat /world/slack/channels/C123/messages.ndjson")
     .split("\n")
-    .map((line) => JSON.parse(line));
+    .map(parseJson);
   expect(lines).toEqual([{ user: "U1", text: "hello", ts: "1.0" }]);
 }
 
@@ -134,7 +136,45 @@ function manifest() {
   const agent =
     "{id: agents, path: agents, provider: agent, " +
     'config: {personas: {reviewer: {prompt: "You are a reviewer.", ' +
-    'tools: {roots: ["/home/root/world/github/acme/widget"]}}}}, ' +
+    'tools: {roots: ["/world/github/acme/widget"]}}}}, ' +
     "capabilities: [chat.completion]}";
   return `{version: 1, mounts: [${github}, ${slack}, ${agent}]}`;
+}
+
+interface StartHereResponse {
+  roots: string[];
+  rootMounts: { root: string; mount: string; provider: string }[];
+  mounts: { path: string; provider: string; resourceShape: string }[];
+}
+
+function startHereResponse(source: string): StartHereResponse {
+  const value = parseJson(source);
+  if (!isStartHereResponse(value)) {
+    throw new Error("Expected start_here response");
+  }
+  return value;
+}
+
+function isStartHereResponse(value: unknown): value is StartHereResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Array.isArray(value.roots) && Array.isArray(value.rootMounts) &&
+    Array.isArray(value.mounts);
+}
+
+function treeResponse(source: string): { entries: { path: string }[] } {
+  const value = parseJson(source);
+  if (!isRecord(value) || !Array.isArray(value.entries)) {
+    throw new Error("Expected tree response");
+  }
+  return { entries: value.entries.filter(hasPath) };
+}
+
+function hasPath(value: unknown): value is { path: string } {
+  return isRecord(value) && typeof value.path === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

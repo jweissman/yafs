@@ -1,26 +1,25 @@
 import { randomUUID } from "node:crypto";
 
-import { question } from "./question";
-import { pollTurn } from "./chatPoll";
+import { chatTurns } from "./chatTurns";
 import type { Readline } from "./repl";
 import type { ChatClient } from "./chatTypes";
 
-type ChatSession = {
+export interface ChatSession {
   client: ChatClient;
   readline: Readline;
   personaPath: string;
   chatId: string;
   interruption: AbortController;
   context?: string;
-};
+}
 
-export type ChatSessionOptions = {
+export interface ChatSessionOptions {
   client: ChatClient;
   readline: Readline;
   personaPath: string;
   initialChatId?: string;
   context?: string;
-};
+}
 
 export async function runChatSession(options: ChatSessionOptions) {
   const session = newSession(options);
@@ -49,9 +48,25 @@ async function withSigintCleanup(
 ) {
   const readline = session.readline;
   const outer = swapOutSigint(readline);
-  const onSigint = () => session.interruption.abort();
+  const onSigint = sigintHandler(session);
   readline.on("SIGINT", onSigint);
-  await action().finally(() => restoreSigint(readline, onSigint, outer));
+  await action().finally(cleanupSigint(readline, onSigint, outer));
+}
+
+function sigintHandler(session: ChatSession) {
+  return () => {
+    session.interruption.abort();
+  };
+}
+
+function cleanupSigint(
+  readline: Readline,
+  onSigint: () => void,
+  outer: (() => void)[],
+) {
+  return () => {
+    restoreSigint(readline, onSigint, outer);
+  };
 }
 
 function restoreSigint(
@@ -67,51 +82,4 @@ function swapOutSigint(readline: Readline): (() => void)[] {
   const outer = readline.listeners("SIGINT") as (() => void)[];
   outer.forEach((listener) => readline.off("SIGINT", listener));
   return outer;
-}
-
-async function chatTurns(session: ChatSession) {
-  let active = true;
-  while (active) {
-    active = await chatStep(session);
-  }
-}
-
-async function chatStep(session: ChatSession): Promise<boolean> {
-  const message = await promptMessage(session);
-  if (!shouldContinue(message)) {
-    return false;
-  }
-  await turnIfNonEmpty(session, message);
-  return true;
-}
-
-function promptMessage(session: ChatSession) {
-  return question(session.readline, "you> ", session.interruption);
-}
-
-function shouldContinue(message: string | undefined): message is string {
-  return message !== undefined && message !== "exit" && message !== "quit";
-}
-
-function turnIfNonEmpty(session: ChatSession, message: string) {
-  return message.trim() ? turn(session, message) : Promise.resolve();
-}
-
-async function turn(session: ChatSession, message: string) {
-  const runId = randomUUID();
-  const chatId = session.chatId;
-  const context = session.context;
-  session.context = undefined;
-  const payload = JSON.stringify({ message, chatId, runId, context });
-  await session.client.writeFile(`${session.personaPath}/ctl`, payload);
-  const runPath = `${session.personaPath}/runs/${runId}`;
-  finishLine(await pollTurn(session.client, runPath));
-}
-
-function finishLine(status: { state: string; error?: string }) {
-  if (status.state === "failed") {
-    console.log(`\n[failed: ${status.error}]`);
-    return;
-  }
-  console.log();
 }

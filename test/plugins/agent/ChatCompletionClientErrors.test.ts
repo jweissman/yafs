@@ -72,9 +72,9 @@ function clientWith(
 function hangingFetch(): Fetch {
   return (_input, init) =>
     new Promise<Response>((_resolve, reject) =>
-      init?.signal?.addEventListener("abort", () =>
-        reject(new DOMException("signal timed out", "TimeoutError")),
-      ),
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("signal timed out", "TimeoutError"));
+      }),
     );
 }
 

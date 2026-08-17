@@ -8,15 +8,14 @@ export function assertEntry(entry: TraceEntry) {
 export function parseTrace(content: string): Trace {
   const trace = JSON.parse(content) as Trace;
   assertManifest(trace);
-  trace.entries.forEach((entry) => assertEntry(entry));
+  trace.entries.forEach((entry) => {
+    assertEntry(entry);
+  });
   return trace;
 }
 
 function assertManifest(trace: Trace) {
   if (
-    trace.kind !== "yafs-trace" ||
-    trace.version !== 1 ||
-    !Array.isArray(trace.entries) ||
     !trace.capturedAt
   ) {
     throw new Error("Invalid trace manifest");

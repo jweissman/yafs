@@ -1,7 +1,7 @@
 import { ProviderOrigin } from "./FSNode";
 import { AbsolutePath } from "../core/AbsolutePath";
 
-export type SnapshotNode = {
+export interface SnapshotNode {
   name: string;
   dir?: boolean;
   content?: string;
@@ -11,6 +11,10 @@ export type SnapshotNode = {
   children?: SnapshotNode[];
   unionLayers?: AbsolutePath[];
   providerOrigin?: ProviderOrigin;
-};
+}
 
-export type VfsSnapshot = { version: 1; sequence: number; root: SnapshotNode };
+export interface VfsSnapshot {
+  version: 1;
+  sequence: number;
+  root: SnapshotNode;
+}

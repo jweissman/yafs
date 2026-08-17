@@ -13,5 +13,5 @@ export function option(args: string[], name: string): Option {
 
 function selected(args: string[], index: number): Option {
   const rest = [...args.slice(0, index), ...args.slice(index + 2)];
-  return [args[index + 1]!, rest];
+  return [args[index + 1], rest];
 }

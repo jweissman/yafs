@@ -40,13 +40,13 @@ async function probe(state: { host: string; port: number }) {
 
 export async function waitForStop(statePath: string, pid: number) {
   await waitUntil(
-    () => !currentState(statePath) || !processAlive(pid),
+    async () => !(await currentState(statePath)) || !processAlive(pid),
     "Timed out stopping yafsd",
   );
 }
 
 export async function waitUntil(
-  check: () => Promise<unknown> | unknown,
+  check: () => Promise<boolean> | boolean,
   message: string,
 ) {
   if (!(await pollUntil(check))) {
@@ -54,7 +54,7 @@ export async function waitUntil(
   }
 }
 
-async function pollUntil(check: () => Promise<unknown> | unknown) {
+async function pollUntil(check: () => Promise<boolean> | boolean) {
   for (let count = 0; count < 30; count++) {
     if (await check()) {
       return true;

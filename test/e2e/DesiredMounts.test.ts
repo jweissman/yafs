@@ -7,6 +7,7 @@ import { YafsServer } from "../../src/protocol/server";
 import { YashClient } from "../../src/protocol/client";
 import Yafs from "../../src";
 import { activateDesired } from "../desired_mount_helpers";
+import { parseJson } from "../json";
 
 test("the daemon reconciles its selected configuration without exposing a host path to yash", async () => {
   const { client, server, config } = await startedDesiredServer(
@@ -24,19 +25,19 @@ async function assertInitialReconciliation(client: YashClient) {
   const active = [
     { id: "demo", plugin: "fixture", path: "/home/root/demo", state: "active" },
   ];
-  expect(JSON.parse(await client.exec("plugins status"))).toEqual({
+  expect(parseJson(await client.exec("plugins status"))).toEqual({
     configured: true,
     changes: [],
     active,
   });
-  expect(JSON.parse(await client.exec("plugins plan"))).toEqual([]);
-  expect(JSON.parse(await client.exec("plugins apply"))).toEqual([]);
+  expect(parseJson(await client.exec("plugins plan"))).toEqual([]);
+  expect(parseJson(await client.exec("plugins apply"))).toEqual([]);
   expect(await client.exec("cat demo/value.txt")).toBe("first");
-  expect(JSON.parse(await client.exec("plugins plan"))).toEqual([]);
+  expect(parseJson(await client.exec("plugins plan"))).toEqual([]);
 }
 
 async function assertAgentPluginDescribed(client: YashClient) {
-  const description = JSON.parse(await client.exec("plugins describe agent"));
+  const description = parseJson(await client.exec("plugins describe agent"));
   expect(description).toMatchObject([
     {
       name: "agent",
@@ -56,7 +57,7 @@ async function assertAgentPluginDescribed(client: YashClient) {
 
 async function assertReactsToConfigChanges(client: YashClient, config: string) {
   await writeFile(config, manifest("second"));
-  expect(JSON.parse(await client.exec("plugins plan"))).toEqual([
+  expect(parseJson(await client.exec("plugins plan"))).toEqual([
     { id: "demo", action: "refresh" },
   ]);
   await client.exec("plugins apply");
@@ -65,7 +66,7 @@ async function assertReactsToConfigChanges(client: YashClient, config: string) {
   expect(JSON.parse(await client.exec("plugins plan"))).toEqual([
     { id: "keep", action: "activate" },
   ]);
-  const applied = JSON.parse(await client.exec("plugins apply --prune"));
+  const applied = parseJson(await client.exec("plugins apply --prune"));
   expect(applied).toEqual(
     expect.arrayContaining([
       { id: "demo", action: "unmount" },
@@ -95,8 +96,8 @@ test("plugins refresh forces republishing one plugin from desired config without
     "first",
   );
   await client.exec("plugins apply");
-  expect(JSON.parse(await client.exec("plugins plan"))).toEqual([]);
-  const refreshed = JSON.parse(await client.exec("plugins refresh demo"));
+  expect(parseJson(await client.exec("plugins plan"))).toEqual([]);
+  const refreshed = parseJson(await client.exec("plugins refresh demo"));
   expect(refreshed).toEqual({ id: "demo", action: "refresh" });
   expect(await client.exec("cat demo/value.txt")).toBe("first");
   await expect(client.exec("plugins refresh nope")).rejects.toThrow(

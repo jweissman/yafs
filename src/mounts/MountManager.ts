@@ -38,7 +38,9 @@ export class MountManager {
     this.providers = options.providers ?? new ProviderRegistry();
     const callbacks = {
       getRecords: () => this.records,
-      commit: (records: PreparedMountRecord[]) => this.commitReplay(records),
+      commit: (records: PreparedMountRecord[]) => {
+        this.commitReplay(records);
+      },
     };
     this.apply(initializeManager(store, options, this.providers, callbacks));
   }
@@ -80,9 +82,7 @@ export class MountManager {
   prepareActivation(record: MountRecord, actor = "system") {
     return activationPrep(this.preparationState(), record, actor);
   }
-  mounts() {
-    return [...this.records];
-  }
+  mounts() { return [...this.records]; }
   plugins(name?: string) {
     return this.providers.describe(name);
   }
@@ -102,7 +102,7 @@ export class MountManager {
   }
 
   planUnmount(id: string): PreparedMountRecord {
-    return this.records.find((item) => item.id === id) || missingMount(id);
+    return this.records.find((item) => item.id === id) ?? missingMount(id);
   }
 
   unmount(id: string, actor: string) {

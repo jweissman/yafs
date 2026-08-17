@@ -9,10 +9,12 @@ import {
 } from "./AgentRunEntries";
 
 export function completeStatus(startedAt: string): Status {
+  const completedAt = new Date().toISOString();
   return {
     state: "complete",
     startedAt,
-    completedAt: new Date().toISOString(),
+    completedAt,
+    durationMs: Date.parse(completedAt) - Date.parse(startedAt),
   };
 }
 

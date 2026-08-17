@@ -17,7 +17,7 @@ function home(user: User): AbsolutePath {
 }
 
 function resolve(path: string, current: AbsolutePath): AbsolutePath {
-  return `/${normalize(path.startsWith("/") ? path : `${current}/${path}`).join("/")}` as AbsolutePath;
+  return `/${normalize(path.startsWith("/") ? path : `${current}/${path}`).join("/")}`;
 }
 
 export const PathResolver = { home, resolve };

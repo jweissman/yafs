@@ -5,9 +5,10 @@ import { ProviderRegistry } from "../mounts/ProviderRegistry";
 import { TraceReifier, TraceService } from "../traces/TraceService";
 import { DesiredMounts as Desired } from "../mounts/DesiredMounts";
 import { CacheService } from "../cache/CacheService";
+import { SnapshotLimits } from "../mounts/SnapshotMaterializer";
 import { ModelFor, SlackClientFor, ToolClientFor } from "./BackgroundDrivers";
 
-export type StartOptions = {
+export interface StartOptions {
   walPath?: string;
   dataDir?: string;
   port?: number;
@@ -23,13 +24,14 @@ export type StartOptions = {
   configPath?: string;
   refreshIntervalMs?: number;
   slackPollIntervalMs?: number;
-};
+  snapshotLimits?: SnapshotLimits;
+}
 
-export type Services = {
+export interface Services {
   store: NodeStore;
   journal: Journal;
   mounts: MountManager;
   traces: TraceService;
   cache: CacheService;
   desired: Desired;
-};
+}

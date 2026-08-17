@@ -7,6 +7,7 @@ import Yafs from "../../../src";
 import { AgentToolMcpSync } from "../../../src/plugins/agent/AgentToolMcpSync";
 import { yafsKey } from "../../../src/plugins/agent/LmStudioMcpJson";
 import { activateDesired } from "../../desired_mount_helpers";
+import { parseJson } from "../../json";
 
 const URL_FOR = (mountId: string, personaName: string) =>
   `http://127.0.0.1:7338/mcp/${mountId}/${personaName}`;
@@ -112,7 +113,7 @@ async function mcpJsonPath(): Promise<string> {
 }
 
 async function readJson(path: string) {
-  return JSON.parse(await readFile(path, "utf8"));
+  return parseJson(await readFile(path, "utf8"));
 }
 
 async function flush() {

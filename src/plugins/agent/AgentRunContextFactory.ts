@@ -7,6 +7,6 @@ export function newRunContext(
   request: AgentRequest,
 ): RunContext {
   const startedAt = new Date().toISOString();
-  const runId = request.runId || startedAt.replace(/[:.]/g, "-");
+  const runId = request.runId ?? startedAt.replace(/[:.]/g, "-");
   return { mountId, personaName, runId, startedAt };
 }

@@ -359,7 +359,13 @@ which is separately tracked, not implied by a milestone checkbox.
   HTTP listener `yafsd` starts itself — one URL per mount/persona, no
   manual LM Studio-side registration — enforcing an operation allowlist,
   root scoping, and byte/call/deadline budgets in code, scoped per MCP
-  session. See the M6.5 checkpoint below.
+  session. See the M6.5 checkpoint below. **Its live-validation gate is now
+  met**: a real LM Studio persona, not a fake one, used the loop end to end
+  against a live GitHub PR collection and returned an accurate,
+  evidence-cited recommendation — see "Review radar proof — achieved"
+  below. M6.6 (runtime-overlay/registry consolidation) and M6.7 (scheduled
+  review digest, the reviewer's recommended "second flow") are both named
+  and scoped, not yet built.
 - `yafs-mcp` is a local stdio client of `yafsd`, not a provider or a second VFS
   implementation, and its surface is **bounded local operations, not purely
   read-only** — alongside the L0/L1 workspace operations (`yafs.list`/
@@ -888,13 +894,18 @@ way an event turns into a bounded action. But per review, this should not
 be pre-designed as a named milestone before it's needed: "let the first
 generic workflow/action runtime emerge from M6.4 plus the bridge," once
 M6.4 (durable outbox) and M6.5 (bounded tools) exist and have been used for
-real. L2 (see [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md)) is explicitly not
-a prerequisite for this first workflow either — an event-triggered
-workflow needs durable triggering, typed argument binding, idempotency,
-approvals, retries, and cancellation, which is more than a script; L2's
-role is to later give operators a reviewable way to author bounded local
-procedures against whatever that stable model turns out to be, not to be
-that model itself.
+real. **M6.4 and M6.5 are both now used for real** (see M6.5's entry
+below); M6.7's scheduled digest is the deliberate second instance this
+section has been waiting on — a workflow/event boundary designed from one
+data point is a guess, from two it's at least a comparison. Don't design
+this boundary before M6.7 ships and both are compared. L2 (see
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md)) is explicitly not a
+prerequisite for this first workflow either — an event-triggered workflow
+needs durable triggering, typed argument binding, idempotency, approvals,
+retries, and cancellation, which is more than a script; L2's role is to
+later give operators a reviewable way to author bounded local procedures
+against whatever that stable model turns out to be, not to be that model
+itself.
 
 **Sequencing and initial demo scope:** M6.5 depended on M6.4 closing first —
 an agent proposing a Slack reply through a still-fire-and-forget outbound
@@ -952,10 +963,11 @@ declared mount—not an implicit host bind mount.
   run/                   # status, logs, ports, artifacts
 ```
 
-### Next proof: review radar
+### Review radar proof — achieved
 
-The one thing near-term work should be judged against. Everything else in
-this section — the `/world`/`/home`/`/commons` namespace direction (see
+The checkpoint near-term work through M6.5 was judged against. Everything
+else in this section — the `/world`/`/home`/`/commons` namespace direction
+(see
 [PRODUCT-SPEC.md](PRODUCT-SPEC.md#long-range-direction-a-legible-federated-world)),
 federation (see the ADR's federation section), commons functions (see
 [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md#paving-stones)) — is a downstream
@@ -966,7 +978,18 @@ useful:
 > candidate worth reviewing, explains its evidence, and produces a
 > human-approved Slack response.
 
-### Next experiment: `yafs.start_here`
+**Verified live, not just plumbing-tested:** a real LM Studio persona,
+mentioned in Slack, called `yafs.start_here` then `yafs.tree`/`yafs.read`
+against the real `/world/github/software/vets-api` mount and returned a
+grounded recommendation for PR #30018 — correctly identified as a
+five-line, declarative-only feature-flag addition
+(`disability_compensation_conditions_evidence_messaging_test`) with no
+logic changes, safe to merge. Checked against the real diff, not taken on
+faith: the summary matched exactly. This is the fake-model e2e proof
+(`test/e2e/SlackToolEnabledReview.test.ts`) confirmed against a real model
+for the first time.
+
+### `yafs.start_here` — implemented
 
 A single typed, read-only MCP operation (same shape as the existing
 `yafs.tree`/`yafs.find`) returning structured orientation instead of
@@ -1010,9 +1033,9 @@ personas or mounts in one run, or any actor other than a
 [ADR.md](ADR.md)'s "Path-scoping primitive" section, sharpened to name
 this distinction explicitly. That gap is M7 "spaces" territory, not a
 prerequisite for the one-hop, one-mount case this experiment targets.
-Also still open per the roadmap's own acceptance criterion: this proof
-uses a fake model, so it shows the plumbing works, not that a real LM
-Studio model reliably chooses to use it — that still needs a live pass.
+**Acceptance criterion met:** a real LM Studio model, not a fake one,
+reliably called `start_here` then read real content before replying — see
+"Review radar proof — achieved" above.
 
 ### M6.6 — Runtime-overlay and plugin-registry consolidation *(decision gate, before M7)*
 
@@ -1049,6 +1072,90 @@ default pathing, or the M6.5 tool loop, all of which ship first.
 two largest concerns are named and scheduled rather than silently dropped.
 Actual design (an explicit snapshot/overlay split; a single declarative
 plugin-registration surface) is deferred to when M7 work is scoped.
+
+### M6.7 — Scheduled review digest *(second hand-built automation)*
+
+Checkpoint: after the review-radar proof, the reviewer's own stated
+sequencing is the plan, verbatim: *"build one deliberately narrow second
+flow — perhaps a scheduled GitHub review sweep that creates a proposed
+Slack digest — and compare it with the inbound Slack path... generalize
+only the parts that are demonstrably identical."* This milestone **is**
+that second flow — not a general scheduler, not a manifest `scheduled:`
+block, not a change to L2. Those all stay exactly where "Later: a
+provider-neutral event/workflow boundary" above and
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md)'s L2 scoping section already
+put them: deferred until there's more than one real trigger/action pair to
+generalize from. A workflow boundary designed from one data point (the
+Slack bridge) is a guess; from two, it's at least a comparison. This
+milestone's job is to *produce* that second data point — deliberately
+built bespoke, on purpose, so the eventual comparison is honest.
+
+- A new background driver, the same shape as `SlackInboundPoller` (a
+  hand-built timer loop, not a generic trigger runtime): during a
+  configured working-hours window, it `plugin refresh`es a GitHub mount
+  (host-triggered — the persona's MCP tool set stays read-only per
+  `BoundedToolSet.ts`; the model never gains refresh/mutate authority by
+  being asked in a message), invokes a persona with a "surface
+  safe-to-merge PRs" prompt, and posts through the existing durable Slack
+  outbox (M6.4) — the same delivery guarantee the inbound reply path
+  already gets, not a new fire-and-forget post.
+- Scoped design questions this milestone answers concretely (not the
+  deferred general ones): what "safe to merge" means as a prompt/bar
+  (same evidence-cited standard the interactive case already validated,
+  or looser); how to avoid re-surfacing the same PR every cycle (durable
+  dedup/seen-state, following M6.4's own durability precedent — not an
+  in-memory set that a restart forgets); what the work-hours window means
+  in code for v1 (a fixed window is enough to prove the shape; timezones,
+  weekends, and holidays are explicitly out of scope until there's a
+  second operator who needs them).
+- **Why M6.6 doesn't block this:** per the reviewer, M6.6 "should not
+  block the current live validation... it should, however, block a
+  durable general workflow system." One narrow scheduled spike, reusing
+  the same durable-outbox/bounded-tools primitives the Slack bridge
+  already proved, is not a durable general workflow system. M6.6 is a
+  prerequisite for generalizing *after* this and the Slack bridge are
+  compared, not for building this.
+- **Exit criterion:** ship it, let it run for real, then compare its
+  driver against `SlackInboundPoller`'s. Same dispatch-then-post shape?
+  Same need for durable dedup? That comparison — not speculation — is
+  what tells M6.6 and the event/workflow boundary what to actually
+  design, and is the evidence L2's own "second decision, earned only by
+  repeated use" principle is waiting on.
+
+### Later: on-demand, single-resource provider fetch (not yet scoped)
+
+Named here so it isn't lost, not designed. Motivated by a concrete richer
+digest idea: alongside `pulls/`, capture `commits/` for the last 10-15
+`master` commits (CI status, run number, optionally diffs), and — the part
+that actually needs new architecture — let a persona ask a provider to
+fetch one specific thing on demand, e.g. a single GitHub Actions run's log
+(`actions/<runId>/...`), *only when requested*, not pre-fetched for every
+recent commit "just in case."
+
+**Why this is a new primitive, not a bigger snapshot.** Every provider
+today is bulk-publish-only: `Plugin.prepare()` fetches everything a mount's
+config asks for in one pass and materializes one immutable snapshot
+(`SnapshotMaterializer`/`populateSnapshot`); there is no "fetch just this
+one thing" verb anywhere in the codebase. CI logs make eager bulk-fetch
+actively wrong, not just wasteful — pulling every recent run's full log
+on every refresh is exactly the "large data" cost a scheduled poll (M6.7)
+would multiply on a timer, and most of it would never be read. This also
+isn't the same gap M6.6 names: M6.6 is about separating a provider's
+immutable fetched content from a runtime actor's mutable writes on top of
+it; this is about a provider needing two *fetch* modes — eager/bulk (what
+exists) and lazy/on-demand-by-id (what doesn't) — with their own capability
+and cost-control story (an on-demand verb is a new way to spend the
+network/secret grant a mount already holds, per-call rather than
+per-refresh, and needs its own accounting).
+
+**Deliberately not designed here:** how a persona would even express "fetch
+this one thing" (a new bounded MCP tool? A `ctl` verb, like actions
+already use for `send`? Something else?), how it composes with the
+read-only bounded tool set (`BoundedToolSet.ts`) without becoming a way to
+trigger arbitrary provider API calls, and how/whether it's audited the
+same way mount activation already is. Scope this for real once M6.7 (or
+whatever next needs it) makes the "we want to check something specific,
+not the whole collection" shape concrete rather than hypothetical.
 
 ## M5 design gate
 

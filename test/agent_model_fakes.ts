@@ -3,14 +3,14 @@ import { sleep } from "./agent_test_helpers";
 
 export function fakeExchangeModel(
   reply: string,
-  calls: Array<{ system: string; message: string }>,
+  calls: { system: string; message: string }[],
 ): ModelClient {
   return { completeChat: async (chat) => recordExchange(reply, calls, chat) };
 }
 
 async function recordExchange(
   reply: string,
-  calls: Array<{ system: string; message: string }>,
+  calls: { system: string; message: string }[],
   chat: { role: string; content: string }[],
 ) {
   calls.push(exchange(chat));
@@ -76,7 +76,7 @@ async function deliverChunk(
 
 export function recordingModel(
   replies: string[],
-  calls: Array<{ role: string; content: string }[]>,
+  calls: { role: string; content: string }[][],
 ): ModelClient {
   const state = { index: 0 };
   const completeChat = (chat: { role: string; content: string }[]) =>
@@ -86,7 +86,7 @@ export function recordingModel(
 
 async function recordAndReply(
   replies: string[],
-  calls: Array<{ role: string; content: string }[]>,
+  calls: { role: string; content: string }[][],
   state: { index: number },
   chat: { role: string; content: string }[],
 ) {

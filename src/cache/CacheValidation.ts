@@ -16,8 +16,6 @@ function assertShape(entry: CacheEntry) {
 
 function validShape(entry: CacheEntry) {
   return (
-    entry.kind === "yafs-cache-entry" &&
-    entry.version === 1 &&
     Boolean(entry.digest) &&
     Boolean(entry.createdAt) &&
     Boolean(entry.expiresAt)

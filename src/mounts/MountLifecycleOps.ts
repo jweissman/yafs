@@ -4,13 +4,13 @@ import { restoredRefresh } from "./MountRestore";
 import { auditActivation, auditRefresh } from "./MountAudit";
 import { MountRecord, PreparedMountRecord } from "./types";
 
-export type LifecycleDeps = {
+export interface LifecycleDeps {
   persistence: MountPersistence;
   snapshots: SnapshotMaterializer;
   getRecords: () => PreparedMountRecord[];
   setRecords: (records: PreparedMountRecord[]) => void;
   save: () => void;
-};
+}
 
 export function activateMount(
   deps: LifecycleDeps,
@@ -23,12 +23,12 @@ export function activateMount(
   auditActivation(deps.persistence, record, actor);
 }
 
-export type RefreshRequest = {
+export interface RefreshRequest {
   previous: PreparedMountRecord;
   record: PreparedMountRecord;
   actor: string;
   detail?: string;
-};
+}
 
 export function refreshMount(deps: LifecycleDeps, request: RefreshRequest) {
   const { previous, record, actor, detail } = request;
@@ -40,7 +40,7 @@ export function refreshMount(deps: LifecycleDeps, request: RefreshRequest) {
 }
 
 export function removeMount(deps: LifecycleDeps, record: MountRecord) {
-  deps.snapshots.remove(record);
+  deps.snapshots.remove(record.path);
   deps.setRecords(deps.getRecords().filter((item) => item !== record));
   deps.save();
 }

@@ -20,8 +20,7 @@ test("sends input/system_prompt/integrations and parses message output", async (
   });
   expect(requests).toHaveLength(1);
   expect(requests[0].url).toBe(`${API_URL}/chat`);
-  const body = await requests[0].json();
-  expect(body).toEqual({
+  expect(await requests[0].json()).toEqual({
     input: "Review this PR",
     system_prompt: "You are a terse reviewer.",
     integrations: INTEGRATIONS,

@@ -23,7 +23,7 @@ export function literacyTools(): Tool[] {
 }
 
 type Parser = (input: Arguments) => WorkspaceOperation;
-const parsers: Record<string, Parser> = {
+const parsers: Partial<Record<string, Parser>> = {
   "yafs.tree": tree,
   "yafs.find": find,
   "yafs.test": test,

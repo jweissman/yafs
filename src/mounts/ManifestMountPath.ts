@@ -26,10 +26,13 @@ function defaultPath(
   parsedConfig: unknown,
 ): string {
   const computed = pluginByName(provider).defaultPath(parsedConfig as never);
-  if (!computed) {
-    throw new Error("Invalid .yafsmeta plugin");
-  }
-  return computed;
+  return computed ?? missingPath(provider);
+}
+
+function missingPath(provider: ManifestMount["provider"]): never {
+  throw new Error(
+    `${provider} mounts have no default path for this config — path: is required`,
+  );
 }
 
 export function pluginByName(name: string) {

@@ -17,12 +17,22 @@ export function watch(
   message: SlackMessage,
 ) {
   const action = () => reply(lookup, options);
-  void withReaction(options, message, action).catch((error) =>
-    logFailure(lookup, error),
-  );
+  void withReaction(options, message, action).catch((error: unknown) => {
+    logFailure(lookup, error);
+  });
 }
 
-async function withReaction(
+function withReaction(
+  options: RouteOptions,
+  message: SlackMessage,
+  action: () => Promise<void>,
+) {
+  return options.reactionsEnabled
+    ? reactedAction(options, message, action)
+    : action();
+}
+
+async function reactedAction(
   options: RouteOptions,
   message: SlackMessage,
   action: () => Promise<void>,
@@ -54,7 +64,9 @@ function unreact(options: RouteOptions, message: SlackMessage) {
 }
 
 async function safely(action: () => Promise<void>) {
-  await action().catch((error) => logReactionFailure(error));
+  await action().catch((error: unknown) => {
+    logReactionFailure(error);
+  });
 }
 
 function logReactionFailure(error: unknown) {

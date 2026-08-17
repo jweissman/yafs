@@ -17,7 +17,7 @@ export class NodeStore {
   private readonly inspection: NodeStoreInspection;
   private readonly snapshots: NodeStoreSnapshot;
   constructor(clock?: Clock) {
-    const components = createNodeStoreComponents(clock || systemClock);
+    const components = createNodeStoreComponents(clock ?? systemClock);
     this.state = components.state;
     this.resolver = components.resolver;
     this.mutation = components.mutation;
@@ -39,31 +39,31 @@ export class NodeStore {
     return this.resolver.get(path, follow ?? true, depth ?? 0);
   }
   mkdir(path: AbsolutePath, at?: Date) {
-    return this.mutation.mkdir(path, at);
+    this.mutation.mkdir(path, at);
   }
   write(path: AbsolutePath, content: string, at?: Date) {
-    return this.mutation.write(path, content, at);
+    this.mutation.write(path, content, at);
   }
   touch(path: AbsolutePath, at?: Date) {
-    return this.mutation.touch(path, at);
+    this.mutation.touch(path, at);
   }
   remove(path: AbsolutePath) {
-    return this.mutation.remove(path);
+    this.mutation.remove(path);
   }
   removeTree(path: AbsolutePath) {
-    return this.mutation.removeTree(path);
+    this.mutation.removeTree(path);
   }
   setProviderOrigin(path: AbsolutePath, origin: ProviderOrigin) {
-    return this.mutation.setProviderOrigin(path, origin);
+    this.mutation.setProviderOrigin(path, origin);
   }
   union(path: AbsolutePath, layers: AbsolutePath[], at?: Date) {
-    return this.mutation.union(path, layers, at);
+    this.mutation.union(path, layers, at);
   }
   symlink(target: string, path: AbsolutePath, at?: Date) {
-    return this.mutation.symlink(target, path, at);
+    this.mutation.symlink(target, path, at);
   }
   apply(item: VfsOperation) {
-    return this.mutation.apply(item);
+    this.mutation.apply(item);
   }
   read(path: AbsolutePath) {
     return this.inspection.read(path);
@@ -87,12 +87,12 @@ export class NodeStore {
     return this.inspection.mounts();
   }
   validate(items: VfsOperation[]) {
-    return this.snapshots.validate(items);
+    this.snapshots.validate(items);
   }
   snapshot(sequence: number): VfsSnapshot {
     return this.snapshots.snapshot(sequence);
   }
   restore(snapshot: VfsSnapshot) {
-    return this.snapshots.restore(snapshot);
+    this.snapshots.restore(snapshot);
   }
 }

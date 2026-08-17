@@ -10,7 +10,6 @@ export class PluginsCommand {
   readonly access = "control";
 
   constructor() {}
-
   execute(context: CommandContext, args: string[]): string | Promise<string> {
     if (!args.length || args[0] === "describe") {
       return this.describe(context, args);

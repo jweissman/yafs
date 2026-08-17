@@ -1,31 +1,47 @@
+import { MountManager } from "../../mounts/MountManager";
 import { AgentTarget, RunContext } from "./AgentTarget";
 import { AgentRequest, userTurn } from "./AgentRequest";
 import { AgentChatStore } from "./AgentChatStore";
 import { AgentRunStore } from "./AgentRunStore";
 import { finalMessage, LmStudioTurn, ToolClientFor } from "./LmStudioMcpClient";
 import { yafsKey } from "./LmStudioMcpJson";
+import { citationsFooter } from "./AgentToolCitations";
 
 export type ToolServerUrl = (mountId: string, personaName: string) => string;
-export type ToolDeps = {
+export interface ToolDeps {
   chats: AgentChatStore;
   runs: AgentRunStore;
   toolClientFor: ToolClientFor;
-};
-export type ToolCall = {
+  mounts: MountManager;
+}
+export interface ToolCall {
   target: AgentTarget;
   context: RunContext;
   request: AgentRequest;
-};
+}
 
 export async function completeWithTools(
   deps: ToolDeps,
   call: ToolCall,
 ): Promise<string> {
-  const { persona, config } = call.target;
-  const client = deps.toolClientFor(persona, config);
-  const turn = await client.respond(turnRequest(deps, call));
+  const startedAt = Date.now();
+  const turn = await toolResponse(deps, call);
+  const elapsedMs = elapsed(startedAt);
   await recordTurn(deps, call, turn);
-  return finalMessage(turn);
+  return reply(deps.mounts, turn, elapsedMs);
+}
+
+async function toolResponse(deps: ToolDeps, call: ToolCall) {
+  const client = deps.toolClientFor(call.target.persona, call.target.config);
+  return client.respond(turnRequest(deps, call));
+}
+
+function elapsed(startedAt: number): number {
+  return Date.now() - startedAt;
+}
+
+function reply(mounts: MountManager, turn: LmStudioTurn, elapsedMs: number) {
+  return finalMessage(turn) + citationsFooter(mounts, turn, elapsedMs);
 }
 
 function turnRequest(deps: ToolDeps, call: ToolCall) {
@@ -55,13 +71,17 @@ export function systemPromptFor(call: ToolCall): string {
 }
 
 function rootsHint(roots: string[]): string {
-  return (
-    "You can inspect the configured Yafs world through MCP. Your tools " +
-    `are scoped to: ${roots.join(", ")}. Begin with yafs.start_here; ` +
-    "then use yafs.tree or yafs.find on an accessible source. Do not " +
-    "ask the user for information you can look up yourself until those " +
-    "calls show no relevant source."
-  );
+  return rootInstructions(roots).join(" ");
+}
+
+function rootInstructions(roots: string[]): string[] {
+  return [
+    `Your MCP tools are scoped to: ${roots.join(", ")}.`,
+    "Begin with yafs.start_here, then use yafs.tree or yafs.find.",
+    "Look up available context before asking the user for it.",
+    "Use resourceShape links when citing a discovered provider resource.",
+    "Scan cheap, small items broadly before reading large items in full.",
+  ];
 }
 
 function integrationFor(call: ToolCall) {

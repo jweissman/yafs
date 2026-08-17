@@ -28,15 +28,17 @@ export class SlackDirectoryDriver {
   }
 
   close() {
-    this.registered.forEach((path) => this.wiring.unregisterCtl(path));
+    this.registered.forEach((path) => {
+      this.wiring.unregisterCtl(path);
+    });
     this.registered.clear();
   }
 
   sync() {
     const paths = new Set<AbsolutePath>();
-    this.mounts
-      .mounts()
-      .forEach((record) => this.registerRecord(record, paths));
+    this.mounts.mounts().forEach((record) => {
+      this.registerRecord(record, paths);
+    });
     this.unregisterUnpaired(paths);
     this.registered = paths;
   }
@@ -73,7 +75,7 @@ export class SlackDirectoryDriver {
   // so "accepted" genuinely means "durably queued," not "queued in memory."
   private async send(mountId: string, payload: string) {
     const action = parseSlackAction(payload);
-    const id = { mountId, actionId: action.actionId || randomUUID() };
+    const id = { mountId, actionId: action.actionId ?? randomUUID() };
     const startedAt = new Date().toISOString();
     await this.outbox.accept(id, action.message, queuedStatus(startedAt));
     const attempt = { id, message: action.message, startedAt };

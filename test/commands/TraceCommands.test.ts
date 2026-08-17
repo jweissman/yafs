@@ -9,6 +9,7 @@ import { MountManager } from "../../src/mounts/MountManager";
 import { ProviderRegistry } from "../../src/mounts/ProviderRegistry";
 import { NodeStore } from "../../src/vfs/NodeStore";
 import { activateDesired, refreshDesired } from "../desired_mount_helpers";
+import { parseJson } from "../json";
 
 test("capture preserves a provider subtree across refresh and restore", async () => {
   const pulls: GitHubPull[] = [pull()];
@@ -16,7 +17,7 @@ test("capture preserves a provider subtree across refresh and restore", async ()
   await activateDesired(yafs, manifest());
   yafs.exec("mkdir notes");
   await yafs.executeAsync("capture reviews/pulls/42 notes/42");
-  const trace = JSON.parse(yafs.exec("cat notes/42/trace.json"));
+  const trace = parseJson(yafs.exec("cat notes/42/trace.json"));
   expect(trace).toMatchObject({
     sourcePath: "/home/root/reviews/pulls/42",
     origin: { provider: "github" },
@@ -79,7 +80,7 @@ test("a failed trace plan leaves blobs unretained for explicit collection", asyn
     (await yafs.executeAsync("capture source missing/artifact")).error,
   ).toBeDefined();
   expect(
-    JSON.parse((await yafs.executeAsync("blobs gc")).stdout).reclaimed,
+    reclaimed((await yafs.executeAsync("blobs gc")).stdout),
   ).toHaveLength(1);
 });
 
@@ -92,7 +93,7 @@ test("command substitution rejects trace before it can retain blobs", async () =
   ).toContain("not read-only");
   expect(yafs.store.get("/home/root/artifact", false)).toBeUndefined();
   expect(
-    JSON.parse((await yafs.executeAsync("blobs gc")).stdout).reclaimed,
+    reclaimed((await yafs.executeAsync("blobs gc")).stdout),
   ).toHaveLength(0);
 });
 
@@ -117,4 +118,16 @@ function pull(): GitHubPull {
 
 function manifest() {
   return '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, query: "is:open", max: 2}, capabilities: [network.github-api]}]}';
+}
+
+function reclaimed(source: string): unknown[] {
+  const value = parseJson(source);
+  if (!isRecord(value) || !Array.isArray(value.reclaimed)) {
+    throw new Error("Expected a blob collection response");
+  }
+  return value.reclaimed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

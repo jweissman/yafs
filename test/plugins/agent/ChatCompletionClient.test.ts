@@ -20,8 +20,7 @@ test("the chat completion client sends a stream:true system/user request and ret
   expect(reply).toBe("Looks good to me.");
   expect(requests).toHaveLength(1);
   expect(requests[0].url).toBe(`${API_URL}/chat/completions`);
-  const body = await requests[0].json();
-  expect(body).toEqual({
+  expect(await requests[0].json()).toEqual({
     model: "local-model",
     messages: MESSAGES,
     stream: true,

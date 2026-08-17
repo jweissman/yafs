@@ -3,7 +3,7 @@ import { type Socket } from "node:net";
 export function attachLines(socket: Socket, onLine: (line: string) => void) {
   let buffer = "";
   socket.on("data", (chunk) => {
-    buffer += chunk;
+    buffer += chunk.toString();
     buffer = consumeLines(socket, buffer, onLine);
   });
 }
@@ -26,7 +26,7 @@ function oversized(socket: Socket, buffer: string) {
 
 function dispatchLines(buffer: string, onLine: (line: string) => void) {
   const lines = buffer.split("\n");
-  const rest = lines.pop() || "";
+  const rest = lines.pop() ?? "";
   lines.filter(Boolean).forEach(onLine);
   return rest;
 }

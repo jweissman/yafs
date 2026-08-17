@@ -7,20 +7,19 @@ export function memoryBlobStore(): BlobStore {
 }
 
 class MemoryBlobStore implements BlobStore {
+  constructor() {}
   private readonly blobs = new Map<string, Uint8Array>();
   private readonly owners = new Map<string, Set<string>>();
 
-  constructor() {}
-
-  async put(bytes: Uint8Array) {
+  put(bytes: Uint8Array) {
     const digest = sha256(bytes);
     if (!this.blobs.has(digest)) {
       this.blobs.set(digest, bytes);
     }
-    return digest;
+    return Promise.resolve(digest);
   }
-  async get(digest: string) {
-    return this.blobs.get(digest);
+  get(digest: string) {
+    return Promise.resolve(this.blobs.get(digest));
   }
   retain(digest: string, owner: string) {
     this.ownersFor(digest).add(owner);
@@ -28,15 +27,15 @@ class MemoryBlobStore implements BlobStore {
   release(digest: string, owner: string) {
     this.owners.get(digest)?.delete(owner);
   }
-  async gc() {
+  gc() {
     const reclaimed = [...this.blobs.keys()].filter(
       (digest) => !this.owners.get(digest)?.size,
     );
     reclaimed.forEach((digest) => this.blobs.delete(digest));
-    return { reclaimed };
+    return Promise.resolve({ reclaimed });
   }
   private ownersFor(digest: string) {
-    return this.owners.get(digest) || this.addOwners(digest);
+    return this.owners.get(digest) ?? this.addOwners(digest);
   }
   private addOwners(digest: string) {
     const owners = new Set<string>();

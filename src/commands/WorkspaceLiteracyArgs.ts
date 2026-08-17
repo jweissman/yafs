@@ -20,12 +20,12 @@ export function find(args: string[]): WorkspaceOperation {
   return findOperation({ path, pattern, type, limit });
 }
 
-type FindOptions = {
+interface FindOptions {
   path: string;
   pattern?: string;
   type?: string;
   limit?: string;
-};
+}
 
 function findOperation(o: FindOptions): WorkspaceOperation {
   return {

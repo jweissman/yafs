@@ -1,6 +1,9 @@
 import { PreparedMountRecord } from "../../mounts/types";
 
-export type ChatMessage = { role: string; content: string };
+export interface ChatMessage {
+  role: string;
+  content: string;
+}
 
 export function chatPath(personaName: string, chatId: string): string {
   return `${personaName}/chats/${chatId}/messages.ndjson`;

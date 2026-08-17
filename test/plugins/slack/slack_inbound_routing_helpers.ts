@@ -3,7 +3,7 @@ import { MountManager } from "../../../src/mounts/MountManager";
 import { PreparedMountRecord } from "../../../src/mounts/types";
 import { DispatchCtl } from "../../../src/plugins/slack/SlackInboundRouting";
 
-export function fakeMounts(entries: Array<[string, string]>): MountManager {
+export function fakeMounts(entries: [string, string][]): MountManager {
   const record = {
     id: "agents",
     path: "/home/root/agents",
@@ -14,17 +14,17 @@ export function fakeMounts(entries: Array<[string, string]>): MountManager {
   return { mounts: () => [record] } as unknown as MountManager;
 }
 
-type DispatchFixture = {
+interface DispatchFixture {
   personaCtlPath: AbsolutePath;
   slackCtlPath: AbsolutePath;
-  entries: Array<[string, string]>;
+  entries: [string, string][];
   postSucceeds: boolean;
-};
+}
 
 export function fakeDispatch(
   personaCtlPath: AbsolutePath,
   slackCtlPath: AbsolutePath,
-  entries: Array<[string, string]>,
+  entries: [string, string][],
   postSucceeds = false,
 ): DispatchCtl {
   const fixture = { personaCtlPath, slackCtlPath, entries, postSucceeds };
@@ -40,7 +40,7 @@ async function handle(fixture: DispatchFixture, path: string, payload: string) {
   return true;
 }
 
-function seedCompletedRun(entries: Array<[string, string]>, payload: string) {
+function seedCompletedRun(entries: [string, string][], payload: string) {
   const { runId } = JSON.parse(payload) as { runId: string };
   entries.push([
     `reviewer/runs/${runId}/status.json`,

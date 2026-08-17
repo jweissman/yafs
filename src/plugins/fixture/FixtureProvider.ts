@@ -4,11 +4,10 @@ export class FixtureProvider {
   constructor(private readonly files: Record<string, string>) {}
 
   read(path: string): string {
-    const value = this.files[path];
-    if (value === undefined) {
+    if (!Object.hasOwn(this.files, path)) {
       throw new Error(`No such file: ${path}`);
     }
-    return value;
+    return this.files[path];
   }
 
   list(path: string): string[] {

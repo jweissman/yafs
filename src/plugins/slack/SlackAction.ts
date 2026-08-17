@@ -1,5 +1,11 @@
-export type SlackAction = { message: string; actionId?: string };
-type RawAction = { message?: unknown; actionId?: unknown };
+export interface SlackAction {
+  message: string;
+  actionId?: string;
+}
+interface RawAction {
+  message?: unknown;
+  actionId?: unknown;
+}
 
 export function parseSlackAction(payload: string): SlackAction {
   const value = JSON.parse(payload) as RawAction;

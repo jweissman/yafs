@@ -9,26 +9,49 @@ import { toolsPort } from "./plugins/agent/AgentToolServer";
 import { defaultMcpJsonPath } from "./plugins/agent/LmStudioMcpJson";
 import { statusOf, stopDaemon } from "./DaemonControl";
 import { serve } from "./DaemonServe";
+import { defaultSnapshotLimits } from "./mounts/SnapshotMaterializer";
+import { resetDaemon } from "./DaemonReset";
 
-const command = process.argv[2] || "serve";
+const command = process.argv[2] ?? "serve";
 const settings = {
-  host: process.env.YAFS_HOST || "127.0.0.1",
-  port: Number(process.env.YAFS_PORT || 7337),
-  dataDir: process.env.YAFS_DATA_DIR || ".yafs",
+  host: process.env.YAFS_HOST ?? "127.0.0.1",
+  port: Number(process.env.YAFS_PORT ?? 7337),
+  dataDir: process.env.YAFS_DATA_DIR ?? ".yafs",
   configPath: selectedConfig(process.argv, process.env),
   toolsPort: toolsPort(),
   mcpJsonPath: defaultMcpJsonPath(),
+  snapshotLimits: snapshotLimits(process.env),
 };
-const statePaths = paths(settings.dataDir);
-const commands = { serve: serveCommand, start, stop, restart, status, logs };
-await (commands[command] || usage)();
-function serveCommand() {
-  return serve(settings, statePaths);
+
+// Override either bound via env (matching YAFS_HOST/YAFS_PORT/etc.'s
+// convention); unset means "use SnapshotMaterializer's own default."
+function snapshotLimits(env: NodeJS.ProcessEnv) {
+  const { YAFS_SNAPSHOT_MAX_BYTES: bytes, YAFS_SNAPSHOT_MAX_FILES: files } =
+    env;
+  return bytes || files
+    ? {
+        bytes: bytes ? Number(bytes) : defaultSnapshotLimits.bytes,
+        files: files ? Number(files) : defaultSnapshotLimits.files,
+      }
+    : undefined;
 }
+const statePaths = paths(settings.dataDir);
+const commands: Record<string, () => void | Promise<void>> = {
+  serve: serveCommand,
+  start,
+  stop,
+  restart,
+  status,
+  logs,
+  reset,
+};
+await (commands[command] ?? usage)();
+function serveCommand() { return serve(settings, statePaths); }
 
 async function start(configPath = settings.configPath) {
   if (await managedState(statePaths.state)) {
-    return report("running");
+    report("running");
+    return;
   }
   const launched = await launch(configPath);
   await waitForState(launched.child, statePaths, launched.logOffset);
@@ -74,10 +97,17 @@ function logs() {
   return printLogs(statePaths.log, process.argv.slice(3));
 }
 
+// Permanently deletes the journal, mount state, audit log, and blob cache
+// (everything under dataDir) and starts over from empty. Stops the daemon
+// first if it's running. Requires --yes since there is no undo.
+function reset() {
+  return resetDaemon(statePaths, stop, process.argv.includes("--yes"), report);
+}
+
 function usage(): never {
   throw new Error(
-    "Usage: yafsd [serve|start|stop|restart|status|logs [-f|--tail] [-n N]] " +
-      "[--config FILE]",
+    "Usage: yafsd [serve|start|stop|restart|status|logs [-f|--tail] [-n N]" +
+      "|reset --yes] [--config FILE]",
   );
 }
 

@@ -2,34 +2,41 @@ import { createHash } from "node:crypto";
 
 import { GitHubConfig } from "../../mounts/types";
 
-export type GitHubPull = {
+export interface GitHubPull {
   number: number;
   title: string;
   updatedAt: string;
   headSha: string;
   diff: string;
-};
-export type GitHubClient = {
+}
+export interface GitHubClient {
   pulls(config: GitHubConfig): Promise<GitHubPull[]>;
-};
-export type GitHubPullFetcher = {
+}
+export interface GitHubPullFetcher {
   pull(repository: string, number: number): Promise<GitHubPull>;
-};
-export type ProviderSnapshot = {
+}
+export interface ProviderSnapshot {
   entries: [string, string][];
   revision: string;
   fetchedAt: string;
   resourceReferences: Record<string, object>;
-};
-export type GitHubResourceReference = {
+}
+export interface GitHubResourceReference {
   kind: "github-pr";
   repository: string;
   number: number;
   headSha: string;
-};
+  title: string;
+  url: string;
+}
+
+const DEFAULT_WEB_URL = "https://github.com";
 
 export class GitHubCollectionSource {
-  constructor(private readonly client: GitHubClient) {}
+  constructor(
+    private readonly client: GitHubClient,
+    private readonly webUrl: string = DEFAULT_WEB_URL,
+  ) {}
 
   async snapshot(config: GitHubConfig): Promise<ProviderSnapshot> {
     const pulls = await this.client.pulls(config);
@@ -47,8 +54,8 @@ export class GitHubCollectionSource {
   private pullEntries(pull: GitHubPull): [string, string][] {
     const root = `pulls/${pull.number}`;
     return [
-      [`${root}/diff.patch`, pullFile(pull, "diff.patch")!],
-      [`${root}/metadata.json`, pullFile(pull, "metadata.json")!],
+      [`${root}/diff.patch`, pull.diff],
+      [`${root}/metadata.json`, JSON.stringify(pullMetadata(pull))],
     ];
   }
   private references(config: GitHubConfig, pulls: GitHubPull[]) {
@@ -63,9 +70,10 @@ export class GitHubCollectionSource {
     config: GitHubConfig,
     pull: GitHubPull,
   ): GitHubResourceReference {
-    const { number, headSha } = pull;
+    const { number, headSha, title } = pull;
     const { repository } = config;
-    return { kind: "github-pr", repository, number, headSha };
+    const url = `${this.webUrl}/${repository}/pull/${String(number)}`;
+    return { kind: "github-pr", repository, number, headSha, title, url };
   }
   private revision(pulls: GitHubPull[]) {
     return `github:${createHash("sha256").update(JSON.stringify(pulls)).digest("hex").slice(0, 12)}`;

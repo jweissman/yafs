@@ -1,8 +1,8 @@
-export type ChatArgs = {
+export interface ChatArgs {
   persona?: string;
   contextPath?: string;
   chatId?: string;
-};
+}
 
 export function parseChatArgs(rest: string): ChatArgs {
   const tokens = rest.split(/\s+/).filter(Boolean);
@@ -44,7 +44,7 @@ function applyPersona(args: ChatArgs, token: string) {
 }
 
 function requireValue(tokens: string[], i: number, flag: string): string {
-  const value = tokens[i + 1];
+  const value = tokens.at(i + 1);
   if (value === undefined) {
     throw new Error(`${flag} requires a value`);
   }

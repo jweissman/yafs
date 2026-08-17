@@ -10,6 +10,8 @@ import { ProviderRegistry } from "../../../src/mounts/ProviderRegistry";
 import { NodeStore } from "../../../src/vfs/NodeStore";
 import { parseManifest } from "../../../src/mounts/Manifest";
 import { activateDesired } from "../../desired_mount_helpers";
+import { inspectedOrigin } from "../../inspection_helpers";
+import { parseJson } from "../../json";
 
 test("a Slack channel becomes an ordered, immutable message snapshot", async () => {
   const yafs = configuredYafs(
@@ -28,22 +30,21 @@ function assertMessagesPublished(yafs: Yafs) {
   const lines = yafs
     .exec("cat updates/messages.ndjson")
     .split("\n")
-    .map((line) => JSON.parse(line));
+    .map(parseJson);
   expect(lines).toEqual([
     { user: "U1", text: "first", ts: "1.0" },
     { user: "U2", text: "second", ts: "2.0" },
   ]);
-  expect(
-    JSON.parse(yafs.exec("inspect updates/messages.ndjson")).origins[0],
-  ).toMatchObject({
+  const origin = inspectedOrigin(yafs.exec("inspect updates/messages.ndjson"));
+  expect(origin).toMatchObject({
     provider: "slack",
     mountId: "updates",
-    revision: expect.stringMatching(/^slack:/),
   });
+  expect(origin.revision).toMatch(/^slack:/);
 }
 
 function assertPluginDescribed(yafs: Yafs) {
-  expect(JSON.parse(yafs.exec("plugins describe slack"))).toMatchObject([
+  expect(parseJson(yafs.exec("plugins describe slack"))).toMatchObject([
     {
       name: "slack",
       actions: [
@@ -79,7 +80,7 @@ function assertRejectsInvalidConfig() {
   expect(() =>
     parseManifest(slackManifest().replace("max: 10", "unknown: 10")),
   ).toThrow(
-    "Unknown slack config field: unknown (expected one of: channel, max, persona, requireMention, replyTimeoutMs)",
+    "Unknown slack config field: unknown (expected one of: channel, max, persona, requireMention, replyTimeoutMs, reactions)",
   );
   expect(() => parseManifest(slackManifest().replace("C123", "a/b"))).toThrow(
     "Invalid slack channel",

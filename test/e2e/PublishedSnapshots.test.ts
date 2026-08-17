@@ -11,6 +11,7 @@ import {
   refreshDesired,
   startedHostConfigServer,
 } from "../desired_mount_helpers";
+import { inspectedOrigin } from "../inspection_helpers";
 
 test("a refresh republishes one snapshot for direct, link, and union reads", async () => {
   const yafs = await mountedWorkspace();
@@ -28,6 +29,12 @@ test("a refresh republishes one snapshot for direct, link, and union reads", asy
   expect(yafs.execute("echo changed > review/new.txt").error?.code).toBe(
     "read_only_mount",
   );
+});
+
+test("rm -r rejects deleting inside a read-only provider mount", async () => {
+  const yafs = await mountedWorkspace();
+  expect(yafs.execute("rm -r fixture").error?.code).toBe("read_only_mount");
+  expect(yafs.exec("cat fixture/hello.txt")).toBe("hello");
 });
 
 test("a bounded snapshot is rejected before it becomes a mount", async () => {
@@ -93,5 +100,5 @@ function hostConfig(content: string) {
 }
 
 function fixtureRevision(yafs: Yafs) {
-  return JSON.parse(yafs.exec("inspect fixture/hello.txt")).origins[0].revision;
+  return inspectedOrigin(yafs.exec("inspect fixture/hello.txt")).revision;
 }

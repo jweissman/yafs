@@ -3,14 +3,14 @@ import { createHash } from "node:crypto";
 import { SlackMessage } from "./SlackApiClient";
 import { SlackConfig } from "../../mounts/types";
 
-export type SlackClient = {
+export interface SlackClient {
   history(channel: string, max: number): Promise<SlackMessage[]>;
-};
-export type SlackSnapshot = {
+}
+export interface SlackSnapshot {
   entries: [string, string][];
   revision: string;
   fetchedAt: string;
-};
+}
 
 const DEFAULT_MAX = 50;
 
@@ -18,7 +18,7 @@ export class SlackCollectionSource {
   constructor(private readonly client: SlackClient) {}
 
   async snapshot(config: SlackConfig): Promise<SlackSnapshot> {
-    const max = config.max || DEFAULT_MAX;
+    const max = config.max ?? DEFAULT_MAX;
     return snapshotOf(await this.client.history(config.channel, max));
   }
 }

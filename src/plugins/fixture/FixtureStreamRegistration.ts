@@ -24,15 +24,17 @@ export class FixtureStreamRegistration {
   }
 
   clear() {
-    this.registered.forEach((path) => this.unregisterCtl(path));
+    this.registered.forEach((path) => {
+      this.unregisterCtl(path);
+    });
     this.registered.clear();
   }
 
   private currentControls() {
     const paths = new Set<AbsolutePath>();
-    this.mounts
-      .mounts()
-      .forEach((record) => this.registerRecord(record, paths));
+    this.mounts.mounts().forEach((record) => {
+      this.registerRecord(record, paths);
+    });
     return paths;
   }
 
@@ -48,7 +50,7 @@ export class FixtureStreamRegistration {
     record: PreparedMountRecord,
     paths: Set<AbsolutePath>,
   ) {
-    const streams = (record.config as FixtureConfig).streams || {};
+    const streams = (record.config as FixtureConfig).streams ?? {};
     if (record.provider === "fixture" && Object.keys(streams).length) {
       paths.add(this.registerStreamCtl(record));
     }

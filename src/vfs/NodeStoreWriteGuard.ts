@@ -12,15 +12,19 @@ export const nodeStoreWriteGuard = {
     assertNotReadOnly(node, path);
   },
   setProviderOrigin(node: FSNode, origin: ProviderOrigin) {
-    node.providerOrigin = origin;
-    for (const child of node.children || []) {
-      this.setProviderOrigin(child, origin);
-    }
+    stampOrigin(node, origin);
   },
 };
 
 function isCtl(path: AbsolutePath) {
   return path.split("/").pop() === "ctl";
+}
+
+function stampOrigin(node: FSNode, origin: ProviderOrigin) {
+  node.providerOrigin = origin;
+  for (const child of node.children ?? []) {
+    stampOrigin(child, origin);
+  }
 }
 
 function assertNotReadOnly(node: FSNode, path: AbsolutePath) {

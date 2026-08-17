@@ -9,21 +9,24 @@ export function populateSnapshot(
   record: PreparedMountRecord,
 ) {
   ensureDirectory(store, record.path);
-  record.snapshot.entries.forEach((entry) => write(store, record.path, entry));
+  record.snapshot.entries.forEach((entry) => {
+    write(store, record.path, entry);
+  });
   store.setProviderOrigin(record.path, origin(record));
 }
 
-// A mount's default /world path can be multiple segments deep
-// (world/github/<owner>/<repo>), unlike the single-segment paths every
-// mount used before defaulting existed — a bare store.mkdir(record.path)
-// throws "No such parent directory" the moment the immediate parent
-// (e.g. world/github/acme) doesn't already exist. Walk and create every
-// missing ancestor instead, the same way write() already does for entries.
+// A mount's default /world path is a true top-level, multi-segment path
+// (/world/github/<owner>/<repo>), unlike the single-segment /home-relative
+// paths every mount used before defaulting existed — a bare
+// store.mkdir(record.path) throws "No such parent directory" the moment
+// the immediate parent (e.g. /world/github/acme) doesn't already exist.
+// Walk from the true filesystem root and create every missing ancestor
+// instead, the same way write() already does for entries.
 function ensureDirectory(store: NodeStore, path: AbsolutePath) {
   const segments = path.slice(1).split("/");
   const makeDir = (parent: AbsolutePath, name: string) =>
     directory(store, parent, name);
-  segments.reduce<AbsolutePath>(makeDir, "/" as AbsolutePath);
+  segments.reduce<AbsolutePath>(makeDir, "/");
 }
 
 // Every entry's relative path is already validated as a safe, non-escaping

@@ -9,7 +9,7 @@ export function entry(context: CommandContext, key: string) {
 
 export function requiredEntry(context: CommandContext, key: string) {
   const item = storedEntry(context, key);
-  if (!item || context.cache.expired(item, context.clock.now())) {
+  if (context.cache.expired(item, context.clock.now())) {
     throw new Error(`Cache miss: ${key}`);
   }
   return item;

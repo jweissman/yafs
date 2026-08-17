@@ -7,7 +7,10 @@ import { fakeClient, FakeState } from "./slack_inbound_fakes";
 export type { Reaction, FakeState } from "./slack_inbound_fakes";
 export { fakeState, arrive } from "./slack_inbound_fakes";
 
-export type ConfigExtra = { requireMention?: boolean; replyTimeoutMs?: number };
+export interface ConfigExtra {
+  requireMention?: boolean;
+  replyTimeoutMs?: number;
+}
 
 export function startServer(
   state: FakeState,

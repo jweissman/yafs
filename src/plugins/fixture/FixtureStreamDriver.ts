@@ -40,7 +40,9 @@ export class FixtureStreamDriver {
 
   start() {
     this.sync();
-    this.timer = setInterval(() => this.tick(), POLL_MS);
+    this.timer = setInterval(() => {
+      this.tick();
+    }, POLL_MS);
   }
   close() {
     if (this.timer) {
@@ -55,17 +57,19 @@ export class FixtureStreamDriver {
 
   private tick() {
     this.sync();
-    this.mounts.mounts().forEach((record) => this.tickRecord(record));
+    this.mounts.mounts().forEach((record) => {
+      this.tickRecord(record);
+    });
   }
 
   private tickRecord(record: PreparedMountRecord) {
     if (record.provider !== "fixture") {
       return;
     }
-    const streams = (record.config as FixtureConfig).streams || {};
-    Object.entries(streams).forEach(([path, spec]) =>
-      this.tickStream(record, path, spec),
-    );
+    const streams = (record.config as FixtureConfig).streams ?? {};
+    Object.entries(streams).forEach(([path, spec]) => {
+      this.tickStream(record, path, spec);
+    });
   }
 
   private tickStream(
@@ -87,7 +91,7 @@ export class FixtureStreamDriver {
   }
 
   private restartRecord(record: PreparedMountRecord, payload: string) {
-    const streams = (record.config as FixtureConfig).streams || {};
+    const streams = (record.config as FixtureConfig).streams ?? {};
     const path = this.restartTarget(payload, streams);
     return this.commit({ record, path, content: "", count: 0 });
   }

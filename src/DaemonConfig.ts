@@ -8,7 +8,7 @@ export function restartConfig(
   selected: string | undefined,
   state?: { configPath?: string },
 ) {
-  return selected || state?.configPath;
+  return selected ?? state?.configPath;
 }
 
 export function selectedConfig(

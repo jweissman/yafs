@@ -26,13 +26,13 @@ export function missingMount(id: string): never {
   throw new Error(`No active mount: ${id}`);
 }
 
-export type PrepareAndReplayDeps = {
+export interface PrepareAndReplayDeps {
   providers: ProviderRegistry;
   persistence: MountPersistence;
   snapshots: SnapshotMaterializer;
   getRecords: () => PreparedMountRecord[];
   commit: (records: PreparedMountRecord[]) => void;
-};
+}
 
 export function buildPrepareAndReplay(deps: PrepareAndReplayDeps) {
   const { providers, persistence, snapshots, getRecords, commit } = deps;
@@ -41,27 +41,27 @@ export function buildPrepareAndReplay(deps: PrepareAndReplayDeps) {
   return { prepareServices, replay };
 }
 
-export type BootstrapBase = {
+export interface BootstrapBase {
   store: NodeStore;
   statePath?: string;
   auditPath?: string;
   limits?: SnapshotLimits;
   providers: ProviderRegistry;
-};
+}
 
 export type BootstrapOptions = BootstrapBase & {
   getRecords: () => PreparedMountRecord[];
   commit: (records: PreparedMountRecord[]) => void;
 };
 
-export type Bootstrapped = {
+export interface Bootstrapped {
   persistence: MountPersistence;
   planner: MountPlanner;
   snapshots: SnapshotMaterializer;
   prepareServices: PrepareServices;
   replay: MountReplayer;
   records: PreparedMountRecord[];
-};
+}
 
 export function bootstrapMountManager(o: BootstrapOptions): Bootstrapped {
   const persistence = persistenceFor(o.statePath, o.auditPath);
@@ -74,17 +74,17 @@ export function bootstrapMountManager(o: BootstrapOptions): Bootstrapped {
   return { persistence, planner, snapshots, records, ...rest };
 }
 
-export type MountManagerOptions = {
+export interface MountManagerOptions {
   statePath?: string;
   auditPath?: string;
   limits?: SnapshotLimits;
   providers?: ProviderRegistry;
-};
+}
 
-export type ManagerCallbacks = {
+export interface ManagerCallbacks {
   getRecords: () => PreparedMountRecord[];
   commit: (records: PreparedMountRecord[]) => void;
-};
+}
 
 export function initializeManager(
   store: NodeStore,

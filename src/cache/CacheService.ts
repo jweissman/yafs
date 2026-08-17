@@ -6,7 +6,7 @@ import {
   assertTtl,
 } from "./CacheValidation";
 
-export type CacheEntry = {
+export interface CacheEntry {
   kind: "yafs-cache-entry";
   version: 1;
   key: string;
@@ -14,8 +14,12 @@ export type CacheEntry = {
   createdAt: string;
   expiresAt: string;
   bytes: number;
-};
-type PutRequest = { key: string; ttlMs: number; now: Date };
+}
+interface PutRequest {
+  key: string;
+  ttlMs: number;
+  now: Date;
+}
 
 export class CacheService {
   constructor(private readonly blobs: BlobStore) {}

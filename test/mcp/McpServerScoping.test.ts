@@ -8,7 +8,8 @@ test("an allowedTools filter narrows tools/list", async () => {
   const client = new LocalYashClient();
   const server = new McpServer(client, new Set(["yafs.list", "yafs.read"]));
   const response = await request(server, 1, "tools/list");
-  const names = (response!.result as { tools: { name: string }[] }).tools.map(
+  expect(response).toBeDefined();
+  const names = (response?.result as { tools: { name: string }[] }).tools.map(
     (tool) => tool.name,
   );
   expect(names).toEqual(["yafs.list", "yafs.read"]);

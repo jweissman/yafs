@@ -14,6 +14,8 @@ import { JournalRecord, JournalReplayer } from "./JournalTypes";
 const SNAPSHOT_INTERVAL = 32;
 
 export class Journal {
+  private lastCompactedSequence = 0;
+
   private constructor(
     private readonly walPath: string,
     private readonly lockPath: string,
@@ -40,7 +42,8 @@ export class Journal {
     store: NodeStore,
     replay?: JournalReplayer,
   ): Promise<Journal> {
-    this.sequence = await this.recoveredSequence(store, replay).catch((error) =>
+    this.sequence = await this.recoveredSequence(store, replay).catch(
+      (error: unknown) =>
       this.closeThenRethrow(error),
     );
     return this;
@@ -67,12 +70,17 @@ export class Journal {
     return operations.map((operation, index) => this.record(operation, index));
   }
 
+  // A threshold check, not an exact-multiple one: a commit batching several
+  // operations at once can otherwise jump straight past every multiple of
+  // SNAPSHOT_INTERVAL for a long stretch, silently disabling compaction
+  // (observed live: a snapshot left 5 days and 700+ operations stale).
   async compact(store: NodeStore) {
-    if (this.sequence % SNAPSHOT_INTERVAL) {
+    if (this.sequence - this.lastCompactedSequence < SNAPSHOT_INTERVAL) {
       return;
     }
     await writeSnapshot(this.snapshotPath(), store.snapshot(this.sequence));
     await truncateAndSync(this.walPath);
+    this.lastCompactedSequence = this.sequence;
   }
 
   async close() {

@@ -1,9 +1,9 @@
-export type Failure = {
+export interface Failure {
   url: string;
   accept: string;
   response: Response;
   body: string;
-};
+}
 
 export function failureDetail(failure: Failure) {
   return failureLines(failure).join("\n");

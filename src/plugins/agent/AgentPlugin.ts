@@ -29,7 +29,6 @@ export class AgentPlugin extends Plugin {
   constructor() {
     super();
   }
-
   capabilities() {
     return ["chat.completion"];
   }

@@ -66,7 +66,9 @@ function retain(
   previous: CacheEntry | undefined,
   next: CacheEntry,
 ) {
-  context.afterCommit(() => releaseAndRetain(context, previous, next));
+  context.afterCommit(() => {
+    releaseAndRetain(context, previous, next);
+  });
 }
 
 function releaseAndRetain(

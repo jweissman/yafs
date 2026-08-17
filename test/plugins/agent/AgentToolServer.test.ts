@@ -8,13 +8,19 @@ import {
   textOf,
   toolServer,
 } from "./agent_tool_server_helpers";
+import { parseJson } from "../../json";
 
 test("starting a second server on an already-bound port fails with a named-port error", () => {
   const first = toolServer(new Yafs());
   first.start(0);
-  const port = first.port()!;
+  const port = first.port();
+  if (port === undefined) {
+    throw new Error("Expected a listening port");
+  }
   const second = toolServer(new Yafs());
-  expect(() => second.start(port)).toThrow(String(port));
+  expect(() => {
+    second.start(port);
+  }).toThrow(String(port));
   first.close();
 });
 
@@ -62,6 +68,18 @@ test("closing the server tears down any still-open sessions", async () => {
   await client.listTools();
   server.close();
   await Bun.sleep(10);
+});
+
+test("a disconnected MCP client releases its session", async () => {
+  const yafs = new Yafs();
+  await yafs.exec("mkdir work");
+  await activateDesired(yafs, manifest(["/home/root/work"]), "agents");
+  const server = toolServer(yafs);
+  server.start(0);
+  const client = await connectedClient(server, "agents", "reviewer");
+  await client.listTools();
+  await client.close();
+  server.close();
 });
 
 test("a real MCP client is rejected reading outside the persona's root", async () => {
@@ -135,7 +153,7 @@ test("yafs.start_here reports only the scoped session's own roots", async () => 
     arguments: {},
   });
   expect(result.isError).toBeFalsy();
-  const value = JSON.parse(textOf(result) ?? "{}");
+  const value = startHere(textOf(result) ?? "{}");
   expect(value.scoped).toBe(true);
   expect(value.roots).toEqual(["/home/root/work"]);
   expect(Array.isArray(value.mounts)).toBe(true);
@@ -144,3 +162,25 @@ test("yafs.start_here reports only the scoped session's own roots", async () => 
   await client.close();
   server.close();
 });
+
+function startHere(source: string): {
+  scoped: boolean;
+  roots: string[];
+  mounts: unknown[];
+  recommendedFirst: unknown[];
+} {
+  const value = parseJson(source);
+  if (!isStartHere(value)) {
+    throw new Error("Expected start_here response");
+  }
+  return value;
+}
+
+function isStartHere(value: unknown): value is ReturnType<typeof startHere> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.scoped === "boolean" && Array.isArray(record.roots) &&
+    Array.isArray(record.mounts) && Array.isArray(record.recommendedFirst);
+}

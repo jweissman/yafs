@@ -1,8 +1,12 @@
 import { SlackSettings, slackSettings } from "./SlackSettings";
 import { ApiRequest, call, Fetch } from "./SlackApiFetch";
 
-export type SlackMessage = { user?: string; text: string; ts: string };
-export type SlackChannelClient = {
+export interface SlackMessage {
+  user?: string;
+  text: string;
+  ts: string;
+}
+export interface SlackChannelClient {
   history(channel: string, max: number): Promise<SlackMessage[]>;
   postMessage(channel: string, text: string): Promise<string>;
   identity(): Promise<string>;
@@ -12,7 +16,7 @@ export type SlackChannelClient = {
     timestamp: string,
     name: string,
   ): Promise<void>;
-};
+}
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -28,7 +32,7 @@ export class SlackApiClient {
     const body = await this.call(`conversations.history?${params}`, {
       method: "GET",
     });
-    return (body.messages as SlackMessage[] | undefined) || [];
+    return (body.messages as SlackMessage[] | undefined) ?? [];
   }
 
   async postMessage(channel: string, text: string): Promise<string> {

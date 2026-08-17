@@ -1,7 +1,11 @@
 import { MountPersistence } from "./MountPersistence";
 import { PreparedMountRecord } from "./types";
 
-export type QuarantineInfo = { actor: string; action: string; detail: string };
+export interface QuarantineInfo {
+  actor: string;
+  action: string;
+  detail: string;
+}
 
 export function auditQuarantine(
   persistence: MountPersistence,
@@ -14,12 +18,12 @@ export function auditQuarantine(
   });
 }
 
-export type RefreshAuditInfo = {
+export interface RefreshAuditInfo {
   record: PreparedMountRecord;
   actor: string;
   before: string | undefined;
   detail?: string;
-};
+}
 
 export function auditRefresh(
   persistence: MountPersistence,

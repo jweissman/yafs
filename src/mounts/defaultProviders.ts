@@ -9,6 +9,7 @@ export function defaultProviders() {
   const settings = githubSettings();
   const github = new GitHubCollectionSource(
     new GitHubApiClient({ apiUrl: settings.apiUrl }),
+    settings.webUrl,
   );
   return new ProviderRegistry(github, authenticated(settings), slackSource());
 }
@@ -17,7 +18,7 @@ function authenticated(
   settings: import("../plugins/github/GitHubSettings").GitHubSettings,
 ) {
   return settings.token
-    ? new GitHubCollectionSource(new GitHubApiClient(settings))
+    ? new GitHubCollectionSource(new GitHubApiClient(settings), settings.webUrl)
     : undefined;
 }
 

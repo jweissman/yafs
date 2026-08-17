@@ -10,7 +10,10 @@ export function fixtureStreams(
 function parsedStreams(value: unknown): Record<string, StreamSpec> {
   const entries = Object.entries(object(value, "fixture streams"));
   assertPaths(entries);
-  const specs = entries.map((entry) => [entry[0], streamSpec(entry[1])]);
+  const specs: [string, StreamSpec][] = entries.map((entry) => [
+    entry[0],
+    streamSpec(entry[1]),
+  ]);
   return Object.fromEntries(specs);
 }
 

@@ -137,14 +137,14 @@ test("a non-timeout network error propagates as-is", async () => {
 function hangingFetch() {
   return (_input: RequestInfo | URL, init?: RequestInit) =>
     new Promise<Response>((_resolve, reject) =>
-      init?.signal?.addEventListener("abort", () =>
-        reject(new DOMException("signal timed out", "TimeoutError")),
-      ),
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("signal timed out", "TimeoutError"));
+      }),
     );
 }
 
 function fakeFetch(requests: Request[]) {
-  return async (input, init) => {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push(new Request(input, init));
     return fakeResponse(requests.length);
   };

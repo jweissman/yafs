@@ -1,7 +1,10 @@
 import { PersonaConfig } from "../../mounts/types";
 import { LmStudioMcpClient } from "./LmStudioMcpClient";
 
-type Mount = { endpoint?: string; model?: string };
+interface Mount {
+  endpoint?: string;
+  model?: string;
+}
 type Env = NodeJS.ProcessEnv;
 
 export function lmStudioMcpClientFor(
@@ -9,12 +12,21 @@ export function lmStudioMcpClientFor(
   mount: Mount,
   environment = process.env,
 ): LmStudioMcpClient {
-  return new LmStudioMcpClient(settingsFor(persona, mount, environment));
+  return clientFor(settingsFor(persona, mount, environment), environment);
+}
+
+function clientFor(settings: ReturnType<typeof settingsFor>, environment: Env) {
+  return new LmStudioMcpClient(settings, fetch, timeoutMsFor(environment));
+}
+
+function timeoutMsFor(environment: Env): number | undefined {
+  const value = environment.YAFS_LMSTUDIO_TIMEOUT_MS;
+  return value ? Number(value) : undefined;
 }
 
 function settingsFor(persona: PersonaConfig, mount: Mount, env: Env) {
   return {
-    apiUrl: persona.endpoint || mount.endpoint || defaultApiUrl(env),
+    apiUrl: persona.endpoint ?? mount.endpoint ?? defaultApiUrl(env),
     model: requiredModel(defaultModel(persona, mount, env)),
     accessToken: env.YAFS_LMSTUDIO_ACCESS_TOKEN,
   };
@@ -38,7 +50,7 @@ function requiredModel(model: string | undefined): string {
 }
 
 function defaultApiUrl(environment: NodeJS.ProcessEnv): string {
-  return environment.YAFS_LMSTUDIO_BASE_URL || "http://localhost:1234/api/v1";
+  return environment.YAFS_LMSTUDIO_BASE_URL ?? "http://localhost:1234/api/v1";
 }
 
 function defaultModel(
@@ -46,5 +58,5 @@ function defaultModel(
   mount: { model?: string },
   environment: NodeJS.ProcessEnv,
 ): string | undefined {
-  return persona.model || mount.model || environment.YAFS_LMSTUDIO_MODEL;
+  return persona.model ?? mount.model ?? environment.YAFS_LMSTUDIO_MODEL;
 }

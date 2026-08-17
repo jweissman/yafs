@@ -1,7 +1,7 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 import { VfsOperation } from "./VfsOperation";
 
-export type Mutator = {
+export interface Mutator {
   mkdir(path: AbsolutePath, at: Date): void;
   touch(path: AbsolutePath, at: Date): void;
   write(path: AbsolutePath, content: string, at: Date): void;
@@ -9,7 +9,8 @@ export type Mutator = {
   rmdir(path: AbsolutePath): void;
   union(path: AbsolutePath, layers: AbsolutePath[], at: Date): void;
   remove(path: AbsolutePath): void;
-};
+  removeTreeChecked(path: AbsolutePath): void;
+}
 
 type Replayed = Exclude<
   VfsOperation,
@@ -19,41 +20,55 @@ type Written = Exclude<Replayed, { type: "mkdir" | "touch" }>;
 type Removed = Exclude<Written, { type: "write" | "symlink" }>;
 
 export function applyOperation(mutator: Mutator, operation: VfsOperation) {
-  if (
+  if (isLifecycleOnly(operation)) {
+    return;
+  }
+  applyAt(mutator, operation, new Date(operation.at));
+}
+
+function isLifecycleOnly(operation: VfsOperation) {
+  return (
     operation.type === "mount" ||
     operation.type === "unmount" ||
     operation.type === "refresh"
-  ) {
-    return;
-  }
-  return applyAt(mutator, operation, new Date(operation.at));
+  );
 }
 
 function applyAt(mutator: Mutator, operation: Replayed, at: Date) {
   if (operation.type === "mkdir") {
-    return mutator.mkdir(operation.path, at);
+    mutator.mkdir(operation.path, at); return;
   }
   if (operation.type === "touch") {
-    return mutator.touch(operation.path, at);
+    mutator.touch(operation.path, at); return;
   }
-  return applyWrite(mutator, operation, at);
+  applyWrite(mutator, operation, at);
 }
 
 function applyWrite(mutator: Mutator, operation: Written, at: Date) {
   if (operation.type === "write") {
-    return mutator.write(operation.path, operation.content, at);
+    mutator.write(operation.path, operation.content, at); return;
   }
   if (operation.type === "symlink") {
-    return mutator.symlink(operation.target, operation.path, at);
+    mutator.symlink(operation.target, operation.path, at); return;
   }
-  return applyRemoval(mutator, operation, at);
+  applyRemoval(mutator, operation, at);
 }
 
 function applyRemoval(mutator: Mutator, operation: Removed, at: Date) {
   if (operation.type === "rmdir") {
-    return mutator.rmdir(operation.path);
+    mutator.rmdir(operation.path); return;
   }
-  return operation.type === "union"
-    ? mutator.union(operation.path, operation.layers, at)
-    : mutator.remove(operation.path);
+  applyDeletion(mutator, operation, at);
+}
+
+type Deletion = Exclude<Removed, { type: "rmdir" }>;
+
+function applyDeletion(mutator: Mutator, operation: Deletion, at: Date) {
+  if (operation.type === "removeTree") {
+    mutator.removeTreeChecked(operation.path); return;
+  }
+  if (operation.type === "union") {
+    mutator.union(operation.path, operation.layers, at); return;
+  }
+  mutator.remove(operation.path);
 }

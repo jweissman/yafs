@@ -65,7 +65,7 @@ async function guardedAsync(
   plan: () => Promise<ExecutionPlan>,
 ): Promise<ExecutionPlan> {
   yafs.operationQueue.reset();
-  return plan().catch((error) => failed(yafs, error));
+  return plan().catch((error: unknown) => failed(yafs, error));
 }
 
 function failed(yafs: Yafs, error: unknown): ExecutionPlan {

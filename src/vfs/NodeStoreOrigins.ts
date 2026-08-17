@@ -34,7 +34,7 @@ export class NodeStoreOrigins {
     return this.resolver
       .layers(node)
       .map((layer) => this.resolver.resolveFrom(layer, parts))
-      .filter(this.node)
+      .filter((item) => this.node(item))
       .map((item) => this.resolver.pathOf(item));
   }
   private childOrigins(node: FSNode, parts: string[], path: AbsolutePath) {

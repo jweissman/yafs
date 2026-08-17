@@ -6,17 +6,17 @@ import { stdin } from "node:process";
 import type { ExecutionResult } from "../types/ExecutionResult";
 import { runEditor } from "./EditorProcess";
 
-export type EditClient = {
+export interface EditClient {
   execute(command: string): Promise<ExecutionResult>;
   writeFile(path: string, content: string): Promise<ExecutionResult>;
-};
+}
 
 export async function edit(
   client: EditClient,
   path: string,
 ): Promise<string | undefined> {
   const rejection = rejectedArgs(path);
-  return rejection || editFile(client, path);
+  return rejection ?? editFile(client, path);
 }
 
 function rejectedArgs(path: string): string | undefined {
@@ -72,7 +72,11 @@ async function stage(path: string, content: string): Promise<string> {
   return temporary;
 }
 
-type EditTarget = { client: EditClient; path: string; original: string };
+interface EditTarget {
+  client: EditClient;
+  path: string;
+  original: string;
+}
 
 async function publish(target: EditTarget, temporary: string) {
   const exitCode = await runEditor(temporary);

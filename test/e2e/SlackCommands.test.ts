@@ -46,11 +46,11 @@ test("slack send rejects an unknown plugin id clearly", async () => {
   await server.close();
 });
 
-type FakeState = {
+interface FakeState {
   messages: SlackMessage[];
-  posted: Array<{ channel: string; text: string }>;
+  posted: { channel: string; text: string }[];
   fail: boolean;
-};
+}
 
 function fakeState(messages: SlackMessage[]): FakeState {
   return { messages, posted: [], fail: false };
@@ -61,8 +61,8 @@ function fakeClient(state: FakeState) {
     history: async () => state.messages,
     identity: async () => "BOT",
     postMessage: (channel: string, text: string) => post(state, channel, text),
-    addReaction: async () => {},
-    removeReaction: async () => {},
+    addReaction: async () => undefined,
+    removeReaction: async () => undefined,
   };
 }
 

@@ -14,8 +14,8 @@ export function defaultClients(
 
 function agentClients(options: StartOptions, toolServer: AgentToolServer) {
   return {
-    modelFor: options.modelFor || chatCompletionClientFor,
-    toolClientFor: options.toolClientFor || lmStudioMcpClientFor,
+    modelFor: options.modelFor ?? chatCompletionClientFor,
+    toolClientFor: options.toolClientFor ?? lmStudioMcpClientFor,
     toolServerUrl: urlFor(toolServer),
     mcpJsonPath: options.mcpJsonPath,
   };
@@ -23,7 +23,7 @@ function agentClients(options: StartOptions, toolServer: AgentToolServer) {
 
 function slackClients(options: StartOptions) {
   return {
-    slackClientFor: options.slackClientFor || (() => defaultSlackClient()),
+    slackClientFor: options.slackClientFor ?? (() => defaultSlackClient()),
   };
 }
 

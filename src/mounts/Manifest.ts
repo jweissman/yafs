@@ -3,9 +3,10 @@ import { Manifest, ManifestMount } from "./types";
 import { object, only } from "./ManifestValidation";
 import { declarationsFor, pluginName } from "./ManifestPlugins";
 import { decoded } from "./ManifestYaml";
-import { pluginKinds } from "./PluginKinds";
-import { pathOrAbsent, pluginByName, resolvedPath } from "./ManifestMountPath";
+import { pluginByName, resolvedPath } from "./ManifestMountPath";
 import { interval } from "./ManifestRefreshInterval";
+import { mountLabel, reason } from "./ManifestErrorContext";
+import { validateMountFields } from "./ManifestMountFields";
 
 export function parseManifest(source: string): {
   manifest: Manifest;
@@ -26,17 +27,34 @@ function validateManifest(value: unknown): Manifest {
 function manifestFor(root: Record<string, unknown>): Manifest {
   const declarations = declarationsFor(root);
   if (root.version !== 1 || !Array.isArray(declarations)) {
-    throw new Error("Invalid .yafsmeta manifest");
+    throw new Error(
+      "Invalid manifest: expected { version: 1, plugins: [...] }",
+    );
   }
-  return { version: 1, mounts: declarations.map(validateMount) };
+  return { version: 1, mounts: declarations.map(validateMountAt) };
+}
+
+function validateMountAt(value: unknown, index: number): ManifestMount {
+  try {
+    return validateMount(value);
+  } catch (error) {
+    throw contextualized(error, value, index);
+  }
+}
+
+function contextualized(error: unknown, value: unknown, index: number): Error {
+  const label = mountLabel(value, index);
+  return new Error(`Invalid mount ${label}: ${reason(error)}`, {
+    cause: error,
+  });
 }
 
 function validateMount(value: unknown): ManifestMount {
-  const mount = object(value, "plugin");
+  const mount = object(value, "mount");
   only(
     mount,
     ["id", "path", "plugin", "provider", "config", "capabilities", "refresh"],
-    "plugin",
+    "mount",
   );
   validateMountFields(mount);
   return validatedMount(mount);
@@ -65,32 +83,4 @@ function identity(mount: Record<string, unknown>, provider: Provider) {
 
 function config(provider: ManifestMount["provider"], value: unknown) {
   return pluginByName(provider).parseConfig(value);
-}
-
-function validateMountFields(mount: Record<string, unknown>) {
-  assertIdentity(mount);
-  assertCapabilities(mount);
-}
-
-function assertIdentity(mount: Record<string, unknown>) {
-  if (
-    typeof mount.id !== "string" ||
-    !pathOrAbsent(mount.path) ||
-    !provider(pluginName(mount))
-  ) {
-    throw new Error("Invalid .yafsmeta plugin");
-  }
-}
-
-function assertCapabilities(mount: Record<string, unknown>) {
-  if (
-    !Array.isArray(mount.capabilities) ||
-    !mount.capabilities.every((capability) => typeof capability === "string")
-  ) {
-    throw new Error("Invalid .yafsmeta capabilities");
-  }
-}
-
-function provider(value: unknown): value is ManifestMount["provider"] {
-  return pluginKinds().some((plugin) => plugin.name === value);
 }

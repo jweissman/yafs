@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-export type DaemonState = {
+export interface DaemonState {
   version: 1;
   pid: number;
   host: string;
@@ -10,7 +10,7 @@ export type DaemonState = {
   startedAt: string;
   instanceId: string;
   configPath?: string;
-};
+}
 
 export function newState(
   address: { host: string; port: number },

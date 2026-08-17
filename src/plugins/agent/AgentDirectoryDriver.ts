@@ -40,7 +40,13 @@ export class AgentDirectoryDriver {
   }
 
   private buildExecutor(clients: AgentClients) {
-    return new AgentRunExecutor(this.runs, this.chats, this.cancels, clients);
+    return new AgentRunExecutor({
+      runs: this.runs,
+      chats: this.chats,
+      cancels: this.cancels,
+      clients,
+      mounts: this.mounts,
+    });
   }
 
   private buildRegistration() {

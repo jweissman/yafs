@@ -4,13 +4,23 @@ export function question(
   readline: ReturnType<typeof createInterface>,
   prompt: string,
   interruption: AbortController,
-) {
-  return readline
-    .question(prompt, { signal: interruption.signal })
-    .catch((error: unknown) => abortedOrThrow(interruption, error));
+): Promise<string | undefined> {
+  return readline.question(prompt, { signal: interruption.signal }).catch(
+    questionError(interruption),
+  );
 }
 
-function abortedOrThrow(interruption: AbortController, error: unknown) {
+function questionError(interruption: AbortController) {
+  return (error: unknown): undefined => {
+    abortedOrThrow(interruption, error);
+    return undefined;
+  };
+}
+
+function abortedOrThrow(
+  interruption: AbortController,
+  error: unknown,
+): undefined {
   if (interruption.signal.aborted) {
     return undefined;
   }

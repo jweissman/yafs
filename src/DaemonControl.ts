@@ -1,7 +1,10 @@
 import { clearState } from "./daemon";
 import { managedState, waitForStop } from "./DaemonHealth";
 
-type StatePaths = { state: string; directory: string };
+interface StatePaths {
+  state: string;
+  directory: string;
+}
 
 export async function stopDaemon(
   statePaths: StatePaths,

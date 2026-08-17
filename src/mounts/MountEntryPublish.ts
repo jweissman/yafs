@@ -21,14 +21,17 @@ export function withEntries(
   };
 }
 
-export type MountJournal = { mounts: MountManager; journal: Journal };
+export interface MountJournal {
+  mounts: MountManager;
+  journal: Journal;
+}
 
-export type PublishRequest = {
+export interface PublishRequest {
   record: PreparedMountRecord;
   updates: Entry[];
   detail?: string;
   extra?: Partial<PreparedMountRecord>;
-};
+}
 
 export async function publishEntries(
   deps: MountJournal,

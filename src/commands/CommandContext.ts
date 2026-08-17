@@ -5,7 +5,7 @@ import { MountRecord, PreparedMountRecord, Provenance } from "../mounts/types";
 import { CacheService } from "../cache/CacheService";
 import { MountSummary } from "../operations/WorkspaceOperation";
 
-export type CommandContext = {
+export interface CommandContext {
   clock: Clock;
   user(): string;
   pwd(): AbsolutePath;
@@ -26,6 +26,7 @@ export type CommandContext = {
   resourceReference(path: AbsolutePath): object | undefined;
   mounts(): string[];
   mountSummaries(): MountSummary[];
+  activeMountIds(): string[];
   plugins(name?: string): object[];
   agentPersona(reference: string): AbsolutePath;
   agentPersonas(): { mountPath: string; persona: string }[];
@@ -40,12 +41,13 @@ export type CommandContext = {
   write(path: AbsolutePath, content: string): void;
   remove(path: AbsolutePath): void;
   rmdir(path: AbsolutePath): void;
+  removeTree(path: AbsolutePath): void;
   symlink(target: string, path: AbsolutePath): void;
   union(path: AbsolutePath, layers: AbsolutePath[]): void;
   mount(record: PreparedMountRecord): void;
   refresh(record: PreparedMountRecord): void;
-  unmount(id: string): void;
+  unmount(id: string, path: AbsolutePath): void;
   afterCommit(effect: () => void): void;
   cache: CacheService;
   traces: TraceService;
-};
+}

@@ -1,15 +1,15 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 
-export type ProviderOrigin = {
+export interface ProviderOrigin {
   mountId: string;
   provider: string;
   revision: string;
   activatedAt: string;
   fetchedAt?: string;
   readOnly: true;
-};
+}
 
-export type FSNode = {
+export interface FSNode {
   name: string;
   children?: FSNode[];
   dir?: boolean;
@@ -20,4 +20,4 @@ export type FSNode = {
   parent?: FSNode;
   createdAt: Date;
   modifiedAt: Date;
-};
+}

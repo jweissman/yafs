@@ -12,7 +12,26 @@ export function installReverseSearch(
     return;
   }
   emitKeypressEvents(stdin);
-  stdin.on("keypress", (_text, key) => onKeypress(readline, history, key));
+  listenForSearch(readline, history);
+}
+
+function listenForSearch(
+  readline: ReturnType<typeof createInterface>,
+  history: CommandHistory,
+) {
+  stdin.on("keypress", (_text, key) => {
+    onKeypress(readline, history, keyFor(key));
+  });
+}
+
+function keyFor(value: unknown): { ctrl: boolean; name: string } | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const key = value as { ctrl?: unknown; name?: unknown };
+  return typeof key.ctrl === "boolean" && typeof key.name === "string"
+    ? { ctrl: key.ctrl, name: key.name }
+    : undefined;
 }
 
 function onKeypress(

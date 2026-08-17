@@ -9,14 +9,17 @@ import {
 } from "./SlackInboundPollerSupport";
 import { SlackChannelClient, SlackMessage } from "./SlackApiClient";
 
-export type Poll = {
+export interface Poll {
   record: PreparedMountRecord;
   config: InboundConfig;
   client: SlackChannelClient;
-};
+}
 export type Msgs = SlackMessage[];
 
-export type RouteDeps = { mounts: MountManager; dispatchCtl: DispatchCtl };
+export interface RouteDeps {
+  mounts: MountManager;
+  dispatchCtl: DispatchCtl;
+}
 
 export async function route(
   deps: RouteDeps,
@@ -31,7 +34,16 @@ export async function route(
 
 function routeOptions(deps: RouteDeps, poll: Poll, botUserId: string) {
   const slackCtlPath = `${poll.record.path}/ctl` as AbsolutePath;
-  const { persona, replyTimeoutMs, channel } = poll.config;
-  const base = { ...deps, persona, slackCtlPath, botUserId };
-  return { ...base, replyTimeoutMs, channel, client: poll.client };
+  const base = { ...deps, slackCtlPath, botUserId, client: poll.client };
+  return { ...base, ...configFields(poll.config) };
+}
+
+function configFields(config: InboundConfig) {
+  const { persona, replyTimeoutMs, channel, reactions } = config;
+  return {
+    persona,
+    replyTimeoutMs,
+    channel,
+    reactionsEnabled: reactions ?? true,
+  };
 }

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-deprecated -- Dynamic JSON schemas and
+ * a transport-managed session lifecycle require MCP's low-level server API. */
 import { Server as McpProtocolServer } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
@@ -24,7 +26,7 @@ function registerHandlers(server: McpProtocolServer, scoped: ScopedMcpClient) {
   );
 }
 
-async function listTools(allowed: Set<string>) {
+function listTools(allowed: Set<string>) {
   return { tools: tools().filter((tool) => allowed.has(tool.name)) };
 }
 
@@ -40,7 +42,7 @@ function callAllowed(
 }
 
 function acceptedCall(scoped: ScopedMcpClient, name: string, args: unknown) {
-  console.log(`agent tool call: ${name}`);
+  console.log(`agent tool call: ${name} ${JSON.stringify(args)}`);
   return callTool(scoped, name, args);
 }
 

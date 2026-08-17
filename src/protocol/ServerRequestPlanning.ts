@@ -15,7 +15,7 @@ export function planRequest(session: Yafs, request: Request) {
   if (isOperationRequest(request)) {
     return session.planOperationAsync(request.operation);
   }
-  return planCommand(session, request as CommandRequest | WriteRequest);
+  return planCommand(session, request);
 }
 
 function planCommand(session: Yafs, request: CommandRequest | WriteRequest) {

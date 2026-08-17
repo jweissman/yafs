@@ -1,7 +1,9 @@
 import { AbsolutePath } from "../core/AbsolutePath";
 import { PreparedMountRecord } from "../mounts/types";
 
-type TimedOperation = { at: string };
+interface TimedOperation {
+  at: string;
+}
 
 export type VfsIntent =
   | { type: "mkdir"; path: AbsolutePath }
@@ -11,9 +13,10 @@ export type VfsIntent =
   | { type: "union"; path: AbsolutePath; layers: AbsolutePath[] }
   | { type: "mount"; record: PreparedMountRecord }
   | { type: "refresh"; record: PreparedMountRecord }
-  | { type: "unmount"; id: string }
+  | { type: "unmount"; id: string; path: AbsolutePath }
   | { type: "remove"; path: AbsolutePath }
-  | { type: "rmdir"; path: AbsolutePath };
+  | { type: "rmdir"; path: AbsolutePath }
+  | { type: "removeTree"; path: AbsolutePath };
 
 export type VfsOperation = TimedOperation &
   (
@@ -24,7 +27,8 @@ export type VfsOperation = TimedOperation &
     | { type: "union"; path: AbsolutePath; layers: AbsolutePath[] }
     | { type: "mount"; record: PreparedMountRecord }
     | { type: "refresh"; record: PreparedMountRecord }
-    | { type: "unmount"; id: string }
+    | { type: "unmount"; id: string; path: AbsolutePath }
     | { type: "remove"; path: AbsolutePath }
     | { type: "rmdir"; path: AbsolutePath }
+    | { type: "removeTree"; path: AbsolutePath }
   );

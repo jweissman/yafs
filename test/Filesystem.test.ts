@@ -57,6 +57,30 @@ test("rm removes files but not directories", () => {
   expect(yafs.execute("rm never-existed").error?.code).toBe("not_found");
 });
 
+test("rm -r removes a non-empty directory tree", () => {
+  const yafs = new Yafs();
+  yafs.exec("mkdir docs");
+  yafs.exec("echo guide > docs/guide.md");
+  yafs.exec("mkdir docs/nested");
+  yafs.exec("echo deep > docs/nested/file.md");
+  expect(() => yafs.exec("rmdir docs")).toThrow("Directory not empty");
+  expect(yafs.exec("rm -r docs")).toBe("");
+  expect(yafs.execute("stat docs").error?.code).toBe("not_found");
+});
+
+test("touch on an already-existing file updates its modified time without erroring", () => {
+  const yafs = new Yafs();
+  yafs.exec("touch note");
+  expect(yafs.exec("touch note")).toBe("");
+  expect(yafs.exec("cat note")).toBe("");
+});
+
+test("writing to a path that is a directory is rejected", () => {
+  const yafs = new Yafs();
+  yafs.exec("mkdir docs");
+  expect(() => yafs.exec("echo hi > docs")).toThrow("Is a directory");
+});
+
 test("symlinks resolve relative to their parent and report loops", () => {
   const yafs = new Yafs();
   yafs.exec("mkdir docs");

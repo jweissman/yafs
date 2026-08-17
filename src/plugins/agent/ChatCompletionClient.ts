@@ -6,14 +6,17 @@ import {
 import { readStream } from "./ChatCompletionStream";
 import { fetchCompletion, Fetch } from "./ChatCompletionFetch";
 
-export type ChatMessage = { role: string; content: string };
+export interface ChatMessage {
+  role: string;
+  content: string;
+}
 
-export type ModelClient = {
+export interface ModelClient {
   completeChat(
     messages: ChatMessage[],
     onDelta?: (delta: string) => void,
   ): Promise<string>;
-};
+}
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -29,7 +32,7 @@ export class ChatCompletionClient implements ModelClient {
     onDelta?: (delta: string) => void,
   ): Promise<string> {
     const response = await this.fetch(this.body(messages));
-    const { raw, full } = await readStream(response.body!, onDelta);
+    const { raw, full } = await readStream(requiredBody(response), onDelta);
     return this.content(full, raw);
   }
 
@@ -56,6 +59,13 @@ export class ChatCompletionClient implements ModelClient {
   }
 }
 
+function requiredBody(response: Response): ReadableStream<Uint8Array> {
+  if (!response.body) {
+    throw new Error("Chat completion response has no body");
+  }
+  return response.body;
+}
+
 export function chatCompletionClientFor(
   persona: PersonaConfig,
   mount: { endpoint?: string; model?: string },
@@ -69,7 +79,7 @@ function resolvedSettings(
   mount: { endpoint?: string; model?: string },
 ): ChatCompletionSettings {
   const defaults = chatCompletionSettings();
-  const apiUrl = persona.endpoint || mount.endpoint || defaults.apiUrl;
-  const model = persona.model || mount.model || defaults.model;
+  const apiUrl = persona.endpoint ?? mount.endpoint ?? defaults.apiUrl;
+  const model = persona.model ?? mount.model ?? defaults.model;
   return { apiUrl, model };
 }

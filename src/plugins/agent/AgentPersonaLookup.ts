@@ -2,7 +2,7 @@ import { AbsolutePath } from "../../core/AbsolutePath";
 import { PathResolver } from "../../core/PathResolver";
 import { MountManager } from "../../mounts/MountManager";
 import { PreparedMountRecord } from "../../mounts/types";
-import { validAgentConfig } from "./AgentRegistration";
+import { validAgentConfig } from "./AgentConfigValidation";
 
 const ROOT = "/home/root" as AbsolutePath;
 
@@ -10,29 +10,27 @@ export function agentPersonaPath(
   mounts: MountManager,
   reference: string,
 ): AbsolutePath {
-  return reference.includes("/")
-    ? pathReference(mounts, reference)
-    : namedPersonaPath(mounts, reference);
+  return resolvePersonaTarget(mounts, reference).personaPath;
 }
 
-function pathReference(mounts: MountManager, reference: string): AbsolutePath {
+function pathReference(mounts: MountManager, reference: string): PersonaTarget {
   const resolved = PathResolver.resolve(reference, ROOT);
   const record = mountFor(mounts, resolved);
   if (!record || !valid(record, resolved)) {
     throw new Error(`No such persona: ${reference}`);
   }
-  return resolved;
+  return targetFrom(record, resolved);
 }
 
 function mountFor(mounts: MountManager, resolved: AbsolutePath) {
   return mounts.mounts().find((item) => resolved.startsWith(`${item.path}/`));
 }
 
-export type PersonaTarget = {
+export interface PersonaTarget {
   personaPath: AbsolutePath;
   mountId: string;
   personaName: string;
-};
+}
 
 // agentPersonaPath already proves a mount containing this persona exists
 // (both pathReference and namedPersonaPath validate against mountFor/
@@ -42,9 +40,9 @@ export function resolvePersonaTarget(
   mounts: MountManager,
   reference: string,
 ): PersonaTarget {
-  const personaPath = agentPersonaPath(mounts, reference);
-  const record = mountFor(mounts, personaPath) as PreparedMountRecord;
-  return targetFrom(record, personaPath);
+  return reference.includes("/")
+    ? pathReference(mounts, reference)
+    : namedPersonaTarget(mounts, reference);
 }
 
 function targetFrom(
@@ -62,12 +60,13 @@ function valid(record: PreparedMountRecord, resolved: AbsolutePath) {
   return personas(record).includes(resolved.slice(record.path.length + 1));
 }
 
-function namedPersonaPath(mounts: MountManager, name: string): AbsolutePath {
+function namedPersonaTarget(mounts: MountManager, name: string): PersonaTarget {
   const matches = mounts
     .mounts()
     .filter((record) => personas(record).includes(name));
   assertUnambiguous(matches.length, name);
-  return `${matches[0].path}/${name}` as AbsolutePath;
+  const record = matches[0];
+  return targetFrom(record, `${record.path}/${name}` as AbsolutePath);
 }
 
 function assertUnambiguous(count: number, name: string) {
@@ -87,7 +86,10 @@ function personas(record: PreparedMountRecord): string[] {
   return config ? Object.keys(config.personas) : [];
 }
 
-export type PersonaListing = { mountPath: string; persona: string };
+export interface PersonaListing {
+  mountPath: string;
+  persona: string;
+}
 
 export function listPersonas(mounts: MountManager): PersonaListing[] {
   return mounts.mounts().flatMap((record) => personaEntries(record));

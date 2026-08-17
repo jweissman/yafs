@@ -1,14 +1,23 @@
 import { Buffer } from "node:buffer";
 
+import { AbsolutePath } from "../core/AbsolutePath";
 import { MountRecord, PreparedMountRecord, PublishedSnapshot } from "./types";
 import { NodeStore } from "../vfs/NodeStore";
 import { populateSnapshot } from "./SnapshotWrite";
 
-export type SnapshotLimits = { files: number; bytes: number };
+export interface SnapshotLimits {
+  files: number;
+  bytes: number;
+}
 
+// 1MB was calibrated against small demo fixtures, not real provider
+// content — a real GitHub mount with a few dozen substantial PR diffs
+// hits it easily (observed live: `max: 100` on vets-api failed
+// reconcile with "Snapshot exceeds 1048576 bytes"). 8MB is still a real
+// bound, not unlimited, but fits realistic single-mount content.
 export const defaultSnapshotLimits: SnapshotLimits = {
   files: 4096,
-  bytes: 1024 * 1024,
+  bytes: 8 * 1024 * 1024,
 };
 
 export class SnapshotMaterializer {
@@ -27,7 +36,9 @@ export class SnapshotMaterializer {
   }
 
   materialize(record: PreparedMountRecord) {
-    this.publish((candidate) => populateSnapshot(candidate, record));
+    this.publish((candidate) => {
+      populateSnapshot(candidate, record);
+    });
   }
   replace(record: PreparedMountRecord) {
     this.publish((candidate) => {
@@ -35,11 +46,13 @@ export class SnapshotMaterializer {
       populateSnapshot(candidate, record);
     });
   }
-  remove(record: MountRecord) {
-    this.publish((candidate) => candidate.removeTree(record.path));
+  remove(path: AbsolutePath) {
+    this.publish((candidate) => {
+      candidate.removeTree(path);
+    });
   }
-  exists(record: MountRecord) {
-    return Boolean(this.store.get(record.path, false));
+  exists(path: AbsolutePath) {
+    return Boolean(this.store.get(path, false));
   }
 
   private publish(change: (store: NodeStore) => void) {
@@ -61,7 +74,7 @@ export class SnapshotMaterializer {
     return snapshotOf(entries, byteCount, resourceReferences);
   }
   private byteCount(entries: [string, string][]) {
-    return entries.reduce(this.countBytes, 0);
+    return entries.reduce((count, entry) => this.countBytes(count, entry), 0);
   }
   private countBytes(count: number, [, content]: [string, string]) {
     return count + Buffer.byteLength(content);

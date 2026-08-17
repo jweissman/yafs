@@ -19,7 +19,7 @@ function requested(
   body: unknown,
   timeoutMs: number,
 ) {
-  return post(request, url, body, timeoutMs).catch((error) =>
+  return post(request, url, body, timeoutMs).catch((error: unknown) =>
     rethrow(error, url, timeoutMs),
   );
 }

@@ -10,6 +10,7 @@ import {
   ToolClient,
 } from "../../src/plugins/agent/LmStudioMcpClient";
 import { yafsKey } from "../../src/plugins/agent/LmStudioMcpJson";
+import { parseJson } from "../json";
 
 // AgentTools.test.ts only covers a persona that has `tools:` from its very
 // first activation. This covers the case the user actually hit live: a
@@ -32,11 +33,11 @@ test("adding tools: to an already-active persona and re-applying enables MCP on 
   // YafsServer.start() already reconciles the config at boot (server.ts's
   // `await s.reconcile()`), so the mount is already active by the time a
   // client connects — this first apply is expected to report no changes.
-  const applyWithoutTools = JSON.parse(await yash.exec("plugins apply"));
+  const applyWithoutTools = parseJson(await yash.exec("plugins apply"));
   expect(applyWithoutTools).toEqual([]);
 
   await writeFile(configPath, manifestWithTools());
-  const applyWithTools = JSON.parse(await yash.exec("plugins apply"));
+  const applyWithTools = parseJson(await yash.exec("plugins apply"));
   expect(applyWithTools).toEqual([{ id: "agents", action: "refresh" }]);
 
   await send(yash, "run-1", "hi", "c1");

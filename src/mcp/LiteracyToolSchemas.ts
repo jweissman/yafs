@@ -1,4 +1,8 @@
-export type Tool = { name: string; description: string; inputSchema: object };
+export interface Tool {
+  name: string;
+  description: string;
+  inputSchema: object;
+}
 
 export function treeTool(): Tool {
   const properties = { path: string(), depth: integer(), limit: integer() };
@@ -51,13 +55,20 @@ function grepToolResult(properties: object): Tool {
 
 export function diffTool(): Tool {
   const properties = { left: string(), right: string(), limit: integer() };
-  return tool("yafs.diff", "Compare two virtual files or directories.", {
-    properties,
-    required: ["left", "right"],
-  });
+  return tool("yafs.diff", diffDescription(), { properties, required: ["left", "right"] });
 }
 
-type ToolSpec = { properties: object; required: string[] };
+function diffDescription(): string {
+  return "Structurally compare two EXISTING virtual paths (both required) " +
+    "and report what changed between them. Not for viewing a diff " +
+    "that's already provided as a file (e.g. a PR's diff.patch) -- " +
+    "use yafs.read for that instead.";
+}
+
+interface ToolSpec {
+  properties: object;
+  required: string[];
+}
 
 function tool(name: string, description: string, spec: ToolSpec): Tool {
   return { name, description, inputSchema: schema(spec) };

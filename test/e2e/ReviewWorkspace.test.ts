@@ -4,6 +4,7 @@ import { GitHubCollectionSource } from "../../src/plugins/github/GitHubCollectio
 import { ProviderRegistry } from "../../src/mounts/ProviderRegistry";
 import { YashClient } from "../../src/protocol/client";
 import { startedHostConfigServer } from "../desired_mount_helpers";
+import { parseJson } from "../json";
 
 test("two review sessions share one GitHub revision and leave separate durable traces", async () => {
   const { server, client: alice } = await startedHostConfigServer(
@@ -21,10 +22,8 @@ test("two review sessions share one GitHub revision and leave separate durable t
   await alice.exec("mkdir notes/42");
   await alice.exec("capture reviews/pulls/42 notes/42/alice");
   await bob.exec("capture /home/root/reviews/pulls/42 /home/root/notes/42/bob");
-  const aliceTrace = JSON.parse(
-    await alice.exec("cat notes/42/alice/trace.json"),
-  );
-  const bobTrace = JSON.parse(
+  const aliceTrace = traceRecord(await alice.exec("cat notes/42/alice/trace.json"));
+  const bobTrace = traceRecord(
     await bob.exec("cat /home/root/notes/42/bob/trace.json"),
   );
   expect(aliceTrace.origin.revision).toMatch(/^github:/);
@@ -33,6 +32,18 @@ test("two review sessions share one GitHub revision and leave separate durable t
   await bob.close();
   await server.close();
 });
+
+function traceRecord(source: string): { origin: { revision: string } } {
+  const value = parseJson(source);
+  if (
+    typeof value === "object" && value !== null && "origin" in value &&
+    typeof value.origin === "object" && value.origin !== null &&
+    "revision" in value.origin && typeof value.origin.revision === "string"
+  ) {
+    return { origin: { revision: value.origin.revision } };
+  }
+  throw new Error("Expected a trace with an origin revision");
+}
 
 test("a due daemon refresh publishes the next complete GitHub snapshot", async () => {
   const pulls = [pull()];

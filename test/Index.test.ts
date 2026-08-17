@@ -67,9 +67,12 @@ test("plan reports the operations a command would apply, synchronously", () => {
   const yafs = new Yafs();
   const planned = yafs.plan("mkdir notes");
   expect(planned.result.stdout).toBe("");
-  expect(planned.operations).toEqual([
-    { type: "mkdir", path: "/home/root/notes", at: expect.any(String) },
-  ]);
+  expect(planned.operations).toHaveLength(1);
+  expect(planned.operations[0]).toMatchObject({
+    type: "mkdir",
+    path: "/home/root/notes",
+  });
+  expect(typeof planned.operations[0].at).toBe("string");
 });
 
 test("execution errors have stable machine-readable codes", () => {

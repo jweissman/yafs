@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { WebStandardStreamableHTTPServerTransport as HttpTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { YafsOptions } from "../../index";
 import { LocalYashClient } from "../../protocol/local";
@@ -10,13 +8,12 @@ import { logSession } from "./AgentToolServerLog";
 import { isAddressInUse } from "../../DaemonAddressError";
 import { toolsPortInUseError } from "./AgentToolServerPort";
 import { Identity, identityFrom, scopedConfig } from "./AgentToolServerScope";
+import { AgentToolSessions } from "./AgentToolSessions";
 
 export { toolsPort, DEFAULT_TOOLS_PORT } from "./AgentToolServerPort";
 
-type Session = { transport: HttpTransport };
-
 export class AgentToolServer {
-  private readonly sessions = new Map<string, Session>();
+  private readonly sessions = new AgentToolSessions();
   private readonly client: LocalYashClient;
   private bun?: ReturnType<typeof Bun.serve>;
 
@@ -29,22 +26,38 @@ export class AgentToolServer {
 
   // Defaults to an OS-assigned ephemeral port, safe for any caller,
   // including tests. Only `yafsd` opts into the fixed port (toolsPort()).
-  start(port: number = 0) {
-    try {
-      this.bun = Bun.serve({ port, fetch: (req) => this.handle(req) });
-    } catch (error) {
-      throw isAddressInUse(error) ? toolsPortInUseError(port) : error;
+  start(port = 0) {
+    if (!this.tryStart(port)) {
+      throw toolsPortInUseError(port);
     }
   }
 
+  private tryStart(port: number): boolean {
+    try {
+      return this.started(
+        Bun.serve({ port, fetch: (req) => this.handle(req) }),
+      );
+    } catch (error) {
+      return startFailure(error);
+    }
+  }
+
+  private started(server: ReturnType<typeof Bun.serve>) {
+    this.bun = server;
+    return true;
+  }
+
   close() {
-    this.sessions.forEach((session) => void session.transport.close());
-    this.sessions.clear();
-    this.bun?.stop();
+    this.sessions.close();
+    void this.bun?.stop();
   }
 
   urlFor(mountId: string, personaName: string): string {
-    return `http://127.0.0.1:${this.bun!.port}/mcp/${mountId}/${personaName}`;
+    const port = this.port();
+    if (!port) {
+      throw new Error("Agent tool server is not running");
+    }
+    return `http://127.0.0.1:${port}/mcp/${mountId}/${personaName}`;
   }
 
   port(): number | undefined {
@@ -58,9 +71,9 @@ export class AgentToolServer {
 
   private async route(req: Request, identity: Identity): Promise<Response> {
     const sessionId = req.headers.get("mcp-session-id") ?? undefined;
-    const existing = sessionId ? this.sessions.get(sessionId) : undefined;
+    const existing = this.sessions.find(sessionId);
     if (existing) {
-      return existing.transport.handleRequest(req);
+      return existing.handleRequest(req);
     }
     return req.method === "POST"
       ? this.startSession(req, identity)
@@ -68,7 +81,7 @@ export class AgentToolServer {
   }
 
   private async startSession(req: Request, identity: Identity) {
-    const body = await req.json().catch(() => undefined);
+    const body: unknown = await req.json().catch(() => undefined);
     if (!isInitializeRequest(body)) {
       return badRequest();
     }
@@ -83,24 +96,16 @@ export class AgentToolServer {
     req: Request,
   ) {
     const scoped = new ScopedMcpClient(this.client, config);
-    const transport = this.transportFor();
+    const transport = this.sessions.create();
     await mcpServer(scoped).connect(transport);
     return transport.handleRequest(req, { parsedBody: body });
   }
 
-  private transportFor(): HttpTransport {
-    const transport = new HttpTransport({
-      sessionIdGenerator: () => randomUUID(),
-      enableJsonResponse: true,
-      onsessioninitialized: (id) => this.sessions.set(id, { transport }),
-    });
-    transport.onclose = () => this.forget(transport);
-    return transport;
-  }
+}
 
-  private forget(transport: HttpTransport) {
-    if (transport.sessionId) {
-      this.sessions.delete(transport.sessionId);
-    }
+function startFailure(error: unknown): false {
+  if (isAddressInUse(error)) {
+    return false;
   }
+  throw error;
 }

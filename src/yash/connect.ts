@@ -7,8 +7,14 @@ import { LocalYashClient } from "../protocol/local";
 import { YashClient } from "../protocol/client";
 
 export type Client = LocalYashClient | YashClient;
-type Connection = { client: Client; server: string };
-type Address = { host: string; port: number };
+interface Connection {
+  client: Client;
+  server: string;
+}
+interface Address {
+  host: string;
+  port: number;
+}
 
 export async function connect(
   local: boolean,
@@ -64,7 +70,9 @@ async function start() {
 
 function exitCode(child: ReturnType<typeof spawn>) {
   return new Promise<number>((resolve) =>
-    child.once("exit", (code) => resolve(code || 0)),
+    child.once("exit", (code) => {
+      resolve(code ?? 0);
+    }),
   );
 }
 

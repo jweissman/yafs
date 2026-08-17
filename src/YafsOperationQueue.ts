@@ -36,38 +36,61 @@ export class YafsOperationQueue {
   }
 
   add(operation: VfsIntent) {
-    this.operations.push({
+    const queued = {
       ...operation,
       at: this.clock.now().toISOString(),
-    } as VfsOperation);
+    };
+    this.operations.push(queued);
+    return queued;
   }
   afterCommit(effect: () => void) {
     this.afterApply.push(effect);
+    return effect;
   }
 
   apply(operations = this.operations) {
-    operations.forEach((operation) => this.applyOperation(operation));
+    operations.forEach((operation) => {
+      this.applyOperation(operation);
+    });
     this.runAfterApply();
   }
 
   private runAfterApply() {
-    this.afterApply.forEach((effect) => effect());
+    this.afterApply.forEach((effect) => {
+      effect();
+    });
     this.afterApply = [];
   }
 
   private applyOperation(operation: VfsOperation) {
     if (operation.type === "mount") {
-      return this.mounts.activate(operation.record, this.actor());
+      this.mounts.activate(operation.record, this.actor());
+      return;
     }
-    return this.applyNonMount(operation);
+    this.applyNonMount(operation);
   }
   private applyNonMount(operation: VfsOperation) {
+    const lifecycle = this.lifecycleOperation(operation);
+    if (lifecycle) {
+      lifecycle();
+      return;
+    }
+    this.store.apply(operation);
+  }
+  private lifecycleOperation(operation: VfsOperation) {
     if (operation.type === "refresh") {
-      return this.mounts.refresh(operation.record, this.actor());
+      return () => this.applyRefresh(operation);
     }
     if (operation.type === "unmount") {
-      return this.mounts.unmount(operation.id, this.actor());
+      return () => this.applyUnmount(operation);
     }
-    return this.store.apply(operation);
+  }
+  private applyRefresh(operation: Extract<VfsOperation, { type: "refresh" }>) {
+    this.mounts.refresh(operation.record, this.actor());
+    return operation;
+  }
+  private applyUnmount(operation: Extract<VfsOperation, { type: "unmount" }>) {
+    this.mounts.unmount(operation.id, this.actor());
+    return operation;
   }
 }

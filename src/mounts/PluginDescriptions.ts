@@ -4,12 +4,12 @@ import {
   PluginExposureDefinition,
 } from "./Plugin";
 
-export type PluginDescription = {
+export interface PluginDescription {
   name: string;
   capabilities: string[];
   actions: PluginActionDefinition[];
   exposures: PluginExposureDefinition[];
-};
+}
 
 export function describePlugins(
   definitions: Map<string, Plugin>,

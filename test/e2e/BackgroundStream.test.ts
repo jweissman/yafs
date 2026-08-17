@@ -7,7 +7,11 @@ import { AbsolutePath } from "../../src/core/AbsolutePath";
 import { YashClient } from "../../src/protocol/client";
 import { YafsServer } from "../../src/protocol/server";
 
-type Delivery = { path: AbsolutePath; chunks: string[]; intervalMs: number };
+interface Delivery {
+  path: AbsolutePath;
+  chunks: string[];
+  intervalMs: number;
+}
 
 test("a slow background delivery does not block other clients while it is in flight", async () => {
   const server = await startedServer("yafs-stream-");
@@ -67,11 +71,20 @@ test("unregistering a ctl handler restores ordinary write behavior for that path
   const server = await startedServer("yafs-ctl-unregister-");
   const client = await YashClient.connect(server.address());
   await client.exec("mkdir stream");
-  server.registerCtl(ctlPath(), () => {});
+  server.registerCtl(ctlPath(), () => undefined);
   server.unregisterCtl(ctlPath());
   await client.exec("printf hello > stream/ctl");
   expect(await client.exec("cat stream/ctl")).toBe("hello");
   await client.close();
+  await server.close();
+});
+
+test("dispatchCtl invokes a registered control path directly", async () => {
+  const server = await startedServer("yafs-ctl-dispatch-");
+  let received = "";
+  server.registerCtl(ctlPath(), (payload) => { received = payload; });
+  expect(await server.dispatchCtl(ctlPath(), "direct")).toBe(true);
+  expect(received).toBe("direct");
   await server.close();
 });
 
@@ -106,11 +119,11 @@ async function startedServer(prefix: string) {
 }
 
 function outputPath(): AbsolutePath {
-  return "/home/root/stream/output.txt" as AbsolutePath;
+  return "/home/root/stream/output.txt";
 }
 
 function ctlPath(): AbsolutePath {
-  return "/home/root/stream/ctl" as AbsolutePath;
+  return "/home/root/stream/ctl";
 }
 
 function restart(

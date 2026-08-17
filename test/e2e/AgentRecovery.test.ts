@@ -9,6 +9,7 @@ import {
   waitForRun,
   waitForStatus,
 } from "../agent_test_helpers";
+import { parseJson } from "../json";
 import { YafsServer } from "../../src/protocol/server";
 import { YashClient } from "../../src/protocol/client";
 import { startedHostConfigServer } from "../desired_mount_helpers";
@@ -33,9 +34,9 @@ test("restart marks an accepted in-flight run interrupted", async () => {
     modelFor: () => fakeMessageModel([]),
   });
   const recovered = await YashClient.connect(restarted.address());
-  const status = JSON.parse(
+  const status = parseJson(
     await recovered.exec(`cat agents/reviewer/runs/${runId}/status.json`),
-  );
+  ) as { state: string; error: string };
   expect(status.state).toBe("interrupted");
   expect(status.error).toContain("Daemon restarted");
   await recovered.close();
@@ -58,9 +59,9 @@ test("restart leaves an already-completed run's status untouched", async () => {
     modelFor: () => fakeMessageModel([]),
   });
   const recovered = await YashClient.connect(restarted.address());
-  const status = JSON.parse(
+  const status = parseJson(
     await recovered.exec(`cat agents/reviewer/runs/${runId}/status.json`),
-  );
+  ) as { state: string };
   expect(status.state).toBe("complete");
   await recovered.close();
   await restarted.close();
@@ -93,7 +94,9 @@ test("a malformed persisted agent record is visibly quarantined, not silently in
     modelFor: () => fakeMessageModel([]),
   });
   const client = await YashClient.connect(server.address());
-  const status = JSON.parse(await client.exec("plugins status"));
+  const status = parseJson(
+    await client.exec("plugins status"),
+  ) as { active: unknown[] };
   expect(status.active).toContainEqual({
     id: "agents",
     plugin: "agent",
@@ -114,7 +117,7 @@ function audit(directory: string) {
     source
       .trim()
       .split("\n")
-      .map((line) => JSON.parse(line)),
+      .map((line) => parseJson(line) as { action: string }),
   );
 }
 

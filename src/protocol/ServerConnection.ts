@@ -55,14 +55,16 @@ export class ServerConnection {
 
   private attachSession(socket: Socket, session: Yafs) {
     socket.setEncoding("utf8");
-    attachLines(socket, (line) => this.enqueue(session, line, socket));
+    attachLines(socket, (line) => {
+      this.enqueue(session, line, socket);
+    });
   }
 
   private enqueue(session: Yafs, line: string, socket: Socket) {
     const run = () => this.executeLine(session, line, socket);
-    this.queue = this.queue
-      .then(run)
-      .catch((error) => this.abort(error, socket));
+    this.queue = this.queue.then(run).catch((error: unknown) => {
+      this.abort(error, socket);
+    });
   }
 
   abort(error: unknown, socket: Socket) {
@@ -78,8 +80,10 @@ export class ServerConnection {
   }
 
   private guardedExecute(session: Yafs, request: Request, socket: Socket) {
-    return this.executeRequest(session, request, socket).catch((error) =>
-      respond(socket, persistenceFailure(request.id, error)),
+    return this.executeRequest(session, request, socket).catch(
+      (error: unknown) => {
+      respond(socket, persistenceFailure(request.id, error));
+      },
     );
   }
 

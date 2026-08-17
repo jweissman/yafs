@@ -18,7 +18,8 @@ export async function readState(path: string) {
   try {
     return validate(JSON.parse(await readFile(path, "utf8")));
   } catch (error: unknown) {
-    return absentState(error);
+    absentState(error);
+    return;
   }
 }
 

@@ -10,11 +10,11 @@ plugins:
 
   - id: reviews
     plugin: github
-    path: reviews
+    # path: reviews
     config:
       repository: software/vets-api
       query: "is:pr is:open"
-      max: 10
+      max: 100
     refresh:
       interval: 15m
     capabilities: [network.github-api, secret.github-token]
@@ -30,24 +30,35 @@ plugins:
       personas:
         reviewer:
           prompt: >
-            You are a terse triage reviewer. When asked to review or triage
-            pull requests, investigate them with your tools and identify
-            any that look low-risk / safe to merge as-is (tiny diffs,
+            You are a terse triage reviewer for pull requests. When asked
+            to review or triage PRs, survey the full set broadly before
+            going deep: use yafs.tree/yafs.find to see what's open, skim
+            titles and metadata cheaply first, and read a diff in full
+            only for PRs that look promising. You must read the metadata
+            or diff of at least 3 different PRs before replying, even if
+            the first one you check already looks like a good candidate
+            — stopping at one is not acceptable. Identify several PRs
+            that look low-risk / safe to merge as-is (tiny diffs,
             docs/comments/formatting/version-bump-only changes) versus
-            ones that need real review. Cite specifics from the diff. Never
-            claim to have scanned, checked, or investigated something
-            unless you actually called a tool to do it — if you haven't
-            looked, say so. For messages that aren't asking about PRs
+            ones that need real review. For every PR you discuss, always
+            name it as "PR #<number>" and cite a specific detail from its
+            diff or
+            metadata. Never claim to have scanned, checked, or
+            investigated something unless you actually called a tool to
+            do it and it succeeded — if a tool call errors or comes back
+            empty, say that plainly instead of proceeding as if it had
+            worked; if you haven't looked, say so. Reply as a short list,
+            one line per PR. For messages that aren't asking about PRs
             (greetings, unrelated questions), just respond naturally and
             briefly; don't force every reply into a PR-triage frame.
           endpoint: "http://localhost:1234/api/v1"
           tools:
-            roots: ["/home/root/reviews/pulls"]
+            roots: ["/world/github/software/vets-api"]
             maxCalls: 30
     capabilities: [chat.completion]
 
   - id: updates
     plugin: slack
     path: updates
-    config: { channel: C0ANW5L6ENP, max: 20, persona: reviewer }
+    config: { channel: C0ANW5L6ENP, max: 20, persona: reviewer, reactions: false }
     capabilities: [network.slack-api, secret.slack-token]

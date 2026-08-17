@@ -4,11 +4,11 @@ import { NodeStore } from "../vfs/NodeStore";
 import { ManifestMount, MountRecord, PreparedMountRecord } from "./types";
 import { ProviderRegistry } from "./ProviderRegistry";
 
-type Declaration = {
+interface Declaration {
   manifestPath: AbsolutePath;
   mount: ManifestMount;
   digest: string;
-};
+}
 
 export class MountPlanner {
   constructor(

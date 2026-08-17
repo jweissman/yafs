@@ -4,7 +4,10 @@ import { NodeStore } from "../vfs/NodeStore";
 import { JournalRecord, JournalReplayer } from "./JournalTypes";
 import { checksum, notFound, VERSION } from "./JournalChecksum";
 
-export type ReplayContext = { store: NodeStore; replayer?: JournalReplayer };
+export interface ReplayContext {
+  store: NodeStore;
+  replayer?: JournalReplayer;
+}
 
 export async function discardTornFinalRecord(path: string) {
   try {
@@ -58,14 +61,16 @@ function applyRecords(data: string, ctx: ReplayContext, sequence: number) {
 
 function applyRecord(line: string, ctx: ReplayContext, sequence: number) {
   try {
-    return replayRecord(JSON.parse(line) as JournalRecord, ctx, sequence);
+    return replayRecord(JSON.parse(line) as StoredRecord, ctx, sequence);
   } catch {
     throw new Error("Corrupt journal record");
   }
 }
 
+type StoredRecord = Omit<JournalRecord, "version"> & { version: number };
+
 function replayRecord(
-  record: JournalRecord,
+  record: StoredRecord,
   ctx: ReplayContext,
   sequence: number,
 ) {
@@ -92,7 +97,7 @@ function applied(record: JournalRecord, ctx: ReplayContext) {
   return record.sequence;
 }
 
-function verifyRecord(record: JournalRecord) {
+function verifyRecord(record: StoredRecord): asserts record is JournalRecord {
   if (
     record.version !== VERSION ||
     record.checksum !== checksum(recordData(record))
@@ -101,7 +106,7 @@ function verifyRecord(record: JournalRecord) {
   }
 }
 
-function recordData(record: JournalRecord) {
+function recordData(record: StoredRecord) {
   return {
     version: record.version,
     sequence: record.sequence,

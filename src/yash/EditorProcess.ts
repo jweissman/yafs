@@ -10,10 +10,12 @@ export function runEditor(temporary: string): Promise<number> {
 function waitForExit(child: ReturnType<typeof spawn>): Promise<number> {
   return new Promise((resolve, reject) => {
     child.once("error", reject);
-    child.once("exit", (code) => resolve(code ?? 1));
+    child.once("exit", (code) => {
+      resolve(code ?? 1);
+    });
   });
 }
 
 function editorCommand(): string[] {
-  return (process.env.VISUAL || process.env.EDITOR || "vi").trim().split(/\s+/);
+  return (process.env.VISUAL ?? process.env.EDITOR ?? "vi").trim().split(/\s+/);
 }

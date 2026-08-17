@@ -17,7 +17,8 @@ test("systemPromptFor appends the persona's tool roots as a starting-point hint"
   expect(prompt).toContain("/home/root/reviews/pulls");
   expect(prompt).toContain("yafs.start_here");
   expect(prompt).toContain("yafs.tree or yafs.find");
-  expect(prompt).toContain("Do not ask the user");
+  expect(prompt).toContain("Look up available context before asking the user");
+  expect(prompt).toContain("resourceShape links");
 });
 
 test("systemPromptFor lists every configured root", () => {

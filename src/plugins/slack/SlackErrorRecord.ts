@@ -1,6 +1,9 @@
 import { PreparedMountRecord } from "../../mounts/types";
 
-type Failure = { message: string; error: unknown };
+interface Failure {
+  message: string;
+  error: unknown;
+}
 
 export function withError(
   record: PreparedMountRecord,

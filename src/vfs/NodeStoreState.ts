@@ -2,7 +2,7 @@ import { Clock, systemClock } from "../core/Clock";
 import { FSNode } from "./FSNode";
 
 export class NodeStoreState {
-  nodes: { [inode: number]: FSNode } = {
+  nodes: Record<number, FSNode> = {
     1: {
       name: "/",
       dir: true,
@@ -49,7 +49,7 @@ export class NodeStoreState {
     this.nodes[this.nextInode++] = node;
   }
   private attach(parent: FSNode, node: FSNode) {
-    parent.children ||= [];
+    parent.children ??= [];
     parent.children.push(node);
   }
 }

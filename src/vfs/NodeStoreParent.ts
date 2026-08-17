@@ -5,7 +5,7 @@ import { NodeStoreResolver } from "./NodeStoreResolver";
 export function parentOf(resolver: NodeStoreResolver, path: AbsolutePath) {
   const parts = path.slice(1).split("/");
   const name = parts.pop();
-  const parentPath = `/${parts.join("/")}` as AbsolutePath;
+  const parentPath = absolutePath(`/${parts.join("/")}`);
   return checkedParent(resolver.get(parentPath), name, parentPath);
 }
 
@@ -18,6 +18,10 @@ function checkedParent(
     throw new Error(`No such parent directory: ${path}`);
   }
   return withWritableCheck(parent, name, path);
+}
+
+function absolutePath(path: string): AbsolutePath {
+  return path as AbsolutePath;
 }
 
 function withWritableCheck(parent: FSNode, name: string, path: AbsolutePath) {

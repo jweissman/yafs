@@ -1,10 +1,14 @@
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 type Arguments = Record<string, unknown>;
-type Tool = { name: string; description: string; inputSchema: object };
+interface Tool {
+  name: string;
+  description: string;
+  inputSchema: object;
+}
 type PathOperationName = "list" | "read" | "inspect";
 
-const OPERATIONS: Record<string, PathOperationName> = {
+const OPERATIONS: Partial<Record<string, PathOperationName>> = {
   "yafs.list": "list",
   "yafs.read": "read",
   "yafs.inspect": "inspect",
@@ -17,12 +21,9 @@ export function pathTools(): Tool[] {
 export function pathOperation(
   name: string,
   input: Arguments,
-): WorkspaceOperation {
+): WorkspaceOperation | undefined {
   const operation = OPERATIONS[name];
-  if (!operation) {
-    throw new Error(`Unknown tool: ${name}`);
-  }
-  return { name: operation, path: pathArgument(input) };
+  return operation ? { name: operation, path: pathArgument(input) } : undefined;
 }
 
 function listTool() {

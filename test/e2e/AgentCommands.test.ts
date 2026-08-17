@@ -14,6 +14,16 @@ test("agent command exposes one mutating command definition", () => {
   expect(agentCommands()).toMatchObject([{ name: "agent", access: "mutate" }]);
 });
 
+test("agent send rejects an unknown request flag", async () => {
+  const { server, client } = await startedAgentServer(controlledModel());
+  await client.exec("plugins apply");
+  await expect(client.exec('agent send reviewer --bad "hi"')).rejects.toThrow(
+    "Unknown agent send flag: --bad",
+  );
+  await client.close();
+  await server.close();
+});
+
 test("agent pseudobinaries send, inspect, and cancel a run without ctl JSON", async () => {
   const model = controlledModel();
   const { client, server } = await startedAgentServer(model);
@@ -25,19 +35,19 @@ test("agent pseudobinaries send, inspect, and cancel a run without ctl JSON", as
     /^accepted: agents\/reviewer -> \/home\/root\/agents\/reviewer\/runs\/[\w-]+$/,
   );
   const run = accepted.split(" -> ")[1];
-  const runId = run.split("/").pop()!;
+  const runId = runIdFor(run);
   await waitForStatus(
     client,
     "agents/reviewer/runs",
     (status) => status.state === "running",
   );
-  expect(JSON.parse(await client.exec(`agent status ${run}`)).state).toBe(
+  expect(runStatus(await client.exec(`agent status ${run}`)).state).toBe(
     "running",
   );
   expect(await client.exec(`agent cancel agents/reviewer ${runId}`)).toBe(
     `cancelling: agents/reviewer ${runId}`,
   );
-  const status = JSON.parse(await client.exec(`agent status ${run}`));
+  const status = runStatus(await client.exec(`agent status ${run}`));
   expect(status.state).toBe("cancelled");
   model.resolve("late response");
   await client.close();
@@ -139,12 +149,29 @@ test("agent target resolves a bare persona name to its full path", async () => {
 });
 
 function controlledModel() {
-  let resolve = (_value: string) => undefined;
+  let resolve: (value: string) => void = () => undefined;
   const client = {
     completeChat: () =>
       new Promise<string>((done) => {
         resolve = done;
       }),
   };
-  return { client, resolve: (value: string) => resolve(value) };
+  return {
+    client,
+    resolve: (value: string) => {
+      resolve(value);
+    },
+  };
+}
+
+function runStatus(raw: string): { state: string } {
+  return JSON.parse(raw) as { state: string };
+}
+
+function runIdFor(run: string): string {
+  const runId = run.split("/").pop();
+  if (!runId) {
+    throw new Error(`Accepted agent run has no id: ${run}`);
+  }
+  return runId;
 }

@@ -1,7 +1,7 @@
 import { ExecutionResult } from "./ExecutionResult";
 import { VfsOperation } from "../vfs/VfsOperation";
 
-export type ExecutionPlan = {
+export interface ExecutionPlan {
   result: ExecutionResult;
   operations: VfsOperation[];
-};
+}

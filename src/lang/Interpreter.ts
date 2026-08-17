@@ -23,6 +23,14 @@ export class Interpreter {
     if (matchResult.failed()) {
       throw new Error(`Failed to parse input: ${input}`);
     }
-    return this.semantics(matchResult).ast() as Command;
+    return astFor(this.semantics, matchResult);
   }
+}
+
+function astFor(semantics: ohm.Semantics, match: ohm.MatchResult): Command {
+  const apply = semantics as unknown as (value: ohm.MatchResult) => {
+    ast: () => unknown;
+  };
+  const operation = apply(match);
+  return operation.ast() as Command;
 }

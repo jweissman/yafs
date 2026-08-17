@@ -1,7 +1,11 @@
 import { WorkspaceOperation } from "../operations/WorkspaceOperation";
 
 type Arguments = Record<string, unknown>;
-type Tool = { name: string; description: string; inputSchema: object };
+interface Tool {
+  name: string;
+  description: string;
+  inputSchema: object;
+}
 
 export function orientationTools(): Tool[] {
   return [startHereTool()];

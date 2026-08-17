@@ -40,11 +40,15 @@ export class SlackInboundPoller {
       clearInterval(this.timer);
     }
   }
-  sync() {}
+  sync() {
+    return undefined;
+  }
 
   private async tick() {
     for (const record of this.mounts.mounts()) {
-      await this.tickRecord(record).catch((error) => log(record.id, error));
+      await this.tickRecord(record).catch((error: unknown) => {
+        log(record.id, error);
+      });
     }
   }
 
@@ -83,7 +87,9 @@ export class SlackInboundPoller {
     const botUserId = await this.identity(poll);
     const requireMention = poll.config.requireMention ?? true;
     const fresh = newMessages(botUserId, cursor, fetched, requireMention);
-    logPoll(poll.record.id, fetched.length, fresh.length);
+    if (fresh.length) {
+      logPoll(poll.record.id, fetched.length, fresh.length);
+    }
     await this.route(poll, botUserId, fresh);
     this.cursors.set(poll.record.id, advanceCursor(cursor, fresh));
   }

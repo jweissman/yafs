@@ -4,15 +4,18 @@ import {
   PersonaConfig,
   PreparedMountRecord,
 } from "../../mounts/types";
-import { validAgentConfig } from "./AgentRegistration";
+import { validAgentConfig } from "./AgentConfigValidation";
 
-export type AgentTarget = { config: AgentConfig; persona: PersonaConfig };
-export type RunContext = {
+export interface AgentTarget {
+  config: AgentConfig;
+  persona: PersonaConfig;
+}
+export interface RunContext {
   mountId: string;
   personaName: string;
   runId: string;
   startedAt: string;
-};
+}
 
 export function agentTarget(
   mounts: MountManager,
@@ -29,10 +32,10 @@ function requiredPersona(
   config: AgentConfig,
   personaName: string,
 ): PersonaConfig {
-  const persona = config.personas[personaName];
-  if (!persona) {
+  if (!Object.hasOwn(config.personas, personaName)) {
     throw new Error(`No such persona: ${personaName}`);
   }
+  const persona = config.personas[personaName];
   return persona;
 }
 

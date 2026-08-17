@@ -4,6 +4,11 @@ import {
   PersonaToolsConfig,
 } from "../../mounts/types";
 import { object, only, relative } from "../../mounts/ManifestValidation";
+import {
+  assertPrompt,
+  optionalNumber,
+  optionalString,
+} from "./AgentManifestValues";
 
 export function agentConfig(value: unknown): AgentConfig {
   const config = object(value, "agent config");
@@ -21,7 +26,9 @@ function personaMap(value: unknown): Record<string, PersonaConfig> {
   if (!entries.length) {
     throw new Error("Invalid agent personas: at least one required");
   }
-  entries.forEach(([name]) => assertPersonaName(name));
+  entries.forEach(([name]) => {
+    assertPersonaName(name);
+  });
   return personaEntries(entries);
 }
 
@@ -83,36 +90,6 @@ function rootsList(value: unknown): string[] {
 function assertRoot(value: unknown): string {
   if (typeof value !== "string" || !value.startsWith("/")) {
     throw new Error("Invalid persona tools root: must be an absolute path");
-  }
-  return value;
-}
-
-function optionalNumber(value: unknown, name: string): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  // Number.isFinite, not typeof + <=: `typeof NaN === "number"` and every
-  // comparison against NaN is false, so a plain `<= 0` check silently lets
-  // `.nan` (a valid YAML float literal) through — which would then quietly
-  // disable whichever budget check compares a live counter against it.
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    throw new Error(`Invalid ${name}`);
-  }
-  return value;
-}
-
-function assertPrompt(prompt: unknown): asserts prompt is string {
-  if (typeof prompt !== "string" || !prompt) {
-    throw new Error("Invalid persona prompt");
-  }
-}
-
-function optionalString(value: unknown, name: string): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || !value) {
-    throw new Error(`Invalid ${name}`);
   }
   return value;
 }

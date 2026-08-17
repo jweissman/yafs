@@ -1,5 +1,11 @@
 import { callTool, failure, tools } from "./Tools";
-import { McpClient, McpId, McpRequest, McpResponse } from "./types";
+import {
+  McpClient,
+  McpId,
+  McpRequest,
+  McpResponse,
+} from "./types";
+import { requestFor } from "./McpRequest";
 
 const protocolVersion = "2025-11-25";
 
@@ -11,16 +17,18 @@ export class McpServer {
 
   async receive(value: unknown): Promise<McpResponse | undefined> {
     const request = requestFor(value);
-    if (!hasId(request)) {
+    if (request.id === undefined) {
       return undefined;
     }
-    return this.respond(request);
+    return this.respond({ ...request, id: request.id });
   }
 
-  private async respond(request: McpRequest): Promise<McpResponse> {
+  private async respond(
+    request: McpRequest & { id: McpId },
+  ): Promise<McpResponse> {
     const result = this.standardResult(request.method);
     if (result) {
-      return response(request.id!, result);
+      return response(request.id, result);
     }
     return this.callOrError(request);
   }
@@ -39,11 +47,13 @@ export class McpServer {
     return !this.allowedTools || this.allowedTools.has(name);
   }
 
-  private async callOrError(request: McpRequest): Promise<McpResponse> {
+  private async callOrError(
+    request: McpRequest & { id: McpId },
+  ): Promise<McpResponse> {
     if (request.method === "tools/call") {
-      return response(request.id!, await this.call(request));
+      return response(request.id, await this.call(request));
     }
-    return error(request.id!, -32601, `Method not found: ${request.method}`);
+    return error(request.id, -32601, `Method not found: ${request.method}`);
   }
 
   private call(request: McpRequest) {
@@ -55,24 +65,6 @@ export class McpServer {
   }
 }
 
-function requestFor(value: unknown): McpRequest {
-  const request = requestObject(value);
-  if (request.jsonrpc !== "2.0" || typeof request.method !== "string") {
-    throw new Error("Invalid JSON-RPC request");
-  }
-  return request;
-}
-
-function requestObject(value: unknown): McpRequest {
-  if (!value || typeof value !== "object") {
-    throw new Error("Invalid JSON-RPC request");
-  }
-  return value as McpRequest;
-}
-
-function hasId(request: McpRequest): boolean {
-  return Object.hasOwn(request, "id");
-}
 function response(id: McpId, result: unknown): McpResponse {
   return { jsonrpc: "2.0", id, result };
 }
@@ -103,5 +95,5 @@ function parameterObject(value: unknown): {
   if (!value || typeof value !== "object") {
     throw new Error("tools/call requires parameters");
   }
-  return value as { name?: unknown; arguments?: unknown };
+  return value;
 }

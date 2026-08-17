@@ -2,11 +2,13 @@ import { GitHubSettings } from "./GitHubSettings";
 import { failureDetail, timedOut } from "./GitHubApiFailure";
 import { Fetch } from "./GitHubApiClientTypes";
 
-export type ApiRequest = {
-  settings: GitHubSettings;
+type RequestSettings = Pick<GitHubSettings, "apiUrl" | "token">;
+
+export interface ApiRequest {
+  settings: RequestSettings;
   request: Fetch;
   timeoutMs: number;
-};
+}
 
 export async function apiJson<T>(deps: ApiRequest, url: string): Promise<T> {
   const res = await response(deps, url, "application/vnd.github+json");
@@ -50,7 +52,7 @@ async function failure(url: string, accept: string, response: Response) {
   return failureDetail({ url, accept, response, body });
 }
 
-function headers(settings: GitHubSettings, accept: string) {
+function headers(settings: RequestSettings, accept: string) {
   return {
     accept,
     ...(settings.token ? { authorization: `Bearer ${settings.token}` } : {}),

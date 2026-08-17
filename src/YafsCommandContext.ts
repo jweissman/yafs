@@ -10,7 +10,7 @@ import { CacheService } from "./cache/CacheService";
 import { mountContext } from "./MountContext";
 import { mutationContext } from "./YafsMutationContext";
 
-type Dependencies = {
+interface Dependencies {
   clock: Clock;
   user: () => string;
   pwd: () => AbsolutePath;
@@ -23,7 +23,7 @@ type Dependencies = {
   traces: TraceService;
   cache: CacheService;
   desired?: DesiredMounts;
-};
+}
 
 export function commandContext(dependencies: Dependencies): CommandContext {
   return {
@@ -45,7 +45,14 @@ function identity({ clock, user, pwd }: Dependencies) {
 }
 
 function shell({ resolve, required, help, workspace }: Dependencies) {
-  return { resolve, required, help, cd: (path: string) => workspace.cd(path) };
+  return {
+    resolve,
+    required,
+    help,
+    cd: (path: string) => {
+      workspace.cd(path);
+    },
+  };
 }
 
 function filesystem({ workspace }: Dependencies) {

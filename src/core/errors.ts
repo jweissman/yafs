@@ -15,7 +15,7 @@ const ERROR_CODES: [string, string][] = [
 
 export function errorCode(message: string): string {
   return (
-    ERROR_CODES.find(([prefix]) => message.startsWith(prefix))?.[1] ||
+    ERROR_CODES.find(([prefix]) => message.startsWith(prefix))?.[1] ??
     "command_error"
   );
 }

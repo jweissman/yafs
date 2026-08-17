@@ -3,7 +3,10 @@ import { BlobStore } from "../protocol/BlobStore";
 import { Trace, TraceFilesystem, TraceReifier } from "./TraceTypes";
 import { writeEntry } from "./TraceMaterializer";
 
-export type MaterializeDeps = { blobs: BlobStore; reifier?: TraceReifier };
+export interface MaterializeDeps {
+  blobs: BlobStore;
+  reifier?: TraceReifier;
+}
 
 export async function materialize(
   deps: MaterializeDeps,

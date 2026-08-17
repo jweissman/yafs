@@ -7,6 +7,8 @@ import { ProviderRegistry } from "../../../src/mounts/ProviderRegistry";
 import { NodeStore } from "../../../src/vfs/NodeStore";
 import { parseManifest } from "../../../src/mounts/Manifest";
 import { activateDesired, refreshDesired } from "../../desired_mount_helpers";
+import { inspectedOrigin } from "../../inspection_helpers";
+import { parseJson } from "../../json";
 
 test("a GitHub collection becomes an immutable, attributable review snapshot", async () => {
   const source = new GitHubCollectionSource(fakeClient());
@@ -17,15 +19,16 @@ test("a GitHub collection becomes an immutable, attributable review snapshot", a
     "diff --git a/a b/a",
   );
   expect(
-    JSON.parse(yafs.exec("cat reviews/pulls/42/metadata.json")),
+    parseJson(yafs.exec("cat reviews/pulls/42/metadata.json")),
   ).toMatchObject({ number: 42 });
-  expect(
-    JSON.parse(yafs.exec("inspect reviews/pulls/42/diff.patch")).origins[0],
-  ).toMatchObject({
+  const origin = inspectedOrigin(
+    yafs.exec("inspect reviews/pulls/42/diff.patch"),
+  );
+  expect(origin).toMatchObject({
     provider: "github",
     mountId: "review",
-    revision: expect.stringMatching(/^github:/),
   });
+  expect(origin.revision).toMatch(/^github:/);
 });
 
 test("a GitHub manifest declares its network capability and rejects unknown configuration", async () => {

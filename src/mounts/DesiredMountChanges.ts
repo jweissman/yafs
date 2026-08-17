@@ -2,7 +2,10 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { PathResolver } from "../core/PathResolver";
 import { ManifestMount, PreparedMountRecord } from "./types";
 
-export type Change = { id: string; action: "activate" | "refresh" | "unmount" };
+export interface Change {
+  id: string;
+  action: "activate" | "refresh" | "unmount";
+}
 
 export class DesiredMountChanges {
   constructor(private readonly root: AbsolutePath) {}

@@ -8,6 +8,7 @@ import {
 } from "./plugins/agent/AgentPersonaLookup";
 import { slackPluginPath } from "./plugins/slack/SlackPluginLookup";
 import { missingDesiredMounts } from "./mounts/MissingDesiredMounts";
+import { PreparedMountRecord } from "./mounts/types";
 
 export function mountContext(
   manager: MountManager,
@@ -37,6 +38,7 @@ function pluginLookups(manager: MountManager) {
     agentPersona: (reference: string) => agentPersonaPath(manager, reference),
     agentPersonas: () => listPersonas(manager),
     slackPlugin: (id: string) => slackPluginPath(manager, id),
+    activeMountIds: () => manager.mounts().map((record) => record.id),
   };
 }
 
@@ -91,8 +93,11 @@ function resourceReferences(manager: MountManager) {
 
 export function mountMutations(operations: YafsOperationQueue) {
   return {
-    mount: (record) => operations.add({ type: "mount", record }),
-    refresh: (record) => operations.add({ type: "refresh", record }),
-    unmount: (id: string) => operations.add({ type: "unmount", id }),
+    mount: (record: PreparedMountRecord) =>
+      operations.add({ type: "mount", record }),
+    refresh: (record: PreparedMountRecord) =>
+      operations.add({ type: "refresh", record }),
+    unmount: (id: string, path: AbsolutePath) =>
+      operations.add({ type: "unmount", id, path }),
   };
 }

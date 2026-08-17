@@ -21,8 +21,9 @@ export class NodeStoreRmdir {
     if (index < 0) {
       throw new Error(`No such file: ${path}`);
     }
-    this.assertEmptyDir(parent.children![index], path);
-    parent.children!.splice(index, 1);
+    const children = requiredChildren(parent);
+    this.assertEmptyDir(children[index], path);
+    children.splice(index, 1);
   }
 
   private assertEmptyDir(node: FSNode, path: AbsolutePath) {
@@ -33,4 +34,11 @@ export class NodeStoreRmdir {
       throw new Error(`Directory not empty: ${path}`);
     }
   }
+}
+
+function requiredChildren(parent: FSNode): FSNode[] {
+  if (!parent.children) {
+    throw new Error("Expected directory children");
+  }
+  return parent.children;
 }

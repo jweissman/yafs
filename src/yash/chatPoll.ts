@@ -1,15 +1,19 @@
 import type { ExecutionResult } from "../types/ExecutionResult";
 
-export type PollClient = {
+export interface PollClient {
   execute(command: string): Promise<ExecutionResult>;
-};
+}
 
 const POLL_INTERVAL_MS = 200;
 const TERMINAL_STATES = ["complete", "failed", "cancelled", "interrupted"];
+interface RunStatus {
+  state: string;
+  error?: string;
+}
 
 export async function pollTurn(client: PollClient, runPath: string) {
   let printed = "";
-  while (true) {
+  for (;;) {
     printed = await printGrowth(client, runPath, printed);
     const status = await tick(client, runPath);
     if (status) {
@@ -18,11 +22,15 @@ export async function pollTurn(client: PollClient, runPath: string) {
   }
 }
 
-async function tick(client: PollClient, runPath: string) {
+async function tick(
+  client: PollClient,
+  runPath: string,
+): Promise<RunStatus | undefined> {
   const status = await readStatus(client, runPath);
-  if (TERMINAL_STATES.includes(status.state)) {
-    return status;
-  }
+  return TERMINAL_STATES.includes(status.state) ? status : pause();
+}
+
+async function pause(): Promise<undefined> {
   await sleep(POLL_INTERVAL_MS);
   return undefined;
 }
@@ -43,9 +51,12 @@ function printGrowthDelta(content: string, printed: string) {
   }
 }
 
-async function readStatus(client: PollClient, runPath: string) {
+async function readStatus(
+  client: PollClient,
+  runPath: string,
+): Promise<RunStatus> {
   const result = await client.execute(`cat ${runPath}/status.json`);
-  return JSON.parse(result.stdout) as { state: string; error?: string };
+  return JSON.parse(result.stdout) as RunStatus;
 }
 
 function sleep(ms: number) {

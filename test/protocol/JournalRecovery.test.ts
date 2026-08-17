@@ -8,6 +8,7 @@ import {
   writeSnapshot,
 } from "../../src/protocol/JournalRecovery";
 import { NodeStore } from "../../src/vfs/NodeStore";
+import { parseJson } from "../json";
 
 test("restoreJournal rejects a snapshot with a mismatched checksum", async () => {
   const directory = await mkdtemp(join(tmpdir(), "yafs-snapshot-corrupt-"));
@@ -42,7 +43,14 @@ function root() {
 }
 
 async function corrupt(path: string) {
-  const stored = JSON.parse(await Bun.file(path).text());
-  stored.checksum = "not-a-real-checksum";
-  await writeFile(path, JSON.stringify(stored));
+  const stored = checksumRecord(await Bun.file(path).text());
+  await writeFile(path, JSON.stringify({ ...stored, checksum: "not-a-real-checksum" }));
+}
+
+function checksumRecord(source: string): Record<string, unknown> {
+  const value = parseJson(source);
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Expected a snapshot record");
+  }
+  return value as Record<string, unknown>;
 }

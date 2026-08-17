@@ -6,7 +6,6 @@ export class MountsCommand {
   readonly access = "read";
 
   constructor() {}
-
   execute(context: CommandContext, args: string[]) {
     if (args.length) {
       throw new Error(

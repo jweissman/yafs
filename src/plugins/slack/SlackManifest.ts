@@ -7,6 +7,7 @@ const FIELDS = [
   "persona",
   "requireMention",
   "replyTimeoutMs",
+  "reactions",
 ];
 
 export function slackConfig(value: unknown): SlackConfig {
@@ -23,6 +24,7 @@ function parsedConfig(config: Record<string, unknown>): SlackConfig {
     persona: persona(config.persona),
     requireMention: requireMention(config.requireMention),
     replyTimeoutMs: replyTimeoutMs(config.replyTimeoutMs),
+    reactions: optionalBoolean("reactions", config.reactions),
   };
 }
 
@@ -37,11 +39,15 @@ function replyTimeoutMs(value: unknown): number | undefined {
 }
 
 function requireMention(value: unknown): boolean | undefined {
+  return optionalBoolean("requireMention", value);
+}
+
+function optionalBoolean(name: string, value: unknown): boolean | undefined {
   if (value === undefined) {
     return undefined;
   }
   if (typeof value !== "boolean") {
-    throw new Error("Invalid slack requireMention");
+    throw new Error(`Invalid slack ${name}`);
   }
   return value;
 }

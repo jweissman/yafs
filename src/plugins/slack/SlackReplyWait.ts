@@ -1,11 +1,11 @@
 import { MountManager } from "../../mounts/MountManager";
 import { PersonaTarget } from "../agent/AgentPersonaLookup";
 
-export type RunLookup = {
+export interface RunLookup {
   mounts: MountManager;
   target: PersonaTarget;
   runId: string;
-};
+}
 
 const POLL_INTERVAL_MS = 300;
 const TERMINAL_STATES = ["complete", "failed", "cancelled", "interrupted"];
@@ -15,12 +15,22 @@ export async function awaitReply(
   timeoutMs: number,
 ): Promise<string | undefined> {
   const settled = await pollUntil(lookup, Date.now() + timeoutMs);
-  return settled ? settled.value || undefined : abandoned(lookup, timeoutMs);
+  return replyFor(settled, lookup, timeoutMs);
 }
 
-function abandoned(lookup: RunLookup, timeoutMs: number): undefined {
-  logAbandoned(lookup, timeoutMs);
-  return undefined;
+function replyFor(
+  settled: { terminal: true; value: string } | undefined,
+  lookup: RunLookup,
+  timeoutMs: number,
+): string | undefined {
+  if (!settled) {
+    logAbandoned(lookup, timeoutMs);
+  }
+  return settled ? replyValue(settled.value) : undefined;
+}
+
+function replyValue(value: string): string | undefined {
+  return value === "" ? undefined : value;
 }
 
 async function pollUntil(lookup: RunLookup, deadline: number) {
@@ -34,7 +44,7 @@ async function pollUntil(lookup: RunLookup, deadline: number) {
 }
 
 async function pollTick(lookup: RunLookup) {
-  const settled = await settledReply(lookup);
+  const settled = settledReply(lookup);
   if (settled === undefined) {
     await sleep(POLL_INTERVAL_MS);
     return { terminal: false as const };
@@ -42,7 +52,7 @@ async function pollTick(lookup: RunLookup) {
   return { terminal: true as const, value: settled };
 }
 
-async function settledReply(lookup: RunLookup): Promise<string | undefined> {
+function settledReply(lookup: RunLookup): string | undefined {
   const status = readStatus(lookup);
   if (!status || !TERMINAL_STATES.includes(status.state)) {
     return undefined;

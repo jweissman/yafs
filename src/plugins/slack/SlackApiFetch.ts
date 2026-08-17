@@ -5,11 +5,11 @@ export type Fetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-export type ApiRequest = {
+export interface ApiRequest {
   settings: SlackSettings;
   request: Fetch;
   timeoutMs: number;
-};
+}
 
 export async function call(
   deps: ApiRequest,
@@ -23,7 +23,7 @@ export async function call(
 
 function checked(path: string, body: Record<string, unknown>) {
   if (body.ok !== true) {
-    throw new Error(`Slack API request failed: ${path} -> ${body.error}`);
+    throw new Error(`Slack API request failed: ${path} -> ${String(body.error)}`);
   }
   return body;
 }
@@ -34,7 +34,7 @@ function fetchApi(deps: ApiRequest, path: string, init: RequestInit) {
   const headers = authHeaders(deps.settings);
   return deps
     .request(url, { ...init, headers, signal })
-    .catch((error) => rethrow(error, url, deps.timeoutMs));
+    .catch((error: unknown) => rethrow(error, url, deps.timeoutMs));
 }
 
 function authHeaders(settings: SlackSettings) {

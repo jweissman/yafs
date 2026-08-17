@@ -1,7 +1,6 @@
 export class LineBuffer {
-  private buffer = "";
-
   constructor() {}
+  private buffer = "";
 
   push(chunk: string) {
     this.buffer += chunk;

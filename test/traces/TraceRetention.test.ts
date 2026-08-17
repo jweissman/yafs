@@ -34,8 +34,12 @@ function filesystem(store: NodeStore): TraceFilesystem {
     type: (path) => store.type(path),
     list: (path) => store.list(path),
     read: (path) => store.read(path),
-    mkdir: (path) => store.mkdir(path),
-    write: (path, content) => store.write(path, content),
+    mkdir: (path) => {
+      store.mkdir(path);
+    },
+    write: (path, content) => {
+      store.write(path, content);
+    },
   };
 }
 

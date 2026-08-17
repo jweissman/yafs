@@ -18,7 +18,6 @@ function validState(state: DaemonState) {
 
 function validAddress(state: DaemonState) {
   return (
-    state.version === 1 &&
     typeof state.host === "string" &&
     Number.isInteger(state.port)
   );

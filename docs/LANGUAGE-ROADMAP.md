@@ -361,7 +361,14 @@ body, with the poller's job reduced to "supply `$PERSONA`/`$CHAT_ID`/
 subscription, or autonomous-trigger primitive is in scope — that is
 explicitly the "second decision, earned only by repeated use" the M7 ADR
 section already reserves, and building it here would be the same
-autonomous-loop overreach already declined this session.
+autonomous-loop overreach already declined this session. A scheduled
+digest is a second concrete driver of this same shape (see
+[FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)'s M6.7) — a timer instead of a
+Slack poller supplying the parameter-binding table — deliberately built
+bespoke in TypeScript, not as an L2 `scheduled` block, so that once there
+are two real drivers instead of one, generalizing (into L2's trigger model
+or the provider-neutral event/workflow boundary) is informed by an actual
+comparison rather than a guess made from a single example.
 
 **Sandboxing reuses `CommandAccess`, it doesn't invent a new effect system.**
 `docs/LANGUAGE-ROADMAP.md` has referred to `session`/`local-write`/`control`/

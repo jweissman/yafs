@@ -10,7 +10,10 @@ import {
   unconfiguredPluginRemedy,
 } from "./PluginConfiguration";
 
-type DesiredMountsOptions = { path?: string; root?: AbsolutePath };
+interface DesiredMountsOptions {
+  path?: string;
+  root?: AbsolutePath;
+}
 export class DesiredMounts {
   private readonly path?: string;
   private readonly root: AbsolutePath;
@@ -21,7 +24,7 @@ export class DesiredMounts {
     options: DesiredMountsOptions = {},
   ) {
     this.path = options.path;
-    this.root = options.root || "/home/root";
+    this.root = options.root ?? "/home/root";
     this.planner = new DesiredMountChanges(this.root);
   }
 
@@ -77,11 +80,11 @@ export class DesiredMounts {
     return loaded;
   }
   private async loaded() {
-    return this.path ? this.parse(await this.read()) : undefined;
+    return this.path ? this.parse(await this.read(this.path)) : undefined;
   }
-  private async read() {
+  private async read(path: string) {
     try {
-      return await readFile(this.path!, "utf8");
+      return await readFile(path, "utf8");
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return undefined;
@@ -90,7 +93,7 @@ export class DesiredMounts {
     }
   }
   private parse(source: string | undefined) {
-    return source && parseManifest(source);
+    return source ? parseManifest(source) : undefined;
   }
   private report(loaded: ReturnType<DesiredMounts["parse"]>) {
     return {

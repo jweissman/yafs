@@ -14,17 +14,19 @@ export class NodeStoreUnion {
 
   entries(node: FSNode): FSNode[] {
     if (!node.unionLayers) {
-      return node.children || [];
+      return node.children ?? [];
     }
     const entries = new Map<string, FSNode>();
-    this.layers(node).forEach((layer) => this.addEntries(entries, layer));
+    this.layers(node).forEach((layer) => {
+      this.addEntries(entries, layer);
+    });
     return [...entries.values()];
   }
 
   layers(node: FSNode): FSNode[] {
-    return (node.unionLayers || [])
+    return (node.unionLayers ?? [])
       .map((path) => this.resolve(path))
-      .filter(this.directory);
+      .filter((item) => this.directory(item));
   }
 
   private layerChild(layers: FSNode[], name: string): FSNode | undefined {
@@ -38,7 +40,7 @@ export class NodeStoreUnion {
 
   private addEntries(entries: Map<string, FSNode>, layer: FSNode) {
     this.entries(layer).forEach((child) =>
-      entries.set(child.name, entries.get(child.name) || child),
+      entries.set(child.name, entries.get(child.name) ?? child),
     );
   }
   private directory(node: FSNode | undefined): node is FSNode {

@@ -16,6 +16,7 @@ import {
   waitFor,
 } from "./slack_inbound_helpers";
 import { fakeClient, FakeState } from "./slack_inbound_fakes";
+import { parseJson } from "../json";
 
 // Proves the pieces built this phase actually chain together: a Slack
 // inbound message routes to a tool-enabled persona, that persona drives its
@@ -41,7 +42,10 @@ test("a Slack message routed to a tool-enabled persona drives a real tool call b
   await waitFor(() => state.posted.length > 0);
 
   expect(state.posted).toEqual([
-    { channel: "C123", text: "Looks fine, no open PRs need review." },
+    {
+      channel: "C123",
+      text: "Looks fine, no open PRs need review.\n\n---\n1 tool call(s) in 0s.",
+    },
   ]);
   expect(calls).toHaveLength(1);
   const transcript = await toolsTranscript(client);
@@ -56,7 +60,11 @@ test("a Slack message routed to a tool-enabled persona drives a real tool call b
 async function toolsTranscript(client: YashClient) {
   const runId = (await client.exec("ls agents/reviewer/runs")).trim();
   const raw = await client.exec(`cat agents/reviewer/runs/${runId}/tools.json`);
-  return JSON.parse(raw);
+  const value = parseJson(raw);
+  if (!Array.isArray(value)) {
+    throw new Error("Expected a tool transcript");
+  }
+  return value.map((item) => item as unknown);
 }
 
 function serverOptions(state: FakeState, toolClient: ToolClient) {

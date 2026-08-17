@@ -5,16 +5,16 @@ import { withError } from "./SlackErrorRecord";
 import { AttemptDeps } from "./SlackOutboxAttempt";
 import { SlackOutboxStore } from "./SlackOutboxStore";
 
-export type SlackPoster = {
+export interface SlackPoster {
   postMessage(channel: string, text: string): Promise<string>;
-};
+}
 export type ClientFor = (config: SlackConfig) => SlackPoster;
 
-export type CommitDeps = {
+export interface CommitDeps {
   wiring: Wiring;
   clientFor: ClientFor;
   outbox: SlackOutboxStore;
-};
+}
 
 export function attemptDepsFor(deps: CommitDeps): AttemptDeps {
   return {
@@ -61,7 +61,11 @@ async function applyRefresh(deps: CommitDeps, mountId: string) {
   await commit(deps, await mounts(deps).prepareActivation(found, "system"));
 }
 
-type Failure = { mountId: string; message: string; error: unknown };
+interface Failure {
+  mountId: string;
+  message: string;
+  error: unknown;
+}
 
 function commitError(deps: CommitDeps, failure: Failure) {
   return deps.wiring.enqueue(() => applyError(deps, failure));
