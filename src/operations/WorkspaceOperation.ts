@@ -10,7 +10,7 @@ export type WorkspaceOperation =
       type?: NodeType;
       limit?: number;
     }
-  | { name: "test"; path: string; predicate: TestPredicate }
+  | { name: "test"; path: string; predicate: TestPredicate; pattern?: string }
   | { name: "diff"; left: string; right: string; limit?: number }
   | { name: "capture"; source: string; artifact: string; limit?: number }
   | { name: "restore"; artifact: string; destination: string }
@@ -27,6 +27,7 @@ export type WorkspaceOperation =
   | { name: "startHere" };
 
 export type NodeType = "file" | "directory" | "symlink";
-export type TestPredicate = "-e" | "-f" | "-d" | "-L";
+
+export type TestPredicate = "-e" | "-f" | "-d" | "-L" | "-c";
 
 export * from "./WorkspaceValue";

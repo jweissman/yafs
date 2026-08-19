@@ -9,12 +9,6 @@ interface Totals {
   bytes: number;
 }
 
-// Answers two questions that came up repeatedly without a direct way to
-// ask them: how many files are under this path, and how big is it --
-// both matter now that SnapshotLimits/byte budgets are a real, recurring
-// operational concern, and "how many PRs are there" has no clean answer
-// without piping ls into wc (which yafs doesn't support -- see
-// LANGUAGE-ROADMAP.md's pipeline scoping).
 export class DuCommand {
   readonly name = "du";
   readonly synopsis = "du PATH";

@@ -11,12 +11,8 @@ export class YafsWorkspace {
     private readonly mounts: () => MountRecord[],
   ) {}
 
-  cd(path: string) {
-    const absolute = this.shell.resolve(path);
-    if (this.type(absolute) !== "directory") {
-      throw new Error(`No such directory: ${absolute}`);
-    }
-    this.shell.enter(absolute);
+  enter(path: AbsolutePath) {
+    this.shell.enter(path);
   }
 
   read(path: AbsolutePath) {

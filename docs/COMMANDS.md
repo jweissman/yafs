@@ -33,6 +33,12 @@ durable VFS operation; `control` manages mount lifecycle. `yafs.query` (see
 "Automation and MCP" below) allows only `read` commands; everything else is
 rejected before it runs.
 
+`help` is the executable synopsis index. This page adds semantics, examples,
+and exclusions that the current command objects do not yet model structurally.
+M6.10 proposes a shared command-description model and a documentation check;
+until that exists, this remains the reviewed reference rather than pretending
+it is generated from incomplete metadata.
+
 ### Session
 
 | Command | Access | Meaning |
@@ -132,7 +138,7 @@ plugins:
   - id: reviews
     plugin: github
     path: reviews
-    config: { repository: acme/widget, query: "is:pr is:open", max: 25 }
+    config: { repository: acme/widget, pulls: { query: "is:pr is:open", max: 25 } }
     capabilities: [network.github-api]
 ```
 
@@ -153,7 +159,7 @@ configuration — see [PRODUCT-SPEC.md](PRODUCT-SPEC.md#first-demo-collaborative
 | Provider | Config | Capability | Notes |
 | --- | --- | --- | --- |
 | `fixture` | `{ files: {PATH: CONTENT}, streams?: {PATH: {chunks, intervalMs}} } ` | none required | Static, config-sourced content. `streams` delivers `chunks` into `PATH` on a timer, for exercising background/`ctl` mechanics with no external dependency — not a production feature. |
-| `github` | `{ repository, query, max }` | `network.github-api`, `secret.github-token` for authenticated access | Bounded PR query collection; see [PRODUCT-SPEC.md](PRODUCT-SPEC.md#first-demo-collaborative-pr-review-collection). |
+| `github` | See [provider reference](PROVIDERS.md#github-and-git-source-trees) | `network.github-api`, `secret.github-token` for authenticated access; optional `host.git-read` | Bounded PR/commit collection with an optional read-only source-tree experiment. |
 | `agent` | `{ personas: { NAME: { prompt, endpoint?, model?, tools? } }, endpoint?, model? }` | `chat.completion` | Publishes `NAME/prompt.md` per persona from `config.personas.NAME.prompt`. One mount can host several personas. For a persona with no `tools:`, `endpoint`/`model` resolve persona → mount → the `YAFS_LLM_BASE_URL`/`YAFS_LLM_MODEL` env vars (generic, any OpenAI-compatible `/chat/completions` server). For a persona *with* `tools:` (MCP-enabled, LM Studio only — see `test/plugins/agent/AgentToolServer.test.ts` and `AgentToolMcpSync.ts`), the same persona/mount fields instead fall back to `YAFS_LMSTUDIO_BASE_URL`/`YAFS_LMSTUDIO_MODEL`, since that path uses LM Studio's own `/api/v1/chat` endpoint, not the generic completions shape. LM Studio requires `model` on every `/api/v1/chat` request — omitting it (persona, mount, *and* the env var) fails with `missing_required_parameter: model`. A tool-enabled persona is served via `AgentToolServer`, an in-process HTTP MCP listener on a fixed port (default `7338`, override with `YAFS_AGENT_TOOLS_PORT`) that `AgentToolMcpSync` keeps registered in `~/.lmstudio/mcp.json` automatically. If LM Studio's "Require Authentication" is on (required alongside "Allow calling servers from mcp.json"), set `YAFS_LMSTUDIO_ACCESS_TOKEN` — sent as `Authorization: Bearer <token>` on every tool-enabled request. |
 | `slack` | `{ channel, max? }` | `network.slack-api`, `secret.slack-token` | Publishes the channel's recent messages as an ordered `NAME/messages.ndjson` snapshot; `channel` is a Slack channel ID (e.g. `C0123456789`), not a name. `secret.slack-token` reads the `YAFS_SLACK_TOKEN` env var daemon-side — there is no per-manifest token field and no `SLACK_CHANNEL_ID` env var; the channel is config, the token is the only secret. See `test/e2e/SlackInbound.test.ts` and `test/plugins/slack/SlackProvider.test.ts`. |
 

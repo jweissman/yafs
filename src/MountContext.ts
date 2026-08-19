@@ -7,6 +7,7 @@ import {
   listPersonas,
 } from "./plugins/agent/AgentPersonaLookup";
 import { slackPluginPath } from "./plugins/slack/SlackPluginLookup";
+import { gitLookups } from "./GitCommandContext";
 import { missingDesiredMounts } from "./mounts/MissingDesiredMounts";
 import { PreparedMountRecord } from "./mounts/types";
 
@@ -39,6 +40,7 @@ function pluginLookups(manager: MountManager) {
     agentPersonas: () => listPersonas(manager),
     slackPlugin: (id: string) => slackPluginPath(manager, id),
     activeMountIds: () => manager.mounts().map((record) => record.id),
+    ...gitLookups(manager),
   };
 }
 

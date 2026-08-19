@@ -3,6 +3,12 @@
 default:
     @just --list
 
+restart:
+    yafsd -- restart --config yafs.plugins.yaml
+
+logs:
+    yafsd logs --tail
+
 gh:
     gh repo view --web
 
@@ -25,6 +31,11 @@ fmt:
 # Run tests. Pass a path or bun test-filter pattern, or nothing for all.
 test PATTERN="":
     bun test {{PATTERN}}
+
+# Clear the structured test-log directory so the next test run starts
+# from a clean slate (stale entries otherwise carry over between runs).
+clean-test-logs:
+    rm -rf .yafs-test
 
 # List every file currently below bunfig.toml's coverageThreshold — the
 # same pass/fail table `bun test --coverage` prints, pre-filtered so only

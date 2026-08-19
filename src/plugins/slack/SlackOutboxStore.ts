@@ -16,11 +16,6 @@ export class SlackOutboxStore {
     private readonly enqueue: (work: () => Promise<void>) => Promise<void>,
   ) {}
 
-  // Accept-time writes run inside the same awaited chain as the ctl write
-  // itself (see SlackDirectoryDriver.send) — the queued record must exist
-  // before the write is acknowledged, matching AgentRunStore.accept.
-  // Routing this through `enqueue` would deadlock for the same reason
-  // documented on AgentChatStore.appendChatTurnNow.
   accept(id: OutboxId, message: string, status: OutboxStatus) {
     const entries = [messageEntry(id, message), statusEntry(id, status)];
     return this.applyEntries(id, entries);

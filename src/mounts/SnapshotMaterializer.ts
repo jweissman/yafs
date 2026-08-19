@@ -10,11 +10,6 @@ export interface SnapshotLimits {
   bytes: number;
 }
 
-// 1MB was calibrated against small demo fixtures, not real provider
-// content — a real GitHub mount with a few dozen substantial PR diffs
-// hits it easily (observed live: `max: 100` on vets-api failed
-// reconcile with "Snapshot exceeds 1048576 bytes"). 8MB is still a real
-// bound, not unlimited, but fits realistic single-mount content.
 export const defaultSnapshotLimits: SnapshotLimits = {
   files: 4096,
   bytes: 8 * 1024 * 1024,

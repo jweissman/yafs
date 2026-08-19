@@ -4,6 +4,7 @@ import { grep } from "./WorkspaceGrep";
 import { diff } from "./WorkspaceDiff";
 import { startHere } from "./WorkspaceStartHere";
 import { literacy, literacyValue } from "./WorkspaceLiteracyInvoke";
+import { gitBackedValue, grepOptions } from "./WorkspaceGitOperations";
 
 export class WorkspaceOperations {
   constructor(private readonly context: () => CommandContext) {}
@@ -13,6 +14,11 @@ export class WorkspaceOperations {
       ? startHere(this.context())
       : this.otherOperation(operation);
   }
+
+  invokeGitBacked(operation: WorkspaceOperation) {
+    return gitBackedValue(this.context(), operation);
+  }
+
   private otherOperation(operation: WorkspaceOperation): WorkspaceValue {
     return operation.name === "grep"
       ? this.grep(operation)
@@ -62,8 +68,3 @@ type ReadOperation = Exclude<
   WorkspaceOperation,
   { name: "grep" | "diff" | "capture" | "restore" | "startHere" }
 >;
-
-function grepOptions(operation: Extract<WorkspaceOperation, { name: "grep" }>) {
-  const { limit, ignoreCase, invert, countOnly, filesOnly } = operation;
-  return { limit, ignoreCase, invert, countOnly, filesOnly };
-}

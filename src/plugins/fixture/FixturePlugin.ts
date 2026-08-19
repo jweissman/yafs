@@ -24,8 +24,8 @@ export class FixturePlugin extends Plugin {
     return fixtureConfig(value);
   }
 
-  createDriver(wiring: Wiring): PluginDriver {
-    return new FixtureStreamDriver(wiring);
+  createDriver(wiring: Wiring): PluginDriver[] {
+    return [new FixtureStreamDriver(wiring)];
   }
 
   prepare(

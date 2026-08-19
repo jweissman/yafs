@@ -53,7 +53,8 @@ function test(
   path: AbsolutePath,
   operation: Extract<LiteracyOperation, { name: "test" }>,
 ): WorkspaceValue {
-  const value = testPath(context, path, operation.predicate);
+  const { predicate, pattern } = operation;
+  const value = testPath(context, { path, predicate, pattern });
   return { kind: "test", value };
 }
 

@@ -81,7 +81,7 @@ function pull() {
   };
 }
 function manifest() {
-  return '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, query: "is:open", max: 2}, capabilities: [network.github-api]}]}';
+  return '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, pulls: {query: "is:open", max: 2}}, capabilities: [network.github-api]}]}';
 }
 function scheduledManifest() {
   return manifest().replace(

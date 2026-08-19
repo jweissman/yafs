@@ -52,11 +52,6 @@ export function restoredRefresh(
   return withReplaced(records, record);
 }
 
-// The operation itself carries `path` (not looked up from `records`)
-// because replay can process an "unmount" for a mount whose "mount" event
-// predates the last compacted snapshot: in that case `records` (rebuilt
-// fresh from this replay pass) never regains an entry for it, even though
-// the snapshot's stale content for it still needs removing.
 export function restoredUnmount(
   snapshots: SnapshotMaterializer,
   records: PreparedMountRecord[],

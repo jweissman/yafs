@@ -60,12 +60,6 @@ test("a blob survives until every retaining owner releases it", async () => {
 });
 
 test("a fresh store has retained nothing yet, so gc reclaims everything until callers replay their retains", async () => {
-  // Documents the lifecycle hazard from the design: retain/release are
-  // in-memory only and start empty on construction. A caller that calls
-  // gc() before finishing its own replay-time retain() calls will lose
-  // every blob it meant to keep — this is the store behaving exactly as
-  // specified, not a bug, which is why the ordering is a documented
-  // caller obligation.
   const path = await directory();
   const first = openBlobStore(path);
   const digest = await first.put(

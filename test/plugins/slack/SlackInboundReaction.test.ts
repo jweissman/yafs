@@ -11,6 +11,7 @@ import {
   fakeMounts,
   waitFor,
 } from "./slack_inbound_routing_helpers";
+import { waitForLogEntry } from "../../logging_helpers";
 
 test("a successful reply adds and removes the working reaction", async () => {
   const entries: [string, string][] = [];
@@ -57,15 +58,12 @@ test("a reaction API failure is logged and does not block the reply", async () =
     client: failingReactionClient(),
   };
 
-  const errors: unknown[][] = [];
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => errors.push(args);
-  try {
-    await routeMessage(options, "chat1", { user: "U1", text: "hi", ts: "1.0" });
-    await waitFor(() => errors.some(loggedReactionFailure), 2000);
-  } finally {
-    console.error = originalError;
-  }
+  await routeMessage(options, "chat1", { user: "U1", text: "hi", ts: "1.0" });
+  await waitForLogEntry(
+    (entry) =>
+      typeof entry.message === "string" &&
+      entry.message.includes("reaction update failed"),
+  );
 });
 
 test("reactionsEnabled: false never calls the reaction API", async () => {
@@ -118,10 +116,4 @@ function failingReactionClient(): SlackChannelClient {
       throw new Error("reaction_rate_limited");
     },
   };
-}
-
-function loggedReactionFailure(args: unknown[]): boolean {
-  return (
-    typeof args[0] === "string" && args[0].includes("reaction update failed")
-  );
 }

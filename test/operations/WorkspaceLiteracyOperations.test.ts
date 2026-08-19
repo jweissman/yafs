@@ -27,10 +27,6 @@ test("tree and find walk a virtual directory in deterministic order", async () =
   });
 });
 
-// tree/find are bounded exploratory reads for an agent that can't know
-// the true result count in advance -- unlike grep/diff (durable,
-// safety-critical), a conservative limit guess should truncate with a
-// flag, not fail the whole call. See WorkspaceWalker's `strict` mode.
 test("find truncates a result set beyond its explicit limit, rather than failing", async () => {
   const yafs = await workspace();
   expect(
@@ -187,11 +183,6 @@ test("grep expands a single wildcard path segment against real directory listing
   });
 });
 
-// Regression coverage for a real live bug: the glob matcher only special
-// -cased a segment that was *exactly* "*", so a partial pattern like
-// "*.md" was treated as a literal filename (matching nothing) instead of
-// a wildcard -- a very common glob shape ("*.md", "test_*") that must
-// work, not just a bare "*".
 test("grep expands a partial wildcard pattern like *.md, not just a bare *", async () => {
   const yafs = await workspace();
   expect(
@@ -216,7 +207,7 @@ test("grep expands ** across any depth, not just one segment", async () => {
   ).toMatchObject({
     matches: [{ path: "/home/root/work/nested/b.md" }],
   });
-  // ** also matches zero segments, reaching a.md directly under work/.
+
   expect(
     yafs.operations.invoke({
       name: "grep",
@@ -259,9 +250,6 @@ test("grep invert matches lines that do NOT contain the pattern", async () => {
   });
 });
 
-// count/files are the whole point of countOnly/filesOnly: an agent can
-// see how many diffs mention something, or which files do, without
-// paying to receive every match's file/line/text.
 test("grep countOnly and filesOnly report the aggregate without full match detail", async () => {
   const yafs = await workspace();
   expect(

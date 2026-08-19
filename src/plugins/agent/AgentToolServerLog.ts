@@ -1,3 +1,7 @@
+import { log } from "../../Logging";
+
+const toolServerLog = log.getSubLogger({ name: "agent.toolServer" });
+
 interface Identity {
   mountId: string;
   personaName: string;
@@ -12,14 +16,13 @@ export function logSession(identity: Identity, found: boolean) {
 }
 
 function logSessionStart(identity: Identity) {
-  console.log(
-    `agent tool session started for ${identity.mountId}/${identity.personaName}`,
-  );
+  toolServerLog.info(identity, "agent tool session started");
 }
 
 function logRejected(identity: Identity) {
-  console.error(
-    `agent tool session rejected for ${identity.mountId}/${identity.personaName}: ` +
-      "no such tool-enabled persona (check the persona exists and has `tools:` configured)",
+  toolServerLog.error(
+    identity,
+    "agent tool session rejected: no such tool-enabled persona " +
+      "(check the persona exists and has `tools:` configured)",
   );
 }

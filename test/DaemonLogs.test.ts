@@ -5,15 +5,6 @@ import { join } from "node:path";
 
 import { emitGrowth, printLogs } from "../src/DaemonLogs";
 
-// --tail's `follow()` loop is a genuinely foreground, run-until-Ctrl-C CLI
-// behavior with no cancellation hook (by design, matching this repo's
-// precedent for interactive/long-running CLI surfaces — `agent chat`'s
-// REPL has the same property: no automated test drives it directly).
-// Manually verified: `yafsd logs --tail` picks up content appended to the
-// log file after it starts watching. `emitGrowth` — the part of that loop
-// that actually decides what to (re-)read — is exported and tested
-// directly below instead.
-
 test("printLogs prints the last N lines by default and with -n", async () => {
   const path = await logFile("a\nb\nc\nd\ne\n");
   expect(await captured(() => printLogs(path, ["-n", "2"]))).toBe("d\ne\n");
@@ -83,7 +74,7 @@ async function logFile(content: string): Promise<string> {
 
 async function captured(run: () => Promise<void>): Promise<string> {
   const chunks: string[] = [];
-  // Bun types `bind()` here as any; this captures stdout before the test swap.
+
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const original: typeof process.stdout.write = process.stdout.write.bind(
     process.stdout,

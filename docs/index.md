@@ -1,16 +1,30 @@
 # Yafs
 
-Yafs is a local-first workspace appliance: one durable, composable filesystem
-tree that can combine local files with explicit, capability-scoped provider
-mounts. Yash (the interactive shell), the loopback RPC protocol, and an MCP
-adapter are equal clients of the same `yafsd` service.
+Yafs is a local-first operating environment for bounded humans and agents. It
+combines live, provider-backed views of external systems with private working
+space and explicit, inspectable actions.
 
-It is not a POSIX shell, a host command runner, or a drop-in Redis, S3,
-Kubernetes, or Docker replacement.
+The point is not to make every API look like a file. The point is to give a
+task a coherent world that people and agents can explore with the same paths,
+provenance, and authority boundaries.
 
-## Getting started
+```text
+live provider views          private work              explicit effects
+/world/github/...       +   /home/<actor>/...     +   typed actions/runs
+```
 
-Start the daemon and connect a client:
+Yash, loopback RPC, MCP, and a future local operator UI are clients of the
+same service. A provider may project a read-only resource tree and separately
+declare typed actions; browsing never implies authority to act.
+
+Yafs is intentionally not a POSIX implementation, a general host shell, or a
+drop-in replacement for Redis, S3, Kubernetes, or Docker. Those may become
+narrow adapters or experiments only when they can honestly use the kernel
+without widening its authority model.
+
+## Start here
+
+For a local durable workspace:
 
 ```sh
 yafsd start
@@ -24,103 +38,34 @@ yash:/home/root$ cat notes/first.md
 hello
 ```
 
-`yash --local` runs an ephemeral, in-process instance with no daemon or
-journal — useful for trying the shell without any durable state. `yash -c
-'COMMAND'` runs one command non-interactively.
+`yash --local` is an ephemeral, in-process development session. `yash -c
+'COMMAND'` runs one non-interactive command.
 
-## Configuring plugin projections
+## Learning trails
 
-Host-side infrastructure configuration declares provider-backed subtrees. Keep
-it outside `.yafs`; the daemon data directory holds runtime state, not desired
-configuration. A minimal fixture configuration looks like this:
+- **Operate a local workspace** — start above, then use the [Yash command
+  reference](COMMANDS.md) for paths, inspection, composition, and daemon
+  lifecycle.
+- **Configure a provider projection** — read the [provider reference](PROVIDERS.md),
+  then use `plugins status`, `plugins plan`, and `plugins apply` against the
+  daemon-selected host-side YAML. For a Git-backed source tree, follow the
+  [git source walkthrough](GIT-SOURCE-SETUP.md).
+- **Use an agent safely** — the [product spec](PRODUCT-SPEC.md) describes
+  `/world`, private workspaces, bounded tools, actions, and the intended task
+  environment. The current MCP and agent surfaces are in [COMMANDS.md](COMMANDS.md).
+- **Understand why a capability exists** — the [ADR decision index](ADR.md)
+  states the durable constraints; the [feature roadmap](FEATURE-ROADMAP.md)
+  states what is actively being proved next.
 
-```yaml
-version: 1
-plugins:
-  - id: demo
-    plugin: fixture
-    path: fixture
-    config: { files: { hello.txt: hi } }
-    capabilities: []
-```
+## Current product direction
 
-Start the daemon with that configuration, then inspect and use the published
-projection:
+The next product proof is an engineering investigation desk: a bounded agent
+should be able to inspect repository, CI, Slack, and eventually incident data;
+produce a cited diagnosis; and propose a separately approved handoff to a
+coding actor. This tests the broader thesis — an agent can inhabit a legible,
+scoped world — rather than merely demonstrating another chat bot.
 
-```sh
-yafsd start --config yafs.plugins.yaml
-yash -c 'plugins status'
-yash -c 'cat fixture/hello.txt'
-yash -c 'inspect fixture/hello.txt'
-```
-
-`plugins status` reports active instances without revealing the host pathname
-of the configuration. `plugins plan` is a machine-readable diff: `[]` means
-the active namespace is already in sync. After editing the YAML, inspect the
-proposed change with `plugins plan` and publish it with `plugins apply`.
-
-Once active, a projection is read-only (`echo x > fixture/hello.txt` fails
-with `read_only_mount`) and every path beneath it carries structured
-provenance. `inspect` shows which plugin and revision produced a file, not
-just its content. See [PRODUCT-SPEC.md](PRODUCT-SPEC.md#first-demo-collaborative-pr-review-collection)
-for the same flow against a real GitHub collection.
-
-## Local model personas and Slack
-
-The built-in `agent` provider publishes named personas backed by a local
-model server (any OpenAI-compatible `/chat/completions` endpoint, or LM
-Studio's native API for tool-enabled personas):
-
-```sh
-agent send agents/reviewer "Review this change"
-agent chat agents/reviewer
-```
-
-`agent send` is one-shot; `agent chat` is a synchronous, interactive,
-multi-turn REPL. A persona with a `tools:` block gets bounded, scoped MCP
-access back into this same `yafsd` instance — `AgentToolServer` registers it
-automatically in LM Studio's own `mcp.json`, so tool calls need no manual
-LM Studio-side wiring beyond enabling "Allow calling servers from mcp.json."
-The built-in `slack` provider bridges a channel to a persona the same way.
-See [the command reference](COMMANDS.md#built-in-plugins) for the full
-`agent`/`slack` config shape and [the product
-spec](PRODUCT-SPEC.md#first-demo-collaborative-pr-review-collection) for
-the end-to-end PR-review demo this is built toward.
-
-## Browsing Yafs from an external MCP client
-
-`yafs-mcp` lets an MCP client — Claude Code, Claude Desktop, or any other
-MCP-speaking agent — browse a running `yafsd` instance without shell access.
-It's a separate small process that bridges MCP's stdio protocol to the same
-loopback RPC `yash` uses; the agent never gets a shell, only the four tools
-below. (This is a different surface from the `agent` provider above: that's
-Yafs driving a local model via MCP, this is an external agent browsing
-Yafs.)
-
-With `yafsd` already running, register it (Claude Code example; other MCP
-clients take the same command and args, just via their own config):
-
-```sh
-claude mcp add yafs -- yafs-mcp
-```
-
-Most of its tools are fixed, narrow operations — `yafs.list PATH`,
-`yafs.read PATH`, `yafs.inspect PATH`, `yafs.tree`, `yafs.find`, `yafs.test`,
-`yafs.diff`, and `yafs.grep` do exactly what they say and nothing else.
-`yafs.query SOURCE` is different in kind: it runs one arbitrary
-**read-only** Yash command — so an agent can `cat`, `ls`, `inspect`, or
-`origins` anything it could as a human at the prompt, but the parser
-rejects redirects, session changes, mount lifecycle commands, and every
-mutating command before it runs, including inside a command substitution.
-`yafs.capture`/`yafs.restore` are the one durable-write exception: they
-capture a provider-backed source into a local artifact and reconstruct it
-later, the same operations `capture`/`restore` expose at the Yash prompt.
-See [the command reference](COMMANDS.md#automation-and-mcp) for the exact
-rejection rules and the full tool list.
-
-## Documentation map
-
-- [Yash command reference](COMMANDS.md) — available syntax, commands, and exclusions.
-- [Product spec](PRODUCT-SPEC.md) — operator-facing provider promise and acceptance criteria.
-- [Architecture decision record](ADR.md) — kernel decisions, invariants, and deferred design work.
-- [Feature roadmap](FEATURE-ROADMAP.md) — implementation order, current status, and what's gated.
+The longer horizon is a world of provider projections, faceted task views,
+reviewed local procedures under `/commons`, and later federation under an
+identity/trust model. It is a direction, not a promise that every integration
+or infrastructure protocol will ship.

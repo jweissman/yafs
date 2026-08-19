@@ -1,9 +1,10 @@
 import {
   GitHubClient,
+  GitHubCommit,
   GitHubPull,
   GitHubPullFetcher,
 } from "./GitHubCollectionSource";
-import { GitHubConfig } from "../../mounts/types";
+import { GitHubConfig, GitHubPullsConfig } from "../../mounts/types";
 import { GitHubSettings } from "./GitHubSettings";
 import { pullFields, searchSummary } from "./GitHubApiSummary";
 import {
@@ -14,12 +15,10 @@ import {
   Search,
 } from "./GitHubApiClientTypes";
 import { apiJson, apiText, ApiRequest } from "./GitHubApiFetch";
+import { fetchCommits } from "./GitHubApiCommits";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-// Only apiUrl/token are used for making requests -- webUrl exists
-// purely for building human-facing citation links elsewhere and has no
-// bearing on this client, so it isn't required here.
 type ClientSettings = Pick<GitHubSettings, "apiUrl" | "token">;
 
 export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
@@ -29,11 +28,18 @@ export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
   ) {}
 
-  async pulls(config: GitHubConfig): Promise<GitHubPull[]> {
-    const search = await this.json<Search>(this.searchUrl(config));
+  async pulls(
+    repository: string,
+    pulls: GitHubPullsConfig,
+  ): Promise<GitHubPull[]> {
+    const search = await this.json<Search>(this.searchUrl(repository, pulls));
     return Promise.all(
-      search.items.map((item) => this.searchedPull(config.repository, item)),
+      search.items.map((item) => this.searchedPull(repository, item)),
     );
+  }
+
+  commits(config: GitHubConfig): Promise<GitHubCommit[]> {
+    return fetchCommits(this.deps(), config);
   }
 
   async pull(repository: string, number: number): Promise<GitHubPull> {
@@ -68,10 +74,10 @@ export class GitHubApiClient implements GitHubClient, GitHubPullFetcher {
     return { ...summary, diff };
   }
 
-  private searchUrl(config: GitHubConfig) {
+  private searchUrl(repository: string, pulls: GitHubPullsConfig) {
     const query = new URLSearchParams({
-      q: `repo:${config.repository} ${config.query}`,
-      per_page: String(config.max),
+      q: `repo:${repository} ${pulls.query}`,
+      per_page: String(pulls.max),
     });
     return `${this.settings.apiUrl}/search/issues?${query}`;
   }

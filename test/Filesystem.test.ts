@@ -96,7 +96,7 @@ test("cp -r copies a directory tree, including nested symlinks", () => {
   expect(yafs.exec("cat archive/guide.md")).toBe("guide");
   expect(yafs.exec("cat archive/nested/file.md")).toBe("deep");
   expect(yafs.exec("readlink archive/latest")).toBe("guide.md");
-  // The source is untouched by cp.
+
   expect(yafs.exec("cat docs/guide.md")).toBe("guide");
 });
 
@@ -139,10 +139,7 @@ test("mv out of a read-only provider mount is rejected atomically -- no copy lan
   expect(yafs.execute("mv fixture/hello.txt moved").error?.code).toBe(
     "read_only_mount",
   );
-  // A command's queued operations are validated as one batch before any
-  // of them apply, so the write half of mv never lands just because the
-  // removeTree half would fail -- better than the copy-then-remove
-  // partial-failure this test originally (incorrectly) expected.
+
   expect(yafs.execute("cat moved").error?.code).toBe("not_found");
   expect(yafs.exec("cat fixture/hello.txt")).toBe("hello");
 });
@@ -160,7 +157,7 @@ test("du sums files and bytes recursively across a directory tree", () => {
   yafs.exec("mkdir docs/nested");
   yafs.exec("echo deep > docs/nested/file.md");
   yafs.exec("ln -s guide.md docs/latest");
-  // 2 real files + 1 symlink (0 bytes of its own) = 3 files.
+
   expect(yafs.exec("du docs")).toBe("files: 3\nbytes: 9");
 });
 

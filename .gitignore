@@ -3,5 +3,7 @@ node_modules/
 .claude/
 .yafs/
 .yafs.*/
+.yafs-test/
 site/
+coverage/
 .env

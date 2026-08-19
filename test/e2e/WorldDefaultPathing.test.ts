@@ -16,12 +16,6 @@ import {
   toolServer,
 } from "../plugins/agent/agent_tool_server_helpers";
 
-// Closes the gap a reviewer flagged: earlier tests proved /world default
-// pathing parses correctly and proved a tool-enabled persona can drive a
-// tool loop, but never together — a persona scoped to a pathless GitHub
-// mount's *default* /world path, discovering and reading real published
-// content through start_here/tree/read, exactly the "no repo context"
-// failure this whole effort was motivated by.
 test("a persona scoped to a pathless GitHub mount's default /world path discovers and reads real content via MCP", async () => {
   const yafs = configuredYafs();
   await activateDesired(yafs, manifest(), "acme-widget");
@@ -54,9 +48,7 @@ async function assertStartHere(client: Client) {
   expect(startHere.rootMounts).toEqual([
     { root: WORLD_ROOT, mount: WORLD_ROOT, provider: "github" },
   ]);
-  // Three mounts are active (github, slack, agents) but this persona is
-  // scoped to the github root alone — the other two must not leak into an
-  // orientation response it receives over MCP.
+
   expect(startHere.mounts).toHaveLength(1);
   expect(startHere.mounts.at(0)).toMatchObject({
     path: WORLD_ROOT,
@@ -128,7 +120,7 @@ function pull() {
 function manifest() {
   const github =
     "{id: acme-widget, provider: github, " +
-    'config: {repository: acme/widget, query: "is:open", max: 2}, ' +
+    'config: {repository: acme/widget, pulls: {query: "is:open", max: 2}}, ' +
     "capabilities: [network.github-api]}";
   const slack =
     "{id: updates, provider: slack, config: {channel: C123, max: 10}, " +

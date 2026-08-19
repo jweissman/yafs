@@ -1,11 +1,5 @@
 import { PersonaConfig } from "../../mounts/types";
 
-// The only integration shape Yafs ever sends: a reference to its own
-// scoped MCP server (AgentToolServer), pre-registered in LM Studio's own
-// mcp.json by AgentToolMcpSync (see that file). NOT `ephemeral_mcp` — LM
-// Studio's SSRF guard rejects loopback URLs for that per-request/dynamic
-// integration type; only mcp.json-declared `plugin` servers are exempt,
-// since registering one requires local filesystem access to begin with.
 export interface PluginIntegration {
   type: "plugin";
   id: string;

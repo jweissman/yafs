@@ -9,6 +9,7 @@ import { DesiredMounts } from "./mounts/DesiredMounts";
 import { CacheService } from "./cache/CacheService";
 import { mountContext } from "./MountContext";
 import { mutationContext } from "./YafsMutationContext";
+import { gitFilesystem, GitFilesystem } from "./GitCommandContext";
 
 interface Dependencies {
   clock: Clock;
@@ -23,6 +24,7 @@ interface Dependencies {
   traces: TraceService;
   cache: CacheService;
   desired?: DesiredMounts;
+  runProgram: CommandContext["runProgram"];
 }
 
 export function commandContext(dependencies: Dependencies): CommandContext {
@@ -31,9 +33,13 @@ export function commandContext(dependencies: Dependencies): CommandContext {
     ...filesystem(dependencies),
     ...mounts(dependencies),
     ...mutations(dependencies),
-    traces: dependencies.traces,
-    cache: dependencies.cache,
+    ...services(dependencies),
   };
+}
+
+function services(dependencies: Dependencies) {
+  const { traces, cache, runProgram } = dependencies;
+  return { traces, cache, runProgram };
 }
 
 function session(dependencies: Dependencies) {
@@ -44,34 +50,45 @@ function identity({ clock, user, pwd }: Dependencies) {
   return { clock, user, pwd };
 }
 
-function shell({ resolve, required, help, workspace }: Dependencies) {
+function shell({ resolve, required, help, workspace, mounts }: Dependencies) {
   return {
     resolve,
     required,
     help,
     cd: (path: string) => {
-      workspace.cd(path);
+      cd(workspace, gitFilesystem(mounts, workspace).type, resolve(path));
     },
   };
 }
 
-function filesystem({ workspace }: Dependencies) {
-  return { ...reads(workspace), ...inspects(workspace) };
+function cd(
+  workspace: YafsWorkspace,
+  type: GitFilesystem["type"],
+  absolute: AbsolutePath,
+) {
+  if (type(absolute, true) !== "directory") {
+    throw new Error(`No such directory: ${absolute}`);
+  }
+  workspace.enter(absolute);
 }
 
-function reads(workspace: YafsWorkspace) {
+function filesystem({ workspace, mounts }: Dependencies) {
+  const git = gitFilesystem(mounts, workspace);
+  return { ...reads(workspace, git), ...inspects(workspace, git) };
+}
+
+function reads(workspace: YafsWorkspace, git: GitFilesystem) {
   return {
-    exists: (path: AbsolutePath) => workspace.exists(path),
+    exists: git.exists,
     read: (path: AbsolutePath) => workspace.read(path),
     readlink: (path: AbsolutePath) => workspace.readlink(path),
-    list: (path: AbsolutePath) => workspace.list(path),
+    list: git.list,
   };
 }
 
-function inspects(workspace: YafsWorkspace) {
+function inspects(workspace: YafsWorkspace, git: GitFilesystem) {
   return {
-    type: (path: AbsolutePath, follow?: boolean) =>
-      workspace.type(path, follow),
+    type: git.type,
     origins: (path: AbsolutePath) => workspace.origins(path),
     provenance: (path: AbsolutePath) => workspace.provenance(path),
     mounts: () => workspace.mountLines(),

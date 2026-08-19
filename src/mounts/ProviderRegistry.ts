@@ -1,5 +1,6 @@
 import { GitHubCollectionSource } from "../plugins/github/GitHubCollectionSource";
 import { SlackCollectionSource } from "../plugins/slack/SlackCollectionSource";
+import { GitHubSettings } from "../plugins/github/GitHubSettings";
 import { SnapshotMaterializer } from "./SnapshotMaterializer";
 import { MountRecord, PreparedMountRecord } from "./types";
 import { Plugin } from "./Plugin";
@@ -8,6 +9,15 @@ import { FixturePlugin } from "../plugins/fixture/FixturePlugin";
 import { GitHubPlugin } from "../plugins/github/GitHubPlugin";
 import { SlackPlugin } from "../plugins/slack/SlackPlugin";
 import { AgentPlugin } from "../plugins/agent/AgentPlugin";
+import { SchedulerPlugin } from "../plugins/scheduler/SchedulerPlugin";
+
+export interface ProviderSources {
+  github?: GitHubCollectionSource;
+  authenticatedGithub?: GitHubCollectionSource;
+  slack?: SlackCollectionSource;
+
+  gitSettings?: GitHubSettings;
+}
 
 export class ProviderRegistry {
   private readonly definitions: Map<string, Plugin>;
@@ -16,11 +26,10 @@ export class ProviderRegistry {
     github?: GitHubCollectionSource,
     authenticatedGithub?: GitHubCollectionSource,
     slack?: SlackCollectionSource,
+    gitSettings?: GitHubSettings,
   ) {
-    const list = providerDefinitions(github, authenticatedGithub, slack);
-    this.definitions = new Map(
-      list.map((definition) => [definition.name, definition]),
-    );
+    const sources = { github, authenticatedGithub, slack, gitSettings };
+    this.definitions = definitionsMap(providerDefinitions(sources));
   }
 
   assertGranted(record: Pick<MountRecord, "id" | "provider" | "capabilities">) {
@@ -66,12 +75,18 @@ export class ProviderRegistry {
   }
 }
 
-function providerDefinitions(
-  github?: GitHubCollectionSource,
-  authenticatedGithub?: GitHubCollectionSource,
-  slack?: SlackCollectionSource,
-): Plugin[] {
-  const githubPlugin = new GitHubPlugin({ github, authenticatedGithub });
-  const builtins = [new FixturePlugin(), new AgentPlugin()];
-  return [...builtins, githubPlugin, new SlackPlugin(slack)];
+function definitionsMap(list: Plugin[]): Map<string, Plugin> {
+  return new Map(list.map((definition) => [definition.name, definition]));
+}
+
+function providerDefinitions(sources: ProviderSources): Plugin[] {
+  const { github, authenticatedGithub, slack, gitSettings } = sources;
+
+  const githubSources = { github, authenticatedGithub };
+  const githubPlugin = new GitHubPlugin(githubSources, gitSettings);
+  return [...builtinPlugins(), githubPlugin, new SlackPlugin(slack)];
+}
+
+function builtinPlugins(): Plugin[] {
+  return [new FixturePlugin(), new AgentPlugin(), new SchedulerPlugin()];
 }

@@ -39,6 +39,16 @@ export interface PluginDriver {
   recover?(): Promise<unknown>;
 }
 
+export interface Citation {
+  key: string;
+  url: string;
+  label: string;
+}
+export interface CitationRenderer {
+  kind: string;
+  render(reference: object): Citation | undefined;
+}
+
 export abstract class Plugin {
   constructor() {}
   abstract readonly name: MountProvider;
@@ -53,21 +63,11 @@ export abstract class Plugin {
   actions(): PluginActionDefinition[] {
     return [];
   }
-  // A provider-derived default under /world, used only when the manifest
-  // omits `path:` — an explicit `path:` always wins. No default means the
-  // provider has no natural identity to derive one from (e.g. fixture,
-  // agent); `path:` stays required for those. See PRODUCT-SPEC.md's
-  // "Namespace: three concepts" section.
+
   defaultPath(_config: MountConfig): string | undefined {
     return undefined;
   }
-  // A short, human/model-readable hint of the resource layout beneath this
-  // mount's root (e.g. "pulls/<number>/{metadata.json,diff.patch}"),
-  // surfaced to a scoped persona via yafs.start_here so it doesn't have to
-  // infer the shape from source code or stale prompt text. Informational
-  // only, not a validated schema — see PRODUCT-SPEC.md's "Namespace: three
-  // concepts" section. No description means nothing beyond the default
-  // orientation is worth stating (e.g. fixture, agent).
+
   worldDescription(): string | undefined {
     return undefined;
   }
@@ -81,6 +81,14 @@ export abstract class Plugin {
     return [];
   }
   commands(): BuiltinCommand[] {
+    return [];
+  }
+
+  createDriver(_wiring: Wiring): PluginDriver[] {
+    return [];
+  }
+
+  citationRenderers(): CitationRenderer[] {
     return [];
   }
 }

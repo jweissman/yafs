@@ -2,9 +2,6 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { FSNode, ProviderOrigin } from "./FSNode";
 
 export const nodeStoreWriteGuard = {
-  // A ctl write is never stored as content — CtlDispatch intercepts or
-  // passes it through — so it must reach planning even under a read-only
-  // mount, or a registered handler could never fire there.
   assertWritable(node: FSNode, path: AbsolutePath) {
     if (isCtl(path)) {
       return;

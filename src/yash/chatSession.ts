@@ -36,12 +36,6 @@ function newSession(options: ChatSessionOptions): ChatSession {
   };
 }
 
-// Node's readline fires every registered SIGINT listener, not just the most
-// recent one — merely adding our own would leave the outer REPL's listener
-// active too, so Ctrl-C during chat would abort the outer session's
-// controller as a side effect (the exact bug this whole function exists to
-// avoid) once chat returns. Swap the outer listener(s) out for the duration
-// instead, and restore them verbatim afterward.
 async function withSigintCleanup(
   session: ChatSession,
   action: () => Promise<void>,

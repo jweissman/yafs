@@ -7,6 +7,8 @@ export class CatCommand {
   readonly access = "read";
   constructor() {}
   execute(context: CommandContext, args: string[]) {
-    return context.read(commandPath(context, args, this.name));
+    const path = commandPath(context, args, this.name);
+    const backing = context.gitBacking(path);
+    return backing ? context.gitRead(backing) : context.read(path);
   }
 }

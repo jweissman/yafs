@@ -1,4 +1,16 @@
 Yash {
+  // Excludes "\n" from Ohm's default whitespace-skip so a newline is
+  // always a significant statement separator, never silently swallowed
+  // inside a FunCall's argument list -- verified live: before this
+  // override, "echo a\nb" parsed as `echo` with args [a, b], merging two
+  // lines into one command's arguments.
+  space := "\t" | "\r" | " "
+
+  // Command stays the first-defined rule -- Ohm's default match start
+  // rule is whichever rule is defined first, and every existing
+  // interactive single-line parse relies on that default. Program is a
+  // second, explicit start rule for script bodies; Interpreter.ts always
+  // names its rule explicitly rather than depending on definition order.
   Command = CoreExp ">" path        -- redirect
           | CoreExp                 -- plain
   CoreExp = FunCall
@@ -13,6 +25,23 @@ Yash {
   ShellEscape = "$" "(" "(" Exp ")" ")"
   CommandSubstitution = "$" "(" FunCall ")"
 
+  Program = newline? NonemptyListOf<Statement, newline> newline?
+  newline = "\n"+
+
+  // A Statement is a Command or an If -- Ohm tries If first (ordered
+  // choice), which only ever commits once it sees the literal "if"
+  // token, so an ordinary command happening to be named "if" still
+  // falls through to Command on backtrack. The condition is truthy
+  // when its own output is exactly the literal string "true" (matching
+  // `test`'s existing convention), not an exit-code/throw check -- see
+  // LANGUAGE-ROADMAP.md's L2 scoping for why: `test -f missing` already
+  // succeeds and just returns "false", so a throw-based `if` would
+  // silently never take the else branch.
+  Statement = If | Command
+  If = "if" CoreExp Block "else" Block  -- withElse
+     | "if" CoreExp Block               -- plain
+  Block = "{" newline? ListOf<Statement, newline> newline? "}"
+
   Exp = AddExp
   AddExp = AddExp "+" PriExp  -- plus
            | AddExp "-" PriExp  -- minus
@@ -25,7 +54,11 @@ Yash {
   pathSegment = pathChar+
   pathChar = letter | digit | "." | "-" | "_"
   identifier = letter (letter | digit)*
-  variable = "$" identifier
+  // "$1"-style positional parameters, alongside named variables like
+  // "$USER" -- a script-scoped binding table resolves these the same
+  // way YafsValues.ts resolves session variables, as a value substitution
+  // after parsing, never by re-parsing interpolated text.
+  variable = "$" (identifier | digit+)
   singleQuoted = "'" singleChar* "'"
   singleChar = ~"'" any
   DoubleQuoted = "\"" DoublePart* "\""

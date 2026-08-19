@@ -47,8 +47,6 @@ function lastLines(content: string, count: number): string {
   return `${complete.slice(-count).join("\n")}\n`;
 }
 
-// `signal` exists purely for tests to bound this otherwise-infinite loop;
-// `yafsd logs --tail` relies on Ctrl-C to stop, same as any other `tail -f`.
 async function follow(path: string, offset: number, signal?: AbortSignal) {
   announceFollowing(path);
   let position = offset;

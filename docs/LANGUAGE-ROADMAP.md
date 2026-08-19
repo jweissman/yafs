@@ -387,10 +387,8 @@ declared where the trigger is configured — turning this session's hand-built
 "the poller can only ever write two specific ctl paths" property into a
 declared policy instead of a TypeScript implementation detail.
 
-**Worked example**, illustrating the target shape without claiming today's
-grammar parses it (it doesn't yet — block bodies, `if`/`else`, and
-newline-separated sequencing inside `{ }` are still needed; `Command` is
-currently the sole top-level parse rule, with no `Program = Command*` root):
+**Worked example**, illustrating the target shape. The first line now
+parses and runs for real; the `if` block does not yet:
 
 ```sh
 agent send $PERSONA --chat $CHAT_ID "$SENDER: $TEXT"
@@ -399,14 +397,99 @@ if test -f runs/$RUN_ID/response.md {
 }
 ```
 
-**Explicitly not decided here:** the concrete block/sequencing grammar (needs
-its own Ohm-review pass); whether script files live in the VFS (inspectable
-like any file) or are host-config-only, which is the same "capability grant
-must not be a plain VFS write" question the `.yafsmeta` removal already
-settled once this session, applied to a new surface, and deserving the same
-deliberate answer rather than a default; and how a driver's allow-list is
-declared (a new manifest field, most likely, but not designed here). This
-section is a scoping document, not a green light to implement.
+**Implemented, not just scoped:** a first slice shipped —
+`Program = newline? NonemptyListOf<Command, newline> newline?` in
+`Yash.ohm`, run via a new `run PATH [ARGS...]` builtin
+(`src/commands/RunCommand.ts`). `$1`-style positional parameters work
+(`variable = "$" (identifier | digit+)`), bound as a script-scoped table
+resolved before session variables, exactly as scoped above — never
+re-parsed source, closing the injection risk by construction. A live bug
+was found and fixed along the way: the grammar's default whitespace-skip
+silently swallowed newlines inside a `FunCall`'s argument list (`"echo
+a\nb"` parsed as one command with two args, verified with a real Ohm probe
+before assuming); `Yash.ohm` now overrides `space` to exclude `\n`, so a
+newline is always a significant statement separator. A whole script run is
+all-or-nothing, matching a single command's existing queuing (no partial
+effects on a mid-script failure), and `run` is correctly rejected inside a
+read-only `$()` substitution (`access: "control"`, checked by the existing
+`assertReadOnlyCommand`, no new mechanism needed). `Command` deliberately
+stayed the grammar's first-defined rule (Ohm's default match-start rule)
+so every existing interactive parse is unaffected; `Interpreter.parse()`
+now names its rule explicitly rather than depending on definition order,
+as defense in depth against the same class of mistake recurring.
+
+**`if`/`else` — also implemented now**, in its own pass as planned rather
+than rushed alongside sequencing. `Statement = If | Command` and
+`Block = "{" newline? ListOf<Statement, newline> newline? "}"` in
+`Yash.ohm`; a `Program`/`Block` is a list of statements, so `if` can
+nest and each branch can hold more than one line. Truthiness is
+deliberately **not** an exit-code/throw check: the condition command's
+own output must equal the literal string `"true"`, matching `test`'s
+existing convention (`test -f missing` already succeeds and just returns
+`"false"` — a throw-based `if` would silently never take the `else`
+branch, breaking the very case the worked example above relies on). One
+new predicate shipped alongside it, `test -c PATTERN PATH` ("contains" —
+a plain literal-substring check, not regex, same minimalist spirit as
+the existing `-e/-f/-d/-L`), since there was previously no way to test a
+file's *content*, only its existence/type — needed for a script to react
+to something like a JSON field's value without a new command per field.
+All of it verified live against the real daemon, not just unit-tested:
+a real script combining `if`/`test -c`/`commits/HEAD` (see
+[FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)'s M6.65) correctly reported the
+real, current CI status of a live GitHub mount.
+
+**Scheduler driver — built, but as a spike, not a workflow-grade
+feature; do not treat it as more finished than this.** A `scheduler`
+plugin (`src/plugins/scheduler/`) exists: a `SchedulerDriver`, the same
+shape as `SlackInboundPoller`, calls `runProgram` on `setInterval`,
+gated by a `CommandAccess` allow-list (`read`/`session`/`mutate`/
+`control`) checked against the whole script before any of it runs. A
+careful review after building it found this is a timer-backed script
+launcher, not durable scheduling, and the gaps are real, not polish:
+- Tick due/handled state lives only in memory (`SchedulerDriver`'s own
+  `Map`) — a restart loses schedule progress entirely, with no
+  deduplication or idempotency story.
+- The script is read fresh from its live VFS path every tick, unpinned —
+  editing that file changes autonomous behavior with no record of what
+  changed or when. This silently answered, in passing, a question this
+  document previously flagged as deliberately undecided ("whether script
+  files live in the VFS... or are host-config-only for an automated
+  trigger" — the same "capability grant must not be a plain VFS write"
+  question `.yafsmeta`'s removal already settled once): a scheduled
+  mount's script does live in the VFS today (published via a `fixture`
+  mount, so at least it's declared in `yafs.plugins.yaml` rather than a
+  bare write), but nothing pins it to a digest, so that answer was never
+  actually deliberated the way this document says it should be.
+  Source-pinning (a digest, checked against the file before each run) is
+  still the right next step and is not built.
+- No overlap/coalesce policy: a script slower than its own `intervalMs`
+  queues ticks indefinitely (serialized correctly, so no data race, but
+  unboundedly backed up) rather than skipping or coalescing.
+- It runs as one shared, session-wide `Yafs` instance with no per-mount
+  path-root scope — unlike `ScopedMcpClient`'s `tools.roots` for agent
+  personas, a scheduled script's `allow` list restricts *which kinds* of
+  commands it can run, not *which paths*.
+- No durable per-tick run record, status file, audit detail, or
+  cancellation handle — only `console.log`/`console.error`.
+
+**Validated live, deliberately low-stakes, in `yafs.plugins.yaml`'s `pulse`
+mount:** `scripts/heartbeat.yash` (`echo "$(date)" > heartbeat.txt`, no
+network call, `allow: [read, mutate]`) on a 30-second interval, watched
+firing repeatedly over real wall-clock time with no leaked timers and no
+errors: `heartbeat.txt` advanced 13:23:46 → 13:24:16 → 13:24:46 → 13:25:16,
+exactly on cadence, across a daemon restart needed to pick up the new
+plugin code. This validates the *mechanism* (fire reliably, unattended, no
+corruption) in isolation from whether any given script's content is
+trustworthy — a deliberately separate question, already tested manually
+elsewhere with the reviewer persona. No other mount uses the scheduler.
+
+That live example is the extent of what's proven. Two options, neither
+chosen yet: keep it as a deliberately-unsafe local development
+convenience, explicitly excluded from the product's authority model; or
+promote it with source pinning, durable run records, overlap policy,
+path-root scope, and audit. Do not build further autonomous functionality
+on top of it until that decision is made. See FEATURE-ROADMAP.md's M6.7
+for why this spike is not the same thing as M6.7's own scheduled digest.
 
 L3 iteration must consume a typed path list, never `for x in $(ls ...)`.
 L4 pipelines need a real stream contract: text versus bytes, backpressure,

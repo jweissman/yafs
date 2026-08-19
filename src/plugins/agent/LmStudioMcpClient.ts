@@ -21,18 +21,6 @@ type Fetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-// Must stay comfortably above AgentToolServerBudgets.ts's own MCP-session
-// deadline (5 minutes) -- this timeout wraps the *entire* incoming LM
-// Studio request, including every outbound tool call LM Studio makes back
-// against that MCP session during a rich tool-call turn, plus whatever
-// generation time comes after. A shorter outer timeout here would abort
-// the whole turn before the inner session budget could ever be reached.
-// 10 minutes still wasn't enough live: a local model reasoning over
-// several accumulated PR diffs/metadata after a dozen-plus tool calls can
-// legitimately run long on typical local hardware, and token budget isn't
-// a real constraint here (local inference, no per-token cost). Override
-// per environment via YAFS_LMSTUDIO_TIMEOUT_MS if 30 minutes still isn't
-// enough, rather than raising this default again.
 const DEFAULT_TIMEOUT_MS = 1_800_000;
 
 export class LmStudioMcpClient {
@@ -88,8 +76,6 @@ export class LmStudioMcpClient {
     return this.request(url, init);
   }
 
-  // Required whenever "Allow calling servers from mcp.json" is on, since
-  // that setting itself requires "Require Authentication" in LM Studio.
   private headers(): Record<string, string> {
     const token = this.settings.accessToken;
     return {

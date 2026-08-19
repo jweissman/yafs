@@ -9,6 +9,7 @@ import { EchoCommand } from "./EchoCommand";
 import { PrintfCommand } from "./PrintfCommand";
 import { PwdCommand } from "./PwdCommand";
 import { CdCommand } from "./CdCommand";
+import { RunCommand } from "./RunCommand";
 
 export function sessionCommands(): BuiltinCommand[] {
   return [...infoCommands(), ...shellCommands()];
@@ -30,6 +31,10 @@ function shellCommands(): BuiltinCommand[] {
     new EchoCommand(),
     new PrintfCommand(),
     new PwdCommand(),
-    new CdCommand(),
+    ...moreShellCommands(),
   ];
+}
+
+function moreShellCommands(): BuiltinCommand[] {
+  return [new CdCommand(), new RunCommand()];
 }

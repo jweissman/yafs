@@ -5,9 +5,12 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { log } from "../../Logging";
 import { boundedToolSet } from "../../mcp/BoundedToolSet";
 import { ScopedMcpClient } from "../../mcp/ScopedMcpClient";
 import { callTool, failure, tools } from "../../mcp/Tools";
+
+const toolLog = log.getSubLogger({ name: "agent.tool" });
 
 export function mcpServer(scoped: ScopedMcpClient): McpProtocolServer {
   const server = new McpProtocolServer(
@@ -42,12 +45,12 @@ function callAllowed(
 }
 
 function acceptedCall(scoped: ScopedMcpClient, name: string, args: unknown) {
-  console.log(`agent tool call: ${name} ${JSON.stringify(args)}`);
+  toolLog.info({ tool: name, args }, "agent tool call");
   return callTool(scoped, name, args);
 }
 
 function rejectedCall(name: string) {
-  console.error(`agent tool call rejected: ${name} not permitted`);
+  toolLog.error({ tool: name }, "agent tool call rejected: not permitted");
   return failure(new Error(`Tool not permitted: ${name}`));
 }
 

@@ -69,10 +69,6 @@ export class Journal {
     return operations.map((operation, index) => this.record(operation, index));
   }
 
-  // A threshold check, not an exact-multiple one: a commit batching several
-  // operations at once can otherwise jump straight past every multiple of
-  // SNAPSHOT_INTERVAL for a long stretch, silently disabling compaction
-  // (observed live: a snapshot left 5 days and 700+ operations stale).
   async compact(store: NodeStore) {
     if (this.sequence - this.lastCompactedSequence < SNAPSHOT_INTERVAL) {
       return;

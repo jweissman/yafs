@@ -36,10 +36,6 @@ function contentFields(details: Pull) {
   return { body: body ?? undefined, createdAt, comments, reviewComments };
 }
 
-// Defensive on labels, not just type-driven: unlike the other fields
-// here (which degrade harmlessly to undefined if a response omits one),
-// .map() on an absent labels array would throw instead -- a real crash
-// this session's own test fixtures surfaced once the field was added.
 function reviewFields(details: Pull) {
   const { mergeable_state: mergeableState, html_url: htmlUrl } = details;
   const labels = (details.labels ?? []).map((label) => label.name);

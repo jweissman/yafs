@@ -10,16 +10,19 @@
     "docs": "uvx --with mkdocs-material mkdocs serve",
     "fmt": "bunx prettier src test --write && eslint --fix .",
     "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
     "typecheck": "tsc --noEmit",
     "yafsd": "bun run src/yafsd.ts",
     "yash": "bun run src/yash.ts",
     "mcp": "bun run src/yafs-mcp.ts",
     "validate:m6.3": "zsh script/validate-m6-3.sh",
+    "validate:git-mirror": "bun run script/validate-git-mirror.ts",
     "check": "bun test --dots && bun lint && bun typecheck"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "ohm-js": "^17.5.0",
+    "tslog": "^5.1.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
@@ -28,6 +31,7 @@
     "@types/node": "^26.1.2",
     "bun-types": "^1.3.14",
     "eslint": "^10.8.0",
+    "eslint-plugin-no-comments": "^1.2.1",
     "globals": "^17.8.0",
     "jiti": "^2.7.0",
     "prettier": "^3.9.6",

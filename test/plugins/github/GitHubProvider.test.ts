@@ -31,6 +31,64 @@ test("a GitHub collection becomes an immutable, attributable review snapshot", a
   expect(origin.revision).toMatch(/^github:/);
 });
 
+test("a GitHub source with no commits() support publishes only pulls", async () => {
+  const yafs = configuredYafs(new ProviderRegistry(fakeSource()));
+  await activateDesired(yafs, githubManifest());
+  await refreshDesired(yafs, githubManifest());
+  expect(yafs.exec("ls reviews")).not.toContain("commits");
+});
+
+test("a bounded commit collection publishes alongside pulls", async () => {
+  const source = new GitHubCollectionSource(fakeCommitClient());
+  const yafs = configuredYafs(new ProviderRegistry(source));
+  await activateDesired(yafs, githubManifest());
+  await refreshDesired(yafs, githubManifest());
+  expect(
+    parseJson(yafs.exec("cat reviews/commits/abc123/metadata.json")),
+  ).toEqual({
+    sha: "abc123",
+    author: undefined,
+    authorName: undefined,
+    message: "Fix the thing",
+    date: undefined,
+    htmlUrl: "https://github.test/acme/widget/commit/abc123",
+    ciStatus: "none",
+  });
+});
+
+test("commits/HEAD mirrors the newest (first-returned) commit, not just any one", async () => {
+  const source = new GitHubCollectionSource(fakeCommitClient());
+  const yafs = configuredYafs(new ProviderRegistry(source));
+  await activateDesired(yafs, githubManifest());
+  await refreshDesired(yafs, githubManifest());
+  expect(yafs.exec("cat reviews/commits/HEAD/metadata.json")).toBe(
+    yafs.exec("cat reviews/commits/abc123/metadata.json"),
+  );
+  expect(
+    parseJson(yafs.exec("cat reviews/commits/HEAD/metadata.json")),
+  ).toMatchObject({ sha: "abc123" });
+});
+
+function fakeCommitClient() {
+  return {
+    pulls: async () => [pull("diff --git a/a b/a")],
+    commits: async () => [
+      {
+        sha: "abc123",
+        message: "Fix the thing",
+        htmlUrl: "https://github.test/acme/widget/commit/abc123",
+        ciStatus: "none" as const,
+      },
+      {
+        sha: "older456",
+        message: "An earlier commit",
+        htmlUrl: "https://github.test/acme/widget/commit/older456",
+        ciStatus: "success" as const,
+      },
+    ],
+  };
+}
+
 test("a GitHub manifest declares its network capability and rejects unknown configuration", async () => {
   const yafs = configuredYafs(new ProviderRegistry(fakeSource()));
   const ungranted = githubManifest().replace(
@@ -40,9 +98,13 @@ test("a GitHub manifest declares its network capability and rejects unknown conf
   await expect(activateDesired(yafs, ungranted)).rejects.toThrow(
     "Capabilities are not granted: network.other",
   );
-  const unknownField = githubManifest().replace("max: 2", "unknown: 2");
+  const unknownField = githubManifest().replace(
+    "repository: acme/widget",
+    "repository: acme/widget, unknown: 2",
+  );
   expect(() => parseManifest(unknownField)).toThrow(
-    "Unknown github config field: unknown (expected one of: repository, query, max)",
+    "Unknown github config field: unknown (expected one of: repository, " +
+      "pulls, commits)",
   );
 });
 
@@ -82,6 +144,25 @@ test("a missing public source identifies the configured GitHub plugin", async ()
   );
 });
 
+test("a mount with neither pulls nor commits configured never calls the collection source", async () => {
+  const yafs = configuredYafs(new ProviderRegistry(throwingSource()));
+  const activated = activateDesired(yafs, sourceOnlyManifest());
+  await expect(activated).resolves.toBeDefined();
+  expect(yafs.exec("ls reviews")).toBe("");
+});
+
+function throwingSource() {
+  return new GitHubCollectionSource({
+    pulls: () => {
+      throw new Error("pulls should never be called for a source-only mount");
+    },
+  });
+}
+
+function sourceOnlyManifest() {
+  return '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget}, capabilities: [network.github-api]}]}';
+}
+
 function configuredYafs(providers: ProviderRegistry) {
   const store = new NodeStore();
   return new Yafs({
@@ -109,5 +190,5 @@ function pull(diff: string) {
 }
 
 function githubManifest() {
-  return '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, query: "is:pr is:open", max: 2}, capabilities: [network.github-api]}]}';
+  return '{version: 1, mounts: [{id: review, path: reviews, provider: github, config: {repository: acme/widget, pulls: {query: "is:pr is:open", max: 2}}, capabilities: [network.github-api]}]}';
 }

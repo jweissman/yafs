@@ -1,6 +1,7 @@
 import * as ohm from "ohm-js";
 import grammarContent from "./Yash.ohm" with { type: "text" };
 import { Command } from "../types/Command";
+import { Program } from "../types/Program";
 import { commandAst } from "./CommandAst";
 import { wordAst } from "./WordAst";
 import { expressionAst } from "./ExpressionAst";
@@ -19,18 +20,27 @@ export class Interpreter {
   }
 
   parse(input: string): Command {
-    const matchResult = this.grammar.match(input);
+    return astFor(this.semantics, this.matched(input, "Command")) as Command;
+  }
+
+  parseProgram(input: string): Program {
+    const match = this.matched(input, "Program");
+    return astFor(this.semantics, match) as Program;
+  }
+
+  private matched(input: string, rule: string): ohm.MatchResult {
+    const matchResult = this.grammar.match(input, rule);
     if (matchResult.failed()) {
       throw new Error(`Failed to parse input: ${input}`);
     }
-    return astFor(this.semantics, matchResult);
+    return matchResult;
   }
 }
 
-function astFor(semantics: ohm.Semantics, match: ohm.MatchResult): Command {
+function astFor(semantics: ohm.Semantics, match: ohm.MatchResult): unknown {
   const apply = semantics as unknown as (value: ohm.MatchResult) => {
     ast: () => unknown;
   };
   const operation = apply(match);
-  return operation.ast() as Command;
+  return operation.ast();
 }

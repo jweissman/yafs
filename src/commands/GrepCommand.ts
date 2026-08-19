@@ -11,21 +11,54 @@ export class GrepCommand implements BuiltinCommand {
   constructor() {}
   execute(context: CommandContext, args: string[]) {
     const query = this.arguments(args);
-    const result = grep(context, query.pattern, query.paths, {
+    const backing = this.singleGitBacking(context, query.paths);
+    return backing
+      ? this.gitExecute(context, query, backing)
+      : render(query, this.vfsResult(context, query));
+  }
+
+  private vfsResult(context: CommandContext, query: Query) {
+    return grep(context, query.pattern, query.paths, {
       ignoreCase: query.flags.has("-i"),
       invert: query.flags.has("-v"),
       countOnly: query.flags.has("-c"),
       filesOnly: query.flags.has("-l"),
     });
+  }
+
+  private singleGitBacking(context: CommandContext, paths: string[]) {
+    return paths.length === 1
+      ? context.gitBacking(context.resolve(paths[0]))
+      : undefined;
+  }
+
+  private async gitExecute(
+    context: CommandContext,
+    query: Query,
+    backing: NonNullable<ReturnType<CommandContext["gitBacking"]>>,
+  ) {
+    const options = gitOptions(query);
+    const result = await context.gitGrep(backing, query.pattern, options);
     return render(query, result);
   }
-  private arguments(args: string[]) {
+
+  private arguments(args: string[]): Query {
     const { flags, rest } = takeFlags(args);
     if (rest.length < 2) {
       throw new Error("grep requires a pattern and path");
     }
     return { flags, pattern: rest[0], paths: rest.slice(1) };
   }
+}
+
+interface Query {
+  flags: Set<string>;
+  pattern: string;
+  paths: string[];
+}
+
+function gitOptions(query: Query) {
+  return { ignoreCase: query.flags.has("-i"), invert: query.flags.has("-v") };
 }
 
 function takeFlags(args: string[]) {

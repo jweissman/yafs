@@ -25,12 +25,6 @@ export async function waitForState(
   }
 }
 
-// 3s (the old 30x100ms budget) is too tight once startup reconciles a
-// mount that fetches real content over the network (observed live: a
-// 100-PR GitHub mount's reconcile outlasted it, so the CLI reported a
-// generic timeout instead of the real error already sitting in the log
-// a moment later). Poll interval stays short so a normal fast boot still
-// reports promptly; only a genuinely slow reconcile eats the longer cap.
 const STARTUP_POLL_BUDGET = 600;
 
 async function pollForState(attempt: Attempt) {

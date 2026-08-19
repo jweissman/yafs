@@ -8,8 +8,7 @@ test("the GitHub API client queries a bounded collection and fetches each immuta
     { apiUrl: "https://github.test", token: "secret" },
     fakeFetch(requests),
   );
-  const pulls = await client.pulls({
-    repository: "acme/widget",
+  const pulls = await client.pulls("acme/widget", {
     query: "is:pr is:open",
     max: 2,
   });
@@ -39,18 +38,13 @@ function assertExpectedRequests(requests: Request[]) {
   ).toBe(true);
 }
 
-// Regression coverage for real, useful data yafs was discarding: author,
-// draft status, and diff-size stats all come back on the same per-PR GET
-// already made for head.sha -- no extra request needed, just fields that
-// were being read past.
 test("the GitHub API client carries author, draft status, and diff-size stats through, at no extra request cost", async () => {
   const requests: Request[] = [];
   const client = new GitHubApiClient(
     { apiUrl: "https://github.test", token: "secret" },
     richFetch(requests),
   );
-  const pulls = await client.pulls({
-    repository: "acme/widget",
+  const pulls = await client.pulls("acme/widget", {
     query: "is:pr is:open",
     max: 1,
   });
@@ -77,6 +71,68 @@ test("the GitHub API client carries author, draft status, and diff-size stats th
   ]);
   expect(requests).toHaveLength(3);
 });
+
+test("the GitHub API client fetches recent commits with a combined CI status", async () => {
+  const requests: Request[] = [];
+  const client = new GitHubApiClient(
+    { apiUrl: "https://github.test", token: "secret" },
+    commitsFetch(requests),
+  );
+  const commits = await client.commits({ repository: "acme/widget" });
+  expect(commits).toEqual([
+    {
+      sha: "abc123",
+      author: "octocat",
+      authorName: "Octo Cat",
+      message: "Fix the thing",
+      date: "2026-08-01T00:00:00Z",
+      htmlUrl: "https://github.test/acme/widget/commit/abc123",
+      ciStatus: "failure",
+    },
+  ]);
+  expect(requests.map((request) => request.url)).toEqual([
+    "https://github.test/repos/acme/widget/commits?per_page=12",
+    "https://github.test/repos/acme/widget/commits/abc123/check-runs?per_page=100",
+  ]);
+});
+
+test("commits.max bounds the commits fetch independently of pulls' own max", async () => {
+  const requests: Request[] = [];
+  const client = new GitHubApiClient(
+    { apiUrl: "https://github.test", token: "secret" },
+    commitsFetch(requests),
+  );
+  await client.commits({
+    repository: "acme/widget",
+    commits: { max: 30 },
+  });
+  expect(requests[0].url).toBe(
+    "https://github.test/repos/acme/widget/commits?per_page=30",
+  );
+});
+
+function commitsFetch(requests: Request[]) {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(new Request(input, init));
+    if (requests.length === 1) {
+      return json([
+        {
+          sha: "abc123",
+          commit: {
+            author: { name: "Octo Cat", date: "2026-08-01T00:00:00Z" },
+            message: "Fix the thing",
+          },
+          author: { login: "octocat" },
+          html_url: "https://github.test/acme/widget/commit/abc123",
+        },
+      ]);
+    }
+    return json({
+      total_count: 1,
+      check_runs: [{ status: "completed", conclusion: "failure" }],
+    });
+  };
+}
 
 function richFetch(requests: Request[]) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -140,7 +196,7 @@ test("the GitHub API client reports non-successful responses without exposing cr
     async () => new Response("", { status: 403 }),
   );
   await expect(
-    client.pulls({ repository: "acme/widget", query: "is:open", max: 1 }),
+    client.pulls("acme/widget", { query: "is:open", max: 1 }),
   ).rejects.toThrow("GitHub API request failed: 403");
 });
 
@@ -153,8 +209,7 @@ test("a failed request reports its url, accept header, request id, and body for 
     { apiUrl: "https://github.test" },
     async () => response,
   );
-  const failure = client.pulls({
-    repository: "acme/widget",
+  const failure = client.pulls("acme/widget", {
     query: "is:open",
     max: 1,
   });
@@ -175,7 +230,7 @@ test("failure detail still reports status when reading the failed response body 
     async () => response,
   );
   await expect(
-    client.pulls({ repository: "acme/widget", query: "is:open", max: 1 }),
+    client.pulls("acme/widget", { query: "is:open", max: 1 }),
   ).rejects.toThrow("GitHub API request failed: 500");
 });
 
@@ -185,8 +240,7 @@ test("the GitHub API client times out a stalled request instead of hanging forev
     hangingFetch(),
     20,
   );
-  const failure = client.pulls({
-    repository: "acme/widget",
+  const failure = client.pulls("acme/widget", {
     query: "is:open",
     max: 1,
   });
@@ -202,8 +256,7 @@ test("a non-timeout network error propagates as-is", async () => {
       throw new Error("ECONNREFUSED");
     },
   );
-  const failure = client.pulls({
-    repository: "acme/widget",
+  const failure = client.pulls("acme/widget", {
     query: "is:open",
     max: 1,
   });

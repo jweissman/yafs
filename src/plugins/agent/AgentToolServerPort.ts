@@ -1,9 +1,3 @@
-// The real `yafsd` binary's chosen port (not AgentToolServer's own default,
-// which stays an OS-assigned ephemeral port — see AgentToolServer.start()).
-// Fixed rather than ephemeral: LM Studio's mcp.json registration needs a
-// stable URL across daemon restarts — an ephemeral port would go stale
-// every time and require rewriting mcp.json (and possibly reloading LM
-// Studio) on every `yafsd start`.
 export const DEFAULT_TOOLS_PORT = 7338;
 
 export function toolsPort(environment = process.env): number {

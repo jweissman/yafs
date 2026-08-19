@@ -39,7 +39,7 @@ test("a manifest rejects a plugin with a bad id, path, or provider, naming the m
 test("a github mount with no path: defaults under /world/github/<owner>/<repo>", () => {
   const manifest =
     "{version: 1, mounts: [{id: review, provider: github, " +
-    'config: {repository: acme/widget, query: "is:pr", max: 2}, ' +
+    'config: {repository: acme/widget, pulls: {query: "is:pr", max: 2}}, ' +
     "capabilities: [network.github-api]}]}";
   const { manifest: parsed } = parseManifest(manifest);
   expect(parsed.mounts[0].path).toBe("/world/github/acme/widget");
@@ -48,7 +48,7 @@ test("a github mount with no path: defaults under /world/github/<owner>/<repo>",
 test("an explicit path: still overrides the github default", () => {
   const manifest =
     "{version: 1, mounts: [{id: review, path: reviews, provider: github, " +
-    'config: {repository: acme/widget, query: "is:pr", max: 2}, ' +
+    'config: {repository: acme/widget, pulls: {query: "is:pr", max: 2}}, ' +
     "capabilities: [network.github-api]}]}";
   const { manifest: parsed } = parseManifest(manifest);
   expect(parsed.mounts[0].path).toBe("reviews");

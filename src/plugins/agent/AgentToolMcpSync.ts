@@ -1,3 +1,4 @@
+import { log } from "../../Logging";
 import { MountManager } from "../../mounts/MountManager";
 import { AgentConfig, PreparedMountRecord } from "../../mounts/types";
 import { validAgentConfig } from "./AgentConfigValidation";
@@ -12,21 +13,6 @@ import {
 
 export type UrlFor = (mountId: string, personaName: string) => string;
 
-// A PluginDriver (no `start()`, so BackgroundDrivers.startAll() calls
-// `sync()` at daemon startup too — see mounts/Plugin.ts). Keeps a chosen
-// mcp.json's yafs-owned entries matching whichever personas are currently
-// tool-enabled, so LM Studio's `plugin` integration type (the only one that
-// accepts a loopback URL — see LM Studio's SSRF guard on `ephemeral_mcp`)
-// can find them without any manual mcp.json editing.
-//
-// `path` has NO default. This touches a real file outside the project
-// (normally `~/.lmstudio/mcp.json` — see LmStudioMcpJson.ts's
-// `defaultMcpJsonPath`), and countless tests construct a full YafsServer
-// via `pluginDrivers()` without ever intending to touch it. A missing path
-// means "do nothing," not "guess the real one" — only `yafsd.ts` (the real
-// binary) should ever supply `defaultMcpJsonPath()` explicitly. Learned
-// this the hard way: an earlier version defaulted to the real path and a
-// single `bun test` run overwrote the developer's actual mcp.json.
 export class AgentToolMcpSync {
   constructor(
     private readonly mounts: MountManager,
@@ -89,8 +75,9 @@ function toolEnabledEntries(mountId: string, config: AgentConfig) {
 }
 
 function logUnreadable(path: string) {
-  console.error(
-    `agent tool mcp.json sync skipped: ${path} exists but could not be ` +
-      "read or parsed — fix or remove it manually.",
+  log.error(
+    { path },
+    "agent tool mcp.json sync skipped: exists but could not be read or " +
+      "parsed — fix or remove it manually",
   );
 }

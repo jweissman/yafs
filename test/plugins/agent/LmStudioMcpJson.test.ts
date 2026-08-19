@@ -25,10 +25,6 @@ test("yafsKey is deterministic for the same pair", () => {
   expect(yafsKey("agents", "reviewer")).toBe(yafsKey("agents", "reviewer"));
 });
 
-// Regression test: mount id has no character restriction in manifest
-// validation (just `typeof === "string"`), and persona names allow "-",
-// so a naive `${mountId}-${personaName}` join is genuinely ambiguous —
-// this exact pair was found to collide before the hash suffix was added.
 test("yafsKey does not collide when mountId/personaName reconstruct the same joined string", () => {
   expect(yafsKey("a", "b-c")).not.toBe(yafsKey("a-b", "c"));
 });
@@ -45,10 +41,6 @@ test("readMcpJson returns undefined for an existing but unparsable file, rather 
 });
 
 test("readMcpJson does not treat a real read failure as an empty document", async () => {
-  // A directory, not a missing path: readFile fails with EISDIR, not
-  // ENOENT — this must not be collapsed into "safe to treat as empty" the
-  // way a bare `.catch(() => undefined)` would (the exact bug class behind
-  // this session's near-incident overwriting a real mcp.json).
   const path = join(await tempDir(), "mcp.json");
   await mkdir(path);
   expect(await readMcpJson(path)).toBeUndefined();

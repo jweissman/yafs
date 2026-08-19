@@ -1,11 +1,18 @@
-import { Plugin } from "../../mounts/Plugin";
-import {
-  GitHubCollectionSource,
-  ProviderSnapshot,
-} from "./GitHubCollectionSource";
+import { CitationRenderer, Plugin } from "../../mounts/Plugin";
+import { GitHubCollectionSource } from "./GitHubCollectionSource";
 import { githubConfig } from "./GitHubManifest";
+import { githubCitationRenderer } from "./GitHubCitation";
+import { GitHubSettings, githubSettings } from "./GitHubSettings";
+import { syncSourceMirror } from "./GitHubSourceMirror";
+import { githubWorldDescription } from "./GitHubWorldDescription";
+import { configurationError, tokenUnavailable } from "./GitHubPluginErrors";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
 import { GitHubConfig, MountConfig, MountRecord } from "../../mounts/types";
+import {
+  emptySnapshot,
+  fetchedRecord,
+  sourceMarker,
+} from "./GitHubFetchedRecord";
 
 interface Sources {
   github?: GitHubCollectionSource;
@@ -15,13 +22,17 @@ interface Sources {
 export class GitHubPlugin extends Plugin {
   readonly name = "github" as const;
 
-  constructor(private readonly sources: Sources = {}) {
+  constructor(
+    private readonly sources: Sources = {},
+    private readonly gitSettings: GitHubSettings = githubSettings(),
+  ) {
     super();
   }
 
   capabilities() {
     return [
       "network.github-api",
+      "host.git-read",
       ...(this.sources.authenticatedGithub ? ["secret.github-token"] : []),
     ];
   }
@@ -30,22 +41,16 @@ export class GitHubPlugin extends Plugin {
     return githubConfig(value);
   }
 
-  // Absolute (leading slash), not relative to the activating session's
-  // home — /world is one shared, top-level namespace visible to every
-  // principal, not nested under whoever happened to run `plugins apply`.
-  // PathResolver.resolve treats a leading-slash path as already-final and
-  // ignores the session root entirely, so this is the whole mechanism.
   defaultPath(config: MountConfig): string {
     return `/world/github/${(config as GitHubConfig).repository}`;
   }
 
   worldDescription(): string {
-    return (
-      "GitHub PR collection: pulls/<number>/{metadata.json,diff.patch}. " +
-      "This mount's own path names the owner/repo (/world/github/<owner>/" +
-      "<repo>) -- cite a PR as https://github.com/<owner>/<repo>/pull/<number> " +
-      '(singular "pull", not the "pulls/" directory name).'
-    );
+    return githubWorldDescription();
+  }
+
+  citationRenderers(): CitationRenderer[] {
+    return [githubCitationRenderer()];
   }
 
   unavailableCapability(record: Pick<MountRecord, "id">, capability: string) {
@@ -55,13 +60,24 @@ export class GitHubPlugin extends Plugin {
   }
 
   async prepare(record: MountRecord, snapshots: SnapshotMaterializer) {
-    const source = this.requiredSource(record);
-    const captured = await source.snapshot(record.config as GitHubConfig);
-    return snapshots.prepare(
-      this.fetchedRecord(record, captured),
-      captured.entries,
-      captured.resourceReferences,
-    );
+    const captured = await this.collectionSnapshot(record);
+    const mirrored = await this.mirroredIfGranted(record);
+    const fetched = fetchedRecord(record, captured, mirrored);
+    const entries = [...captured.entries, ...sourceMarker(mirrored)];
+    return snapshots.prepare(fetched, entries, captured.resourceReferences);
+  }
+
+  private collectionSnapshot(record: MountRecord) {
+    const config = record.config as GitHubConfig;
+    return config.pulls || config.commits
+      ? this.requiredSource(record).snapshot(config)
+      : Promise.resolve(emptySnapshot());
+  }
+
+  private mirroredIfGranted(record: MountRecord) {
+    return record.capabilities.includes("host.git-read")
+      ? syncSourceMirror(this.gitSettings, record)
+      : { sha: undefined, paths: undefined };
   }
 
   private requiredSource(record: MountRecord) {
@@ -73,26 +89,4 @@ export class GitHubPlugin extends Plugin {
     }
     return source;
   }
-
-  private fetchedRecord(record: MountRecord, snapshot: ProviderSnapshot) {
-    return {
-      ...record,
-      revision: snapshot.revision,
-      fetchedAt: snapshot.fetchedAt,
-    };
-  }
-}
-
-function configurationError(record: MountRecord) {
-  return record.capabilities.includes("secret.github-token")
-    ? tokenUnavailable(record)
-    : `GitHub plugin '${record.id}' has no GitHub source configured.`;
-}
-
-function tokenUnavailable(record: Pick<MountRecord, "id">) {
-  return (
-    `GitHub plugin '${record.id}' requires secret.github-token, but ` +
-    "YAFS_GITHUB_TOKEN was unavailable when yafsd started. Add it to the " +
-    "daemon environment, or remove the grant for a public collection."
-  );
 }

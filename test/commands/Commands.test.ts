@@ -26,6 +26,11 @@ test("session command objects provide the standard session commands", () => {
   expect(yafs.exec("pwd")).toBe("/home/root");
   yafs.exec("mkdir next");
   expect(yafs.exec("cd next")).toBe("");
+  expect(yafs.execute("cd nonexistent").error?.code).toBe("not_found");
+  yafs.exec("touch afile");
+  expect(yafs.execute("cd afile").error?.message).toContain(
+    "No such directory",
+  );
 });
 
 test("plugins desired-state commands report unconfigured instead of throwing when there is no daemon config", async () => {
@@ -97,6 +102,7 @@ function commandContext(): CommandContext {
     mountSummaries: () => [],
     activeMountIds: () => [],
     plugins: () => [],
+    runProgram: unimplemented,
     ...mountContext(),
     ...writeContext(),
   };
@@ -132,6 +138,9 @@ function pluginLookupContext() {
     agentPersona: unimplemented,
     agentPersonas: () => [],
     slackPlugin: unimplemented,
+    gitBacking: () => undefined,
+    gitRead: unimplemented,
+    gitGrep: unimplemented,
   };
 }
 

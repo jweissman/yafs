@@ -1,13 +1,10 @@
 import { SlackMessage } from "./SlackApiClient";
+import { log } from "../../Logging";
 import { awaitReply, RunLookup } from "./SlackReplyWait";
 import { RouteOptions, postIfReplied } from "./SlackInboundRouting";
 
-// A backstop, not the expected turnaround. Reply-waiting runs detached from
-// the poll loop (see routeMessage's `void reply(...)`), so this only bounds
-// how long an abandoned watcher lingers in memory — it does not gate how
-// many inbound messages can be dispatched, and it is never the reason a
-// completed reply fails to post (a run that finishes after this fires is
-// still sitting in its run artifact, just not auto-posted).
+const reactionLog = log.getSubLogger({ name: "slack.reaction" });
+
 const REPLY_SAFETY_TIMEOUT_MS = 10 * 60_000;
 const WORKING_REACTION = "eyes";
 
@@ -70,12 +67,20 @@ async function safely(action: () => Promise<void>) {
 }
 
 function logReactionFailure(error: unknown) {
-  console.error("Slack reaction update failed:", error);
+  reactionLog.error(
+    { error: errorMessage(error) },
+    "Slack reaction update failed",
+  );
 }
 
 function logFailure(lookup: RunLookup, error: unknown) {
-  console.error(
-    `Slack reply for ${lookup.target.personaName} run ${lookup.runId} failed:`,
-    error,
+  const { personaName } = lookup.target;
+  reactionLog.error(
+    { personaName, runId: lookup.runId, error: errorMessage(error) },
+    "Slack reply failed",
   );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

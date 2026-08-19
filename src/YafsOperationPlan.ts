@@ -10,21 +10,42 @@ export function planOperation(yafs: Yafs, operation: WorkspaceOperation) {
     yafs.operationQueue.reset();
     return planned(yafs, operation);
   } catch (error) {
-    return { result: failure(yafs, error), operations: [] };
+    return planFailure(yafs, error);
   }
+}
+
+function planFailure(yafs: Yafs, error: unknown): ExecutionPlan {
+  return { result: failure(yafs, error), operations: [] };
 }
 
 export async function planOperationAsync(
   yafs: Yafs,
   operation: WorkspaceOperation,
 ) {
-  return evidence(operation)
-    ? evidencePlan(yafs, operation)
-    : planOperation(yafs, operation);
+  if (evidence(operation)) {
+    return evidencePlan(yafs, operation);
+  }
+  const git = await gitBackedPlan(yafs, operation);
+  return git ?? planOperation(yafs, operation);
+}
+
+async function gitBackedPlan(yafs: Yafs, operation: WorkspaceOperation) {
+  try {
+    const value = await yafs.operations.invokeGitBacked(operation);
+    return value && resultFor(yafs, value);
+  } catch (error) {
+    return planFailure(yafs, error);
+  }
 }
 
 function planned(yafs: Yafs, operation: WorkspaceOperation): ExecutionPlan {
-  const value = yafs.operations.invoke(operation);
+  return resultFor(yafs, yafs.operations.invoke(operation));
+}
+
+function resultFor(
+  yafs: Yafs,
+  value: NonNullable<ExecutionResult["value"]>,
+): ExecutionPlan {
   return { result: success(yafs, render(value), value), operations: [] };
 }
 

@@ -8,6 +8,7 @@ import {
 import { agentConfig } from "./AgentManifest";
 import { agentCommands } from "./AgentCommands";
 import { AgentClients, AgentDirectoryDriver } from "./AgentDirectoryDriver";
+import { AgentToolMcpSync } from "./AgentToolMcpSync";
 import { ModelClient } from "./ChatCompletionClient";
 import { carryForward } from "../../mounts/SnapshotCarryForward";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
@@ -23,10 +24,14 @@ export type ModelFor = (
   mount: AgentConfig,
 ) => ModelClient;
 
+export interface AgentDriverConfig extends AgentClients {
+  mcpJsonPath?: string;
+}
+
 export class AgentPlugin extends Plugin {
   readonly name = "agent" as const;
 
-  constructor() {
+  constructor(private readonly driverConfig?: AgentDriverConfig) {
     super();
   }
   capabilities() {
@@ -49,8 +54,15 @@ export class AgentPlugin extends Plugin {
     return agentCommands();
   }
 
-  createDriver(wiring: Wiring, clients: AgentClients): PluginDriver {
-    return new AgentDirectoryDriver(wiring, clients);
+  createDriver(wiring: Wiring): PluginDriver[] {
+    if (!this.driverConfig) {
+      return [];
+    }
+    const { mcpJsonPath, ...clients } = this.driverConfig;
+    return [
+      new AgentDirectoryDriver(wiring, clients),
+      new AgentToolMcpSync(wiring.mounts, clients.toolServerUrl, mcpJsonPath),
+    ];
   }
 
   prepare(

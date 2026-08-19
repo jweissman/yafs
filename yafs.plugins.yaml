@@ -8,16 +8,48 @@ plugins:
         hello.txt: hello
     capabilities: []
 
+  - id: scripts
+    plugin: fixture
+    path: scripts
+    config:
+      files:
+        poll-review.yash: >
+          agent send reviewer 'Survey the open PR queue and name anything
+          that looks safe to merge, and anything that clearly is not,
+          with evidence for each.'
+        heartbeat.yash: echo "$(date)" > heartbeat.txt
+    capabilities: []
+
+  # Deliberately low-stakes: this scheduler mount exists to validate the
+  # scheduler MECHANISM itself (does a timer fire repeatedly, unattended,
+  # without leaking or corrupting state) in isolation from whether any
+  # given script's content is good -- see LANGUAGE-ROADMAP.md's scheduler
+  # spike entry. heartbeat.yash makes no network call and costs nothing;
+  # it only overwrites its own timestamp file, so a bad tick is cheap and
+  # harmless to observe. This is explicitly NOT M6.7 (see FEATURE-ROADMAP.md).
+  - id: pulse
+    plugin: scheduler
+    path: pulse
+    config:
+      script: /home/root/scripts/heartbeat.yash
+      intervalMs: 30000
+      allow: [read, mutate]
+    capabilities: [control.scheduled-execution]
+
   - id: reviews
     plugin: github
     # path: reviews
     config:
       repository: software/vets-api
-      query: "is:pr is:open -is:draft -label:test-failure -label:lint-failure label:require-backend-review"
-      max: 100
+      pulls:
+        query: "is:pr is:open -is:draft -label:test-failure -label:lint-failure label:require-backend-approval"
+        max: 100
+      commits:
+        max: 20
+
     refresh:
       interval: 15m
-    capabilities: [network.github-api, secret.github-token]
+    capabilities: [network.github-api, secret.github-token, host.git-read]
 
   - id: agents
     plugin: agent
@@ -43,13 +75,24 @@ plugins:
             reviewComments (how much human attention it has already
             gotten), mergeableState (GitHub computes this lazily and it
             is "unknown" for nearly every open PR -- treat "unknown" as
-            no signal at all, not a reason for caution; only "dirty"
-            -- a real merge conflict -- is worth flagging, and it is
-            rare. Judge readiness primarily from draft status, diff
+            no signal at all, not a reason for caution. Only two values
+            are worth flagging: "dirty" (a real merge conflict) and
+            "unstable" (failing status checks) -- both are code-related
+            blockers. "blocked" means a process gate like required review
+            is unmet, not a code problem -- do not describe it as broken
+            or risky. Judge readiness primarily from draft status, diff
             size, and labels instead), and labels (repo conventions like
-            "require-backend-approval" -- do not ignore them). Use all
-            of this to judge size, intent, and readiness without needing
-            to read the full diff first. You must read the metadata
+            "require-backend-approval" -- do not ignore them). Separately
+            from pulls/, a commits/ directory holds the last several
+            commits on the default branch, each with its own
+            ciStatus (success/failure/pending/none, a combined reduction
+            of that commit's check runs) -- check it if you want to know
+            whether the base branch itself is currently green, e.g. to
+            judge whether a PR's own failing checks look like a real
+            problem or environmental flakiness shared by recent master
+            commits too. Use all of this to judge size, intent, and
+            readiness without needing to read the full diff first. You
+            must read the metadata
             or diff of at least 3 different PRs before replying, even if
             the first one you check already looks like a good candidate
             — stopping at one is not acceptable. Identify several PRs

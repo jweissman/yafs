@@ -18,10 +18,6 @@ export interface GrepResult {
   files: AbsolutePath[];
 }
 
-// Bounded exploratory read, same family as tree/find: a caller (often an
-// agent guessing at a limit it can't know in advance) gets a truncated,
-// flagged result, never a hard failure -- see WorkspaceWalker's `strict`
-// mode for why that distinction matters.
 export function grep(
   context: CommandContext,
   pattern: string,
@@ -40,13 +36,6 @@ function foundMatches(
   return paths.flatMap((value) => matchesAt(context, pattern, value, options));
 }
 
-// count/files reflect every match found (before `limit` truncates the
-// detail view), and matches itself is suppressed for countOnly/filesOnly
-// -- the whole point of asking for either is to avoid paying to receive
-// full match detail when only the aggregate is wanted (mirrors why the
-// review-radar persona prompt asks for a broad, cheap scan before a full
-// read: an agent counting "how many diffs mention TODO" shouldn't have to
-// download every line to get that number).
 function summarized(found: GrepMatch[], options: GrepOptions): GrepResult {
   const limit = options.limit ?? 10_000;
   const suppressed = Boolean(options.countOnly) || Boolean(options.filesOnly);

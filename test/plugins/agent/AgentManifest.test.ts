@@ -66,9 +66,7 @@ test("a persona rejects an empty, missing, or malformed tools config", () => {
     ),
     "Invalid maxCalls",
   );
-  // `.nan` is a valid YAML float literal; typeof NaN === "number" and every
-  // comparison against NaN is false, so a naive `<= 0` check would let a
-  // budget field silently disable the check it's supposed to enforce.
+
   assertRejected(
     personas(
       '{reviewer: {prompt: "hi", tools: {roots: ["/home/root"], maxCalls: .nan}}}',

@@ -1,22 +1,40 @@
 # ADR: Yafs as a composable workspace service
 
+## Decision index
+
+This document contains the durable architectural record. It also preserves
+some implementation-era reasoning below; use this index for the current
+constraints, not the chronological narrative.
+
+| Decision | Current rule | Status / gate |
+| --- | --- | --- |
+| Product boundary | Yafs is a local-first, inspectable environment for provider views, private workspaces, and explicit actions—not a universal POSIX/runtime replacement. | Current product direction; [product spec](PRODUCT-SPEC.md) owns the operator story. |
+| Authority | Only daemon-owned configuration plus invocation context grant capability. A path, script, artifact, MCP request, or plugin projection cannot self-grant authority. | Settled. |
+| Reads and providers | Provider refresh publishes bounded snapshots atomically; ordinary reads do not make network calls or mutate the VFS. Explicitly scoped backing experiments must name their exception and preserve revision/freshness. | Settled baseline; git source experiment remains under validation. |
+| Namespace composition | Links and ordered unions compose paths. They are not access control. A future faceted task view must carry principal, allowed roots, layers, and action grants through every client. | General resolver/view primitive not yet built. |
+| Actions | Providers declare typed actions. Yash pseudobinaries, MCP, RPC, and UI are adapters over the same accepted action and result model. `ctl` is current diagnostic transport, not the final public contract. | Transition in progress. |
+| External effects | Consequential actions need accepted intent, idempotency/recovery policy, status, and audit. Unknown after an uncertain external effect is safer than an automatic duplicate retry. | Settled for agent runs/Slack outbox; general envelope pending. |
+| Automation | A timer-backed scheduler exists only as an L2 spike. It is not durable workflow infrastructure and cannot be the basis for further autonomous behavior yet. | Explicitly gated. |
+| Host execution | Providers never receive general host execution. Any bounded investigation/coding handoff is a separately authorized actor with isolated inputs, budgets, and human approval. | M9 decision gate. |
+| Federation and public service | Remote identity, authorization, trust, and capability attenuation precede public endpoints or `/commons/public`. | Post-M8 hypothesis. |
+
+The immediate product proof is an engineering investigation desk: a bounded
+agent uses a self-describing task world to correlate live repository/CI/Slack
+and later incident evidence, then proposes a separately approved handoff. The
+roadmap must be judged by whether it makes that proof possible, not by whether
+it adds another provider noun.
+
 ## Persistent virtual workspace
 
-Build Yafs as a persistent, inspectable virtual workspace service. It makes
-local, remote, cached, generated, and long-running state look like one
-composable filesystem tree.
+Yafs keeps local state and bounded provider views in one inspectable namespace.
+It is a broadly useful kernel only if each provider and adapter remains narrow:
+the kernel promises composition, provenance, identity, and durable local state,
+not wholesale Redis, Docker, chat-service, or shell replacement. The operator
+story and intended users live in [PRODUCT-SPEC.md](PRODUCT-SPEC.md); this ADR
+only records the constraints that make that story safe.
 
-It is intended as a broadly useful brick for developers, system administrators,
-DevOps workflows, lower-level personal knowledge management, and agent/chat
-backends. “Broadly useful” means one trustworthy kernel with narrow providers,
-not a core that attempts to reproduce Redis, Docker, a chat service, and a
-shell at once. A provider may offer an adapter or compatible endpoint where that
-is valuable; Yafs itself promises composition, provenance, identity, and
-durable state semantics.
-
-Yash is the human-facing client for that tree; a structured RPC API is an equal
-client for scripts, services, and agents. Yafs is not a POSIX shell, a
-distributed filesystem, a Redis replacement, or a container orchestrator.
+Yash is one client. Structured RPC, MCP, and a future UI must use the same
+workspace/action semantics rather than reconstructing them through shell text.
 
 ```text
 Yash / SSH / API / agent
@@ -28,8 +46,8 @@ Yash / SSH / API / agent
  local store | provider mounts | cache | GitHub | agent runs | runtimes
 ```
 
-The defining rule is: **capabilities are explicit mounts; their state and
-provenance remain inspectable through the tree.**
+The defining rule is: **capabilities are daemon-granted and explicit; their
+resulting provider state and provenance remain inspectable through the tree.**
 
 ## Product invariants
 
@@ -106,41 +124,20 @@ per process, or adopt Plan 9's union-write behavior. We retain the name only
 while this limited ordered-directory composition is useful; a future public
 configuration syntax may call the operation `compose` if that is clearer.
 
-### Mount lifecycle commands
+### Historical: removed in-VFS mount lifecycle
 
-> **Superseded.** The `mount` (singular) command described in this section,
-> and the in-VFS `.yafsmeta` declaration it read, were removed as a
-> capability-granting security gap once external providers made it possible
-> to self-grant real capabilities this way. Kept below as the decision
-> record of what the original lifecycle model was; see "Capabilities,
-> distribution, and adapters" further down for the current operator surface
-> (`plugins status|plan|apply|refresh`, `plugin deactivate`) and the full
-> removal rationale.
+The original prototype exposed `mount validate|activate|refresh|unmount` and
+read `.yafsmeta` from the virtual filesystem. Both were removed: a writable
+workspace cannot safely contain declarations that grant the authority to act on
+external systems. The current operator-owned surface is `plugins
+status|plan|apply|refresh` and `plugin deactivate`; its configuration lives
+outside the VFS. See “Capabilities, distribution, and adapters” for the
+current lifecycle and authority model.
 
-`mount` is a control-plane builtin, with equivalent structured RPC operations;
-it is not the POSIX host-mount command.
-
-| Command                        | Meaning                                                                                                                                                    | Side effects                                                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `mount validate MANIFEST [ID]` | Parse strict `.yafsmeta`, select exactly one declaration when `ID` is supplied, validate its provider configuration, and report the proposed mount record. | None: no provider activation, network activity, secret access, or durable state.                                  |
-| `mount activate MANIFEST [ID]` | Validate and authorize the declaration, prepare a read-only snapshot if needed, then durably attach that exact snapshot at its declared path.              | A private read cache may be prepared before commit; it becomes visible only after the mount operation is durable. |
-| `mount refresh MANIFEST [ID]`  | Prepare and atomically replace one active mount with a new immutable snapshot.                                                                             | Provider I/O is explicit and authorized; the resulting snapshot is durable before its refresh operation commits.  |
-| `mount unmount ID`             | Durably detach the active mount.                                                                                                                           | It does not delete a provider's private cache or remote data; cache retention is provider policy.                 |
-
-A mounted provider view is an immutable, byte/file-count-bounded
-snapshot. Explicit refresh atomically replaces the active view with a new
-revision/freshness record. A declared kernel-owned, daemon-executed interval
-may request the same refresh operation; it is durable policy, not ambient
-provider activity.
-It is persisted with the mount, coalesces overlapping attempts, retains the
-last successful snapshot on failure, and audits every attempt. Refresh never
-changes local review artifacts; those artifacts must record the source revision
-they address.
-
-Fixture snapshots are bounded and embedded in their WAL operations. A future
-provider whose snapshots live in a content-addressed store must sync content
-before syncing the WAL record that names its digest. Recovery reads only that
-durable content; it never refetches a provider or acquires network authority.
+The durable-snapshot rule survived that redesign: an immutable provider view is
+published only after its bounded content is durable, refresh atomically replaces
+the view, and recovery never refetches a provider. This historical note replaces
+the old command table so it cannot be mistaken for a supported interface.
 
 ## Product horizon and extension hypotheses
 
@@ -1071,6 +1068,23 @@ authentication — is the concrete unblock condition for that remaining gap.
 Recorded here so it has a checkable shape instead of a vague "later," and
 so it is not silently rediscovered from scratch or mistaken for work
 already done.
+
+**Related, not yet scoped: an agent eventually writing scripts and
+invoking sub-investigations, not just reading.** Two directions named in
+conversation, not designed here: an agent proposing a `/commons` function
+from a successful procedure (write access through some scoped path, per
+the still-deferred gap above — see PRODUCT-SPEC.md's `/commons` section
+for the human-approval discipline this would need); and an agent invoking
+another bounded investigatory actor rather than only calling read tools
+itself.
+[FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)'s M6.8 (`host.investigate-repository`)
+is the first concrete instance of the second shape, though today it's
+host-orchestrated, not persona-invoked — a persona asking for an
+investigation on its own behalf, rather than a human/scheduler triggering
+one directly, is a further step this hasn't earned yet. Both connect to
+M7 "spaces" (multi-actor orchestration) and M9 (the runtime bridge this
+gap sits next to); named here so the next time write-or-subagent access
+comes up, it's a known, connected gap, not rediscovered from scratch.
 
 ### `AgentToolServer`'s loopback trust — accepted, not yet enforced further
 

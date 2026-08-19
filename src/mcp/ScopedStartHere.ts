@@ -5,11 +5,6 @@ import {
   StartHereValue,
 } from "../operations/WorkspaceOperation";
 
-// Merges an agent tool session's configured roots into the unscoped
-// orientation payload: which mount each root actually lives under, and a
-// recommendedFirst pointing at the caller's own roots instead of a generic
-// "a mounted root" — the concrete first `yafs.tree` call a scoped persona
-// should make, not just proof that mounts exist somewhere.
 export function scopedStartHere(
   value: StartHereValue,
   roots: string[],
@@ -27,9 +22,6 @@ function scopedFields(mounts: MountSummary[], roots: string[]) {
   };
 }
 
-// yafs.start_here must not leak the existence of mounts a scoped session
-// has no access to — only mounts that intersect at least one configured
-// root belong in the response at all.
 function intersectingMounts(
   mounts: MountSummary[],
   roots: string[],

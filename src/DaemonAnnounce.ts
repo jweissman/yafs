@@ -1,16 +1,18 @@
+import { log } from "./Logging";
+
+const daemonLog = log.getSubLogger({ name: "daemon" });
+
 export function logStartup(
   address: { host: string; port: number },
   dataDir: string,
   toolsPort?: number,
 ) {
-  console.log(
-    `yafsd listening on ${address.host}:${address.port}; data: ${dataDir}`,
-  );
+  daemonLog.info({ host: address.host, port: address.port, dataDir }, "yafsd listening");
   logAgentTools(toolsPort);
 }
 
 function logAgentTools(toolsPort?: number) {
   if (toolsPort !== undefined) {
-    console.log(`agent tool server listening on 127.0.0.1:${toolsPort}`);
+    daemonLog.info({ toolsPort }, "agent tool server listening");
   }
 }

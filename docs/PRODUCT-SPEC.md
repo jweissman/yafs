@@ -84,8 +84,9 @@ plugins:
     plugin: github
     config:
       repository: acme/widget
-      query: "is:pr is:open"
-      max: 50
+      pulls:
+        query: "is:pr is:open"
+        max: 50
     capabilities:
       - network.github-api
       - secret.github-token
@@ -384,6 +385,65 @@ resources aren't all "pull requests"). Defaulting to the mount root
 resource-type segment is additive path structure *beneath* that root, not
 a change to what's already shipped.
 
+### Faceted task environments: a view is not a jail
+
+An agent needs an obvious, small world, not a prompt that describes an
+unbounded appliance. A future task view should compose a declared set of
+read-only resources with one private writable root:
+
+```text
+/home/reviewer/labs/triage-482/
+  world/       # selected GitHub, Slack, and incident-source views
+  notes/       # private, writable analysis and proposed procedure
+  evidence/    # explicit captures, not hidden read caches
+  runs/        # accepted action/run records
+```
+
+This is deliberately a **faceted namespace**, not merely a convention of
+symlinks. Union mounts are useful composition machinery, but neither a union
+nor a symlink enforces authority. The eventual resolver/invocation boundary
+must carry the principal, allowed roots, and action grants, so `cat`, MCP,
+Yash, and a future web client observe the same jail. Today's scoped MCP roots
+are a useful first consumer, not yet that general primitive.
+
+The first operator-facing legibility contract should be small: `start_here`
+or an equivalent structured operation returns the task's roots, each source's
+provider/revision/freshness, writable locations, available typed actions, and
+remaining budgets. An agent should be able to discover its world with
+`tree`, `inspect`, and `find`; it should not need deployment-specific prompt
+instructions to guess where a repository or incident feed lives.
+
+### Services and actions are separate resource modes
+
+The filesystem is the common inspection and composition surface, not a claim
+that every integration has file-like semantics. Keep five modes distinct:
+
+| Mode | Example | Rule |
+| --- | --- | --- |
+| Projection | GitHub PRs, Slack messages, incident groups | Read paths expose a revisioned view and never cause an external side effect. |
+| Faceted workspace | an agent task lab | Ordered views plus a private writable root, evaluated under one scope. |
+| Typed action | `agent send`, `slack send`, later `incident acknowledge` | An accepted envelope names actor, input revisions, authority, budget, idempotency key, and outcome. |
+| Service facade | a cache's RESP subset or an object store's S3 subset | A network adapter is honest only about operations and consistency it actually implements; it is not generic protocol compatibility. |
+| Reconciler | a future machine or deployment resource | Desired state, observed status, and controller action remain separately visible. |
+
+`ctl` is currently a diagnostic transport for a few of these actions. The
+product surface should become provider-declared typed actions, with Yash
+pseudobinaries, MCP tools, RPC, and the web UI all adapting the same action
+descriptor. That keeps Slack-to-agent wiring from becoming a privileged
+TypeScript-only exception and gives scripts a vocabulary that can later be
+reviewed, tested, and shared.
+
+### Operator web UI: a projection, not a second control plane
+
+An early local-only UI is worthwhile once it consumes the same typed workspace
+operations and action descriptors as Yash/MCP. Its initial job is to make the
+appliance inspectable: browse `/world` and task views; show mount/provider
+revision and health; inspect runs, accepted actions, outbox state, and timer
+state; and invoke only actions already exposed to the local operator. It must
+not gain a private plugin API or duplicate lifecycle/business rules in a web
+backend. Public sharing, remote identities, and a chat product remain later
+separate decisions.
+
 ### Capture stays secondary
 
 The default for an exploratory task (find a low-risk PR, triage a queue)
@@ -425,7 +485,17 @@ falsify, not the registry build itself. Design of the bundle/manifest
 contract can proceed alongside L2 scripting (see
 [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md#paving-stones)); actually
 publishing or invoking a function is gated strictly after L2 lands for
-real, since there's no script to publish or invoke before then. Federation
+real, since there's no script to publish or invoke before then.
+
+**First candidate feedstock, not yet a publication:** M6.8's investigation
+"cases" (see [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)) are the first
+concrete instance of "a procedure that worked" this system has produced —
+a repeatable fetch → narrow → isolate → explain → capture pipeline with a
+durable, inspectable record of each run. Whether a specific case-shaped
+procedure (e.g. "explain a red master commit") is used often enough and
+well enough to be worth distilling into a published, reviewed `/commons`
+function is exactly the falsifiable question above — not assumed here,
+and not before L2 exists to express the distilled version as a script. Federation
 (a `/commons/public` sourced from an actual external registry) is a
 second, separate concern layered on top — explicitly **beyond
 identity/auth work**, recorded as a post-M8 hypothesis with its own
@@ -451,7 +521,16 @@ beyond "a writable subdirectory" yet.
 - GitHub writes, provider writes, and distributed transactions.
 - Arbitrary third-party provider code and a package marketplace — distinct
   from the reviewed, human-published `/commons` procedures above.
-- Autonomous multi-agent orchestration and host-process execution.
+- Autonomous multi-agent orchestration and host-process execution, in
+  general. **Narrow exception:** [FEATURE-ROADMAP.md](FEATURE-ROADMAP.md)'s
+  M6.8 spikes one deliberately bounded case — a disposable, content-addressed
+  worktree plus a frontier-model CLI invocation to explain a CI failure,
+  gated behind a new, small, explicit capability
+  (`host.investigate-repository`, not general `host.exec`), human-approved
+  before delivery. Validated live (real failure, real grounded explanation,
+  independently fact-checked) before this exception was written down. It
+  does not reverse this deferral — general autonomous orchestration and
+  unrestricted host execution stay out of scope.
 - **General/unbounded** recursive-MCP tool-calling: a persona reading or
   writing outside its own mount, or chaining across multiple personas/mounts
   in one run — blocked on a per-actor path-scoping primitive that does not

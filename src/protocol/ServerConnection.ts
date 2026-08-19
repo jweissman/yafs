@@ -4,6 +4,7 @@ import { VfsOperation } from "../vfs/VfsOperation";
 import { CtlDispatch } from "./CtlDispatch";
 import { BackgroundDrivers } from "./BackgroundDrivers";
 import { syncAll } from "./BackgroundDriversLifecycle";
+import { compact, logAbort } from "./ServerConnectionLog";
 import {
   attachLines,
   persistenceFailure,
@@ -68,7 +69,7 @@ export class ServerConnection {
   }
 
   abort(error: unknown, socket: Socket) {
-    console.error("Unhandled command error:", error);
+    logAbort(error);
     socket.destroy();
   }
 
@@ -101,10 +102,6 @@ export class ServerConnection {
     await this.services.journal.commit(operations);
     session.apply(operations);
     syncAll(this.background());
-    try {
-      await this.services.journal.compact(this.services.store);
-    } catch (error) {
-      console.error("Journal compaction failed:", error);
-    }
+    await compact(this.services.journal, this.services.store);
   }
 }

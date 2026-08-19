@@ -6,10 +6,6 @@ import { expandGlob } from "./WorkspaceGlob";
 const DIRECTORY_WALK_DEPTH = 10;
 const DIRECTORY_WALK_LIMIT = 5000;
 
-// A path element may be a literal file, a literal directory (searched
-// recursively across every file beneath it), or contain a single
-// wildcard segment (e.g. "pulls/*/diff.patch") -- expanded against real
-// directory listings, since the model has no shell to glob with itself.
 export function targetsFor(
   context: CommandContext,
   value: string,

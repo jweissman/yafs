@@ -4,6 +4,15 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { MountRecord, PreparedMountRecord, Provenance } from "../mounts/types";
 import { CacheService } from "../cache/CacheService";
 import { MountSummary } from "../operations/WorkspaceOperation";
+import { GrepResult } from "../operations/WorkspaceGrep";
+
+export interface GitBackingInfo {
+  mirrorDir: string;
+  sha: string;
+  relativePath: string;
+  mountRoot: AbsolutePath;
+  paths: string[];
+}
 
 export interface CommandContext {
   clock: Clock;
@@ -31,6 +40,14 @@ export interface CommandContext {
   agentPersona(reference: string): AbsolutePath;
   agentPersonas(): { mountPath: string; persona: string }[];
   slackPlugin(id: string): AbsolutePath;
+
+  gitBacking(path: AbsolutePath): GitBackingInfo | undefined;
+  gitRead(backing: GitBackingInfo): Promise<string>;
+  gitGrep(
+    backing: GitBackingInfo,
+    pattern: string,
+    options: { ignoreCase?: boolean; invert?: boolean },
+  ): Promise<GrepResult>;
   desiredStatus(): Promise<object>;
   desiredPlan(): Promise<object[]>;
   applyDesired(prune?: boolean): Promise<object[]>;
@@ -48,6 +65,7 @@ export interface CommandContext {
   refresh(record: PreparedMountRecord): void;
   unmount(id: string, path: AbsolutePath): void;
   afterCommit(effect: () => void): void;
+  runProgram(path: AbsolutePath, args: string[]): Promise<string>;
   cache: CacheService;
   traces: TraceService;
 }

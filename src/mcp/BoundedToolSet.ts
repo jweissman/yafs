@@ -1,7 +1,3 @@
-// The tool set granted to a scoped agent MCP server: read/inspection only.
-// Deliberately excludes yafs.query (arbitrary command string, not
-// structurally path-scopable) and yafs.capture/yafs.restore (durable
-// mutations) — see docs/FEATURE-ROADMAP.md's M6.5 entry for the rationale.
 export const BOUNDED_TOOL_NAMES = [
   "yafs.list",
   "yafs.read",

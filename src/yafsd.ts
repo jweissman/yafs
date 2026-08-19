@@ -87,9 +87,6 @@ function logs() {
   return printLogs(statePaths.log, process.argv.slice(3));
 }
 
-// Permanently deletes the journal, mount state, audit log, and blob cache
-// (everything under dataDir) and starts over from empty. Stops the daemon
-// first if it's running. Requires --yes since there is no undo.
 function reset() {
   return resetDaemon(statePaths, stop, process.argv.includes("--yes"), report);
 }

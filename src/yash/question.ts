@@ -1,28 +1,32 @@
 import { createInterface } from "node:readline/promises";
 
+type Readline = ReturnType<typeof createInterface>;
+
 export function question(
-  readline: ReturnType<typeof createInterface>,
+  readline: Readline,
   prompt: string,
   interruption: AbortController,
-): Promise<string | undefined> {
-  return readline
-    .question(prompt, { signal: interruption.signal })
-    .catch(questionError(interruption));
+) {
+  return Promise.resolve()
+    .then(() => readline.question(prompt, { signal: interruption.signal }))
+    .catch(catchWith(interruption));
 }
 
-function questionError(interruption: AbortController) {
-  return (error: unknown): undefined => {
-    abortedOrThrow(interruption, error);
-    return undefined;
-  };
+function catchWith(interruption: AbortController) {
+  // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression
+  return (error: unknown) => recovered(interruption, error);
 }
 
-function abortedOrThrow(
-  interruption: AbortController,
-  error: unknown,
-): undefined {
+function recovered(interruption: AbortController, error: unknown): undefined {
   if (interruption.signal.aborted) {
     return undefined;
   }
-  throw error;
+  console.error(
+    `yash: terminal input failed unexpectedly (${detail(error)}); exiting.`,
+  );
+  return undefined;
+}
+
+function detail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

@@ -6,14 +6,6 @@ import { startedHostConfigServer } from "../desired_mount_helpers";
 
 const SNAPSHOT_INTERVAL = 32;
 
-// Reproduces a live bug: a mount's activation can predate the journal's
-// last compacted snapshot while its later unmount postdates it. On the
-// next restart, the snapshot restores the mount's stale content, and
-// replay only reprocesses records after the snapshot -- which includes
-// the unmount but not the original activation. Unmount handling used to
-// look up the mount's path in the in-memory records array being rebuilt
-// by *this* replay pass, which never regains an entry for a mount whose
-// activation was never replayed -- silently skipping the removal.
 test("an unmount survives restart even when a compaction predates it but postdates the mount's activation", async () => {
   const { directory, server, client } = await startedHostConfigServer(
     "yafs-replay-compact-",

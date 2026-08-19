@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { AbsolutePath } from "../../core/AbsolutePath";
 import { MountManager } from "../../mounts/MountManager";
+import { log } from "../../Logging";
 import {
   PersonaTarget,
   resolvePersonaTarget,
@@ -10,18 +11,13 @@ import { SlackChannelClient, SlackMessage } from "./SlackApiClient";
 import { stripMention } from "./SlackInboundSchedule";
 import { watch } from "./SlackInboundReaction";
 
+const inboundLog = log.getSubLogger({ name: "slack.inbound.route" });
+
 export type DispatchCtl = (
   path: AbsolutePath,
   payload: string,
 ) => Promise<boolean>;
 
-// Both legs of this route are ordinary ctl writes — the same primitive
-// `agent send`/`slack send` reduce to once their command-line parsing is
-// done. Routing the reply through the Slack mount's own ctl path (instead
-// of calling the Slack client directly) reuses SlackDirectoryDriver's
-// existing outbound handling rather than opening a second call site.
-// Reactions go direct through `client` instead — they're a best-effort UI
-// indicator, not a durable delivery, so they don't need the outbox.
 export interface RouteOptions {
   mounts: MountManager;
   dispatchCtl: DispatchCtl;
@@ -69,14 +65,8 @@ function dispatch(options: RouteOptions, request: DispatchRequest) {
   return options.dispatchCtl(ctlPath(personaPath), JSON.stringify(body));
 }
 
-// Fires once per message actually routed (not per poll tick -- see
-// SlackInboundPoller.ts's own logging, which is silenced when nothing
-// routes), so it stays proportionate to real activity. Without this, the
-// only way to see what a persona was actually asked was to already know
-// its runId and go read request.md -- there was no way to watch inbound
-// traffic as it happened.
 function logInbound(persona: string, runId: string, text: string) {
-  console.log(`agent inbound: persona=${persona} runId=${runId} "${text}"`);
+  inboundLog.info({ persona, runId, text }, "agent inbound");
 }
 
 function content(botUserId: string, message: SlackMessage): string {

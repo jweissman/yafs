@@ -38,11 +38,24 @@ function findOperation(o: FindOptions): WorkspaceOperation {
 }
 
 export function test(args: string[]): WorkspaceOperation {
+  const predicate = required(args, 0) as "-e" | "-f" | "-d" | "-L" | "-c";
+  return predicate === "-c" ? containsTest(args) : simpleTest(predicate, args);
+}
+
+function containsTest(args: string[]): WorkspaceOperation {
   return {
     name: "test",
-    predicate: required(args, 0) as "-e" | "-f" | "-d" | "-L",
-    path: required(args, 1),
+    predicate: "-c",
+    pattern: required(args, 1),
+    path: required(args, 2),
   };
+}
+
+function simpleTest(
+  predicate: "-e" | "-f" | "-d" | "-L",
+  args: string[],
+): WorkspaceOperation {
+  return { name: "test", predicate, path: required(args, 1) };
 }
 
 export function diff(args: string[]): WorkspaceOperation {

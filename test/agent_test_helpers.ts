@@ -66,9 +66,6 @@ async function firstRunId(state: PollState) {
   return listing.split("\n")[0];
 }
 
-// A freshly listed run/action directory entry can momentarily precede its
-// status.json becoming readable (a republish can be mid-flight) — treat a
-// read failure as "not ready yet" so the poll retries instead of throwing.
 async function readStatus(client: YashClient, runsDir: string, runId: string) {
   return client
     .exec(`cat ${runsDir}/${runId}/status.json`)

@@ -16,11 +16,6 @@ test("a GH_HOST-style enterprise cloud host resolves to its api subdomain", () =
   );
 });
 
-// Regression coverage for a real live bug: citation links hardcoded
-// github.com even against a real GHEC deployment. The web host is the
-// bare configured host in every shape (github.com, a .ghe.com data
-// residency subdomain, or a self-hosted enterprise server) -- only the
-// API host varies (api.<host>, or <host>/api/v3).
 test("the web host is the bare configured host, unlike the api host", () => {
   expect(githubSettings({ YAFS_GITHUB_HOST: "va.ghe.com" }).webUrl).toBe(
     "https://va.ghe.com",

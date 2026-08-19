@@ -70,9 +70,6 @@ export class SlackDirectoryDriver {
     return path;
   }
 
-  // Durable acceptance must complete before this handler returns — the ctl
-  // write is only acknowledged to the caller once `outbox.accept` has run,
-  // so "accepted" genuinely means "durably queued," not "queued in memory."
   private async send(mountId: string, payload: string) {
     const action = parseSlackAction(payload);
     const id = { mountId, actionId: action.actionId ?? randomUUID() };

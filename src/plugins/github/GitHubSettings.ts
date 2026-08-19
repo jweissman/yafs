@@ -21,13 +21,6 @@ function assertHttps(apiUrl: string) {
   }
 }
 
-// The human-facing web host, unlike the API host, is the bare configured
-// host in every real GitHub deployment shape yafs supports: github.com
-// itself, a GHEC data-residency subdomain (<name>.ghe.com, API served
-// from api.<name>.ghe.com but the web UI from the bare subdomain), and
-// GitHub Enterprise Server (API under /api/v3, web at the bare host).
-// Live-observed bug this fixes: citation links hardcoded github.com
-// while the daemon's real repository is on a .ghe.com host.
 function resolvedApiUrl(environment: NodeJS.ProcessEnv, host: string) {
   return environment.YAFS_GITHUB_API_URL ?? apiUrlForHost(host);
 }

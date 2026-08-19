@@ -1,12 +1,17 @@
-import { Wiring, PluginDriver } from "../mounts/Plugin";
+import { Plugin, Wiring, PluginDriver } from "../mounts/Plugin";
 import { FixturePlugin } from "../plugins/fixture/FixturePlugin";
-import { AgentPlugin, ModelFor } from "../plugins/agent/AgentPlugin";
+import {
+  AgentPlugin,
+  AgentDriverConfig,
+  ModelFor,
+} from "../plugins/agent/AgentPlugin";
 import { ToolClientFor } from "../plugins/agent/LmStudioMcpClient";
 import { ToolServerUrl } from "../plugins/agent/AgentToolCompletion";
-import { AgentToolMcpSync } from "../plugins/agent/AgentToolMcpSync";
 import { SlackPlugin, SlackClientFor } from "../plugins/slack/SlackPlugin";
-import { SlackInboundPoller } from "../plugins/slack/SlackInboundPoller";
+import { GitHubPlugin } from "../plugins/github/GitHubPlugin";
+import { SchedulerPlugin } from "../plugins/scheduler/SchedulerPlugin";
 import { ServerRefresh } from "./ServerRefresh";
+import type Yafs from "../index";
 
 export type { Wiring, ModelFor, SlackClientFor, ToolClientFor, ToolServerUrl };
 
@@ -21,19 +26,14 @@ export interface RefreshTiming {
   slackPollIntervalMs?: number;
 }
 
-function refreshDriver(wiring: Wiring, timing: RefreshTiming) {
-  return new ServerRefresh(wiring, {
-    now: timing.now,
-    intervalMs: timing.refreshIntervalMs,
-  });
-}
-
 export interface Clients {
   modelFor: ModelFor;
   toolClientFor: ToolClientFor;
   toolServerUrl: ToolServerUrl;
   slackClientFor: SlackClientFor;
   mcpJsonPath?: string;
+
+  scheduledYafs?: Yafs;
 }
 
 export function backgroundDrivers(
@@ -41,55 +41,51 @@ export function backgroundDrivers(
   clients: Clients,
   timing: RefreshTiming = {},
 ): BackgroundDrivers {
-  const refreshes = refreshDriver(wiring, timing);
-  const plugins = pluginDrivers(wiring, clients, timing);
-  return { refreshes, plugins };
+  return {
+    refreshes: refreshDriver(wiring, timing),
+    plugins: pluginDrivers(wiring, clients, timing),
+  };
+}
+
+function refreshDriver(wiring: Wiring, timing: RefreshTiming) {
+  return new ServerRefresh(wiring, {
+    now: timing.now,
+    intervalMs: timing.refreshIntervalMs,
+  });
 }
 
 function pluginDrivers(
   wiring: Wiring,
   clients: Clients,
   timing: RefreshTiming,
-) {
-  const slack = slackDrivers(wiring, clients.slackClientFor, timing);
-  return [...coreDrivers(wiring, clients), ...slack];
+): PluginDriver[] {
+  return configuredPlugins(clients, timing).flatMap((plugin) =>
+    plugin.createDriver(wiring),
+  );
 }
 
-function coreDrivers(wiring: Wiring, clients: Clients) {
+function configuredPlugins(clients: Clients, timing: RefreshTiming): Plugin[] {
   return [
-    new FixturePlugin().createDriver(wiring),
-    agentDriver(wiring, clients),
-    mcpSyncDriver(wiring, clients),
+    new FixturePlugin(),
+    new AgentPlugin(agentDriverConfig(clients)),
+    new SlackPlugin(undefined, slackDriverConfig(clients, timing)),
+    new GitHubPlugin(),
+    new SchedulerPlugin(schedulerDriverConfig(clients)),
   ];
 }
 
-function agentDriver(wiring: Wiring, clients: Clients) {
-  const { modelFor, toolClientFor, toolServerUrl } = clients;
-  const agentClients = { modelFor, toolClientFor, toolServerUrl };
-  return new AgentPlugin().createDriver(wiring, agentClients);
+function schedulerDriverConfig(clients: Clients) {
+  return clients.scheduledYafs ? { yafs: clients.scheduledYafs } : undefined;
 }
 
-function mcpSyncDriver(wiring: Wiring, clients: Clients) {
-  const { toolServerUrl, mcpJsonPath } = clients;
-  return new AgentToolMcpSync(wiring.mounts, toolServerUrl, mcpJsonPath);
+function agentDriverConfig(clients: Clients): AgentDriverConfig {
+  const { modelFor, toolClientFor, toolServerUrl, mcpJsonPath } = clients;
+  return { modelFor, toolClientFor, toolServerUrl, mcpJsonPath };
 }
 
-function slackDrivers(
-  wiring: Wiring,
-  slackClientFor: SlackClientFor,
-  timing: RefreshTiming,
-) {
-  const slack = new SlackPlugin().createDriver(wiring, slackClientFor);
-  const inbound = slackInbound(wiring, slackClientFor, timing);
-  return [slack, inbound];
-}
-
-function slackInbound(
-  wiring: Wiring,
-  slackClientFor: SlackClientFor,
-  timing: RefreshTiming,
-) {
-  const { mounts, dispatchCtl } = wiring;
-  const ms = timing.slackPollIntervalMs;
-  return new SlackInboundPoller(mounts, dispatchCtl, slackClientFor, ms);
+function slackDriverConfig(clients: Clients, timing: RefreshTiming) {
+  return {
+    clientFor: clients.slackClientFor,
+    pollIntervalMs: timing.slackPollIntervalMs,
+  };
 }

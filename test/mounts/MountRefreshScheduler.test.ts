@@ -59,7 +59,7 @@ function mount(): PreparedMountRecord {
     id: "review",
     path: "/reviews",
     provider: "github",
-    config: { repository: "acme/widget", query: "is:open", max: 1 },
+    config: { repository: "acme/widget" },
     manifestPath: "/.yafsmeta",
     manifestDigest: "digest",
     revision: "github:one",

@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 
-import { GitHubConfig } from "../../mounts/types";
+import { GitHubConfig, GitHubPullsConfig } from "../../mounts/types";
 import { pullMetadata } from "./GitHubPullMetadata";
+import { commitEntries } from "./GitHubCommitEntries";
+import { pullReferences } from "./GitHubPullReferences";
+import { CiStatus } from "./GitHubApiClientTypes";
 
 export interface GitHubPull {
   number: number;
@@ -22,8 +25,19 @@ export interface GitHubPull {
   labels?: string[];
   htmlUrl?: string;
 }
+export interface GitHubCommit {
+  sha: string;
+  author?: string;
+  authorName?: string;
+  message: string;
+  date?: string;
+  htmlUrl: string;
+  ciStatus: CiStatus;
+}
 export interface GitHubClient {
-  pulls(config: GitHubConfig): Promise<GitHubPull[]>;
+  pulls(repository: string, pulls: GitHubPullsConfig): Promise<GitHubPull[]>;
+
+  commits?(config: GitHubConfig): Promise<GitHubCommit[]>;
 }
 export interface GitHubPullFetcher {
   pull(repository: string, number: number): Promise<GitHubPull>;
@@ -52,13 +66,18 @@ export class GitHubCollectionSource {
   ) {}
 
   async snapshot(config: GitHubConfig): Promise<ProviderSnapshot> {
-    const pulls = await this.client.pulls(config);
+    const pulls = await this.pulls(config);
+    const commits = (await this.client.commits?.(config)) ?? [];
     return {
-      entries: this.entries(pulls),
-      revision: this.revision(pulls),
+      entries: [...this.entries(pulls), ...commitEntries(commits)],
+      revision: this.revision(pulls, commits),
       fetchedAt: new Date().toISOString(),
-      resourceReferences: this.references(config, pulls),
+      resourceReferences: pullReferences(config, pulls, this.webUrl),
     };
+  }
+
+  private pulls({ repository, pulls }: GitHubConfig) {
+    return pulls ? this.client.pulls(repository, pulls) : Promise.resolve([]);
   }
 
   private entries(pulls: GitHubPull[]) {
@@ -71,32 +90,10 @@ export class GitHubCollectionSource {
       [`${root}/metadata.json`, JSON.stringify(pullMetadata(pull))],
     ];
   }
-  private references(config: GitHubConfig, pulls: GitHubPull[]) {
-    return Object.fromEntries(
-      pulls.map((pull) => [
-        `pulls/${pull.number}`,
-        this.reference(config, pull),
-      ]),
-    );
-  }
-  // Prefer GitHub's own html_url over constructing one from webUrl: GitHub
-  // is the authoritative source for its own URLs, so this can't drift out
-  // of sync with a real deployment's host the way a manually-constructed
-  // one already did once (github.com hardcoded against a real GHEC repo).
-  // The constructed form stays as a fallback for callers/fixtures that
-  // don't supply htmlUrl.
-  private reference(
-    config: GitHubConfig,
-    pull: GitHubPull,
-  ): GitHubResourceReference {
-    const { number, headSha, title, htmlUrl } = pull;
-    const { repository } = config;
-    const url =
-      htmlUrl ?? `${this.webUrl}/${repository}/pull/${String(number)}`;
-    return { kind: "github-pr", repository, number, headSha, title, url };
-  }
-  private revision(pulls: GitHubPull[]) {
-    return `github:${createHash("sha256").update(JSON.stringify(pulls)).digest("hex").slice(0, 12)}`;
+  private revision(pulls: GitHubPull[], commits: GitHubCommit[]) {
+    const payload = JSON.stringify({ pulls, commits });
+    const digest = createHash("sha256").update(payload).digest("hex");
+    return `github:${digest.slice(0, 12)}`;
   }
 }
 

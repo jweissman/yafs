@@ -5,14 +5,6 @@ import { TreeEntry } from "./WorkspaceOperation";
 export class WorkspaceWalker {
   private truncated = false;
 
-  // strict (the default, used by capture/restore/diff/grep) throws when
-  // the limit is hit -- those are durability/safety-critical, and a
-  // silently-truncated capture masquerading as complete is worse than a
-  // loud failure. tree/find are bounded exploratory reads for an agent
-  // that can't know the true count in advance; erroring out entirely on
-  // a conservative guess (observed live: a model requesting `limit: 20`
-  // against 100 real entries) is actively unhelpful, so they opt into
-  // non-strict: stop and report `truncated: true` instead of throwing.
   constructor(
     private readonly context: CommandContext,
     private readonly depth: number,

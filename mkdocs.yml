@@ -5,6 +5,8 @@ theme:
 nav:
   - Overview: index.md
   - Yash command reference: COMMANDS.md
+  - Built-in provider reference: PROVIDERS.md
+  - Git source walkthrough: GIT-SOURCE-SETUP.md
   - Yash language roadmap: LANGUAGE-ROADMAP.md
   - Architecture decision record: ADR.md
   - Product spec: PRODUCT-SPEC.md

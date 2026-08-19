@@ -18,12 +18,6 @@ import {
 import { fakeClient, FakeState } from "./slack_inbound_fakes";
 import { parseJson } from "../json";
 
-// Proves the pieces built this phase actually chain together: a Slack
-// inbound message routes to a tool-enabled persona, that persona drives its
-// own bounded MCP tool-call loop (M6.5) against live mount data instead of
-// just answering from the prompt, and the reply that goes back to Slack is
-// the model's final message. `tools.json` is the durable evidence a tool
-// call really happened, not just that a reply was posted.
 test("a Slack message routed to a tool-enabled persona drives a real tool call before replying", async () => {
   const state = fakeState([]);
   const calls: LmStudioTurnRequest[] = [];

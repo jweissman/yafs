@@ -10,9 +10,6 @@ export function validateMountFields(mount: Record<string, unknown>) {
   assertCapabilities(mount.capabilities);
 }
 
-// "--all" is reserved by `plugin deactivate --all` — a mount actually
-// named that would be permanently undeactivatable by id (every reference
-// to it would instead be parsed as the bulk flag).
 function assertId(id: unknown): void {
   if (typeof id !== "string") {
     throw new Error("id must be a string");

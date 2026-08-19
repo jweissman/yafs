@@ -4,13 +4,6 @@ import { sleep } from "../agent_test_helpers";
 import { startedHostConfigServer } from "../desired_mount_helpers";
 import { YashClient } from "../../src/protocol/client";
 
-// Regression test for a real live failure: a tool-enabled persona with no
-// model configured anywhere (persona/mount/YAFS_LMSTUDIO_MODEL) used to
-// send LM Studio a request missing `model` entirely, which LM Studio
-// rejects with a cryptic `missing_required_parameter` 400 visible only in
-// LM Studio's own log. Unlike AgentTools.test.ts, this deliberately does
-// NOT override `toolClientFor` — it uses the real `lmStudioMcpClientFor`,
-// so the eager-validation fix actually runs.
 test("a tool-enabled persona with no resolvable model fails clearly, before any request goes out", async () => {
   const originalEnv = process.env.YAFS_LMSTUDIO_MODEL;
   delete process.env.YAFS_LMSTUDIO_MODEL;

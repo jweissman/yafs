@@ -8,11 +8,6 @@ import {
   RunLookup,
 } from "../../../src/plugins/slack/SlackReplyWait";
 
-// A pending reply-wait is a detached background watcher (SlackInboundRouting's
-// `void reply(...)`), not something daemon shutdown should block on. If its
-// poll timer isn't unref'd, `yafsd stop` can report success (its state file
-// check passes) while the OS process is still alive running out this timer —
-// see SlackReplyWait.ts's `sleep()` for the fix this guards.
 test("awaitReply's poll timer does not keep the process alive", async () => {
   const capturedTimers: NodeJS.Timeout[] = [];
   const originalSetTimeout = global.setTimeout;

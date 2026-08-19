@@ -8,6 +8,7 @@ import { AgentToolMcpSync } from "../../../src/plugins/agent/AgentToolMcpSync";
 import { yafsKey } from "../../../src/plugins/agent/LmStudioMcpJson";
 import { activateDesired } from "../../desired_mount_helpers";
 import { parseJson } from "../../json";
+import { loggedEntries } from "../../logging_helpers";
 
 const URL_FOR = (mountId: string, personaName: string) =>
   `http://127.0.0.1:7338/mcp/${mountId}/${personaName}`;
@@ -23,8 +24,6 @@ test("sync() does nothing when no path is given", async () => {
   const sync = new AgentToolMcpSync(yafs.mounts, URL_FOR);
   sync.sync();
   await flush();
-  // no assertion needed beyond "this didn't throw and touched nothing" —
-  // there is no path to check by design.
 });
 
 test("sync() writes an entry for each tool-enabled persona", async () => {
@@ -47,8 +46,7 @@ test("sync() skips a persona with no tools: configured and writes nothing", asyn
   await activateDesired(yafs, manifest(false), "agents");
   new AgentToolMcpSync(yafs.mounts, URL_FOR, path).sync();
   await flush();
-  // Nothing to sync against an empty desired set — no-op, not an empty
-  // write; the file should never have been created.
+
   await expect(readFile(path, "utf8")).rejects.toThrow();
 });
 
@@ -80,15 +78,15 @@ test("sync() preserves entries it doesn't own and removes stale yafs entries", a
 test("sync() leaves an unparsable file alone and logs instead of guessing", async () => {
   const path = await mcpJsonPath();
   await writeFile(path, "{ not valid json");
-  const errors = await capturedErrors(async () => {
+  const entries = await loggedEntries(async () => {
     const yafs = await toolPersonaYafs();
     new AgentToolMcpSync(yafs.mounts, URL_FOR, path).sync();
     await flush();
   });
   expect(await readFile(path, "utf8")).toBe("{ not valid json");
-  expect(errors.some((args) => String(args[0]).includes("mcp.json"))).toBe(
-    true,
-  );
+  expect(
+    entries.some((entry) => String(entry.message).includes("mcp.json")),
+  ).toBe(true);
 });
 
 async function toolPersonaYafs(): Promise<Yafs> {
@@ -118,16 +116,4 @@ async function readJson(path: string) {
 
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 20));
-}
-
-async function capturedErrors(run: () => Promise<void>) {
-  const errors: unknown[][] = [];
-  const original = console.error;
-  console.error = (...args: unknown[]) => errors.push(args);
-  try {
-    await run();
-  } finally {
-    console.error = original;
-  }
-  return errors;
 }

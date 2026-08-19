@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
 
 import { GitHubCollectionSource } from "../../src/plugins/github/GitHubCollectionSource";
 import { ProviderRegistry } from "../../src/mounts/ProviderRegistry";
@@ -6,7 +6,6 @@ import { YashClient } from "../../src/protocol/client";
 import { startedHostConfigServer } from "../desired_mount_helpers";
 
 test("a failed scheduled refresh does not sever an unrelated client connection", async () => {
-  const error = spyOn(console, "error").mockImplementation(() => undefined);
   const { server, client } = await startedHostConfigServer(
     "yafs-refresh-failure-",
     scheduledManifest(),
@@ -20,8 +19,6 @@ test("a failed scheduled refresh does not sever an unrelated client connection",
   await client.exec("plugins apply");
   await server.refreshDue();
   expect(await client.exec("echo still alive")).toBe("still alive");
-  expect(error).toHaveBeenCalled();
-  error.mockRestore();
   await client.close();
   await server.close();
 });
@@ -88,6 +85,6 @@ function pull(revision = 1) {
 function scheduledManifest() {
   return (
     "{version: 1, mounts: [{id: review, path: reviews, provider: github, " +
-    'config: {repository: acme/widget, query: "is:open", max: 2}, refresh: {interval: 1m}, capabilities: [network.github-api]}]}'
+    'config: {repository: acme/widget, pulls: {query: "is:open", max: 2}}, refresh: {interval: 1m}, capabilities: [network.github-api]}]}'
   );
 }

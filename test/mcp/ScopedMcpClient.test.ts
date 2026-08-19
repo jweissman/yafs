@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { ScopedMcpClient } from "../../src/mcp/ScopedMcpClient";
 import { LocalYashClient } from "../../src/protocol/local";
+import { loggedEntries } from "../logging_helpers";
 
 test("permits an operation under an allowed root", async () => {
   const client = new LocalYashClient();
@@ -129,28 +130,14 @@ test("truncates a result exceeding the byte budget", async () => {
 test("logs a budget/scope rejection instead of only returning it to the caller", async () => {
   const client = new LocalYashClient();
   const scoped = new ScopedMcpClient(client, config(["/home/root/work"]));
-  const errors = await capturedErrors(() =>
-    scoped
-      .operation({ name: "read", path: "/home/root/secrets.md" })
-      .catch(() => undefined),
+  const entries = await loggedEntries(() =>
+    scoped.operation({ name: "read", path: "/home/root/secrets.md" }),
   );
-  expect(errors.some((args) => String(args[0]).includes("Path outside"))).toBe(
-    true,
-  );
+  expect(
+    entries.some((entry) => String(entry.reason).includes("Path outside")),
+  ).toBe(true);
   await client.close();
 });
-
-async function capturedErrors(run: () => Promise<unknown>) {
-  const errors: unknown[][] = [];
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => errors.push(args);
-  try {
-    await run();
-  } finally {
-    console.error = originalError;
-  }
-  return errors;
-}
 
 function config(roots: string[]) {
   return { roots, maxResultBytes: 20_000, maxCalls: 20, deadlineMs: 60_000 };

@@ -7,6 +7,7 @@ import {
 import { slackConfig } from "./SlackManifest";
 import { slackCommands } from "./SlackCommands";
 import { SlackDirectoryDriver } from "./SlackDirectoryDriver";
+import { SlackInboundPoller } from "./SlackInboundPoller";
 import { SlackCollectionSource, SlackSnapshot } from "./SlackCollectionSource";
 import { SlackChannelClient } from "./SlackApiClient";
 import { SnapshotMaterializer } from "../../mounts/SnapshotMaterializer";
@@ -14,10 +15,18 @@ import { MountConfig, MountRecord, SlackConfig } from "../../mounts/types";
 
 export type SlackClientFor = (config: SlackConfig) => SlackChannelClient;
 
+export interface SlackDriverConfig {
+  clientFor: SlackClientFor;
+  pollIntervalMs?: number;
+}
+
 export class SlackPlugin extends Plugin {
   readonly name = "slack" as const;
 
-  constructor(private readonly source?: SlackCollectionSource) {
+  constructor(
+    private readonly source?: SlackCollectionSource,
+    private readonly driverConfig?: SlackDriverConfig,
+  ) {
     super();
   }
 
@@ -29,13 +38,6 @@ export class SlackPlugin extends Plugin {
     return slackConfig(value);
   }
 
-  // Collides across two Slack mounts on different workspaces, since
-  // SlackConfig has no workspace/team field — only a bare channel id. An
-  // explicit path: is required once more than one Slack mount is active;
-  // see PRODUCT-SPEC.md's "Namespace: three concepts" section.
-  // Absolute (leading slash) for the same reason as GitHubPlugin's
-  // defaultPath: /world is one shared top-level namespace, not nested
-  // under the activating session's own home.
   defaultPath(config: MountConfig): string {
     return `/world/slack/channels/${(config as SlackConfig).channel}`;
   }
@@ -59,8 +61,8 @@ export class SlackPlugin extends Plugin {
     return slackCommands();
   }
 
-  createDriver(wiring: Wiring, slackClientFor: SlackClientFor): PluginDriver {
-    return new SlackDirectoryDriver(wiring, slackClientFor);
+  createDriver(wiring: Wiring): PluginDriver[] {
+    return this.driverConfig ? drivers(wiring, this.driverConfig) : [];
   }
 
   async prepare(record: MountRecord, snapshots: SnapshotMaterializer) {
@@ -87,4 +89,13 @@ export class SlackPlugin extends Plugin {
       fetchedAt: snapshot.fetchedAt,
     };
   }
+}
+
+function drivers(wiring: Wiring, config: SlackDriverConfig): PluginDriver[] {
+  const { clientFor, pollIntervalMs } = config;
+  const { mounts, dispatchCtl } = wiring;
+  return [
+    new SlackDirectoryDriver(wiring, clientFor),
+    new SlackInboundPoller(mounts, dispatchCtl, clientFor, pollIntervalMs),
+  ];
 }

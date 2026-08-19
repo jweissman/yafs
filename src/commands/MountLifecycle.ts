@@ -18,15 +18,6 @@ function deactivation(context: CommandContext, id: string | undefined) {
   return id === "--all" ? deactivateAll(context) : deactivateOne(context, id);
 }
 
-// Known limitation, shared by every mutating command (not introduced
-// here): queued operations apply as one batch after this function
-// returns, with no per-operation try/catch (YafsOperationQueue.apply).
-// If unmounting one id throws mid-batch (e.g. a disk I/O error during
-// that mount's audit/persistence write), earlier ids in the list are
-// already gone and later ones never ran, with no report of which is
-// which beyond the raw error. Low-probability in practice, but a real
-// gap; fixing it needs apply() to report partial progress, not a
-// change scoped to this command.
 function deactivateAll(context: CommandContext) {
   const ids = context.activeMountIds();
   ids.forEach((id) => deactivateOne(context, id));

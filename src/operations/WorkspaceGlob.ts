@@ -4,12 +4,6 @@ import { wildcard } from "./WorkspaceFind";
 import { doubleStarMatches } from "./WorkspaceGlobDoubleStar";
 import { safeList, child } from "./WorkspaceGlobSupport";
 
-// Two wildcards: "*" matches any substring within exactly one path
-// component -- bare ("pulls/*/diff.patch") or partial, the same pattern
-// language yafs.find's own `pattern` argument already uses ("*.md",
-// "test_*"), reusing that exact matcher rather than a second one. "**"
-// matches zero or more whole components (e.g. "**/diff.patch" reaches any
-// depth). No character classes/"?" -- not needed yet.
 type Matcher = (
   context: CommandContext,
   base: AbsolutePath,

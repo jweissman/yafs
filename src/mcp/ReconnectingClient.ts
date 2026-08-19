@@ -8,13 +8,6 @@ interface Address {
   port: number;
 }
 
-// yafs-mcp is a long-lived stdio process; the daemon it talks to routinely
-// gets stopped/restarted during normal development. A plain YashClient
-// connects once and stays dead after that, forcing the operator to notice
-// and manually reconnect the MCP server itself. Retry once, transparently,
-// on exactly the "stale connection" failure -- not on a fresh connect
-// failure (e.g. the daemon genuinely isn't running), which should still
-// surface normally.
 export class ReconnectingClient implements McpClient {
   private client: Promise<YashClient>;
 

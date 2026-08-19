@@ -24,8 +24,6 @@ export class AgentToolServer {
     this.client = new LocalYashClient(yafsOptions);
   }
 
-  // Defaults to an OS-assigned ephemeral port, safe for any caller,
-  // including tests. Only `yafsd` opts into the fixed port (toolsPort()).
   start(port = 0) {
     if (!this.tryStart(port)) {
       throw toolsPortInUseError(port);

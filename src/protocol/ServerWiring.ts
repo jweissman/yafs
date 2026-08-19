@@ -1,3 +1,4 @@
+import Yafs from "../index";
 import { AbsolutePath } from "../core/AbsolutePath";
 import { CtlHandler } from "./CtlDispatch";
 import { Wiring } from "../mounts/Plugin";
@@ -53,9 +54,25 @@ export function driversFor(
   bindings: ServerBindings,
   options: StartOptions,
 ): BackgroundDrivers {
-  const clients = defaultClients(options, bindings.toolServer);
-  const timing = timingFrom(options);
-  return backgroundDrivers(wiring(bindings), clients, timing);
+  const clients = clientsFor(bindings, options);
+  return backgroundDrivers(wiring(bindings), clients, timingFrom(options));
+}
+
+function clientsFor(bindings: ServerBindings, options: StartOptions) {
+  return {
+    ...defaultClients(options, bindings.toolServer),
+    scheduledYafs: schedulerSession(bindings.services),
+  };
+}
+
+function schedulerSession(services: Services): Yafs {
+  return new Yafs({
+    store: services.store,
+    mounts: services.mounts,
+    traces: services.traces,
+    cache: services.cache,
+    desired: services.desired,
+  });
 }
 
 function timingFrom(options: StartOptions) {

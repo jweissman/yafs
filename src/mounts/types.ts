@@ -9,16 +9,17 @@ export interface FixtureConfig {
   files: Record<string, string>;
   streams?: Record<string, StreamSpec>;
 }
-export interface GitHubConfig {
-  repository: string;
+export interface GitHubPullsConfig {
   query: string;
   max: number;
 }
-// Declares this persona has bounded MCP tool access. Yafs runs its own
-// scoped MCP HTTP server (AgentToolServer) and points LM Studio at it via
-// an `ephemeral_mcp` integration computed automatically per request — the
-// operator never edits LM Studio's mcp.json or hand-authors an
-// `integrations` list; `roots`/budgets here are the whole contract.
+export interface GitHubConfig {
+  repository: string;
+
+  pulls?: GitHubPullsConfig;
+  commits?: { max: number };
+}
+
 export interface PersonaToolsConfig {
   roots: string[];
   maxResultBytes?: number;
@@ -42,15 +43,21 @@ export interface SlackConfig {
   persona?: string;
   requireMention?: boolean;
   replyTimeoutMs?: number;
-  // Adding/removing the "working" reaction needs a separate OAuth scope
-  // (reactions:write) beyond posting/reading messages. Default true to
-  // match existing behavior; set false for a bot token that doesn't have
-  // that scope, instead of failing (and logging) on every message.
+
   reactions?: boolean;
 }
-export type MountProvider = "fixture" | "github" | "agent" | "slack";
+
+export interface SchedulerConfig {
+  script: string;
+  intervalMs: number;
+  args?: string[];
+  allow: CommandAccessName[];
+}
+export type CommandAccessName = "read" | "session" | "mutate" | "control";
+export type MountProvider =
+  "fixture" | "github" | "agent" | "slack" | "scheduler";
 export type MountConfig =
-  FixtureConfig | GitHubConfig | AgentConfig | SlackConfig;
+  FixtureConfig | GitHubConfig | AgentConfig | SlackConfig | SchedulerConfig;
 export interface PublishedSnapshot {
   entries: [string, string][];
   fileCount: number;
@@ -72,6 +79,10 @@ export interface MountRecord {
   refreshIntervalMs?: number;
   fetchedAt?: string;
   capabilities: string[];
+
+  sourceRevision?: string;
+
+  sourcePaths?: string[];
 }
 export type PreparedMountRecord = MountRecord & { snapshot: PublishedSnapshot };
 

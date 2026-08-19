@@ -1,7 +1,9 @@
 # Yafs feature roadmap
 
-This file tracks implementation sequencing. The product decision, use cases,
-and acceptance-level milestones live in [ADR.md](ADR.md).
+This file tracks implementation sequencing. The [product spec](PRODUCT-SPEC.md)
+owns the operator-facing outcome; the [ADR decision index](ADR.md) owns durable
+constraints and gates. This document should say what is being proved next, not
+repeat either one or become a permanent transcript of every completed debate.
 
 The committed delivery horizon now extends through M6.5 — local durable
 cache, the agent runtime, bounded agent tool access, and the durable Slack
@@ -14,6 +16,20 @@ Yash has a linked language track in [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md).
 L0 (the typed command boundary) and L1 (workspace literacy) are planned paving
 stones before broader MCP or web surfaces; later script, iteration, and pipeline
 work is evidence-gated rather than an implicit POSIX-compatibility commitment.
+
+## Roadmap map
+
+| Lane | Purpose | Current state |
+| --- | --- | --- |
+| Kernel and local service | Make one durable, composable local workspace reliable. | M0–M5 delivered. |
+| Bounded agent substrate | Give agents declared providers, scoped tools, durable runs, and explicit actions. | M6.1–M6.5 delivered; M6.9 git source remains validation work. |
+| Product proof | Show an engineering investigation desk: a self-describing task world produces a useful, cited diagnosis and a separately approved handoff. | Active direction; incident source and faceted task view are the missing product ingredients. |
+| Learning loop | Turn repeated successful procedures into reviewed local `/commons` functions. | Downstream of stable script/action contracts. |
+| Option frontier | Service facades, controllers, public service, federation, and machines. | Hypotheses, not implied commitments. |
+
+Completed milestones remain below as concise delivery evidence until their
+settled decisions are folded into the ADR. New roadmap work should enter one of
+these lanes with an explicit product question and exit evidence.
 
 ## Product thesis
 
@@ -302,81 +318,27 @@ Design checkpoints for every plugin:
 
 ### Current status
 
-"Complete" below means the delivery gate is mechanically met — implemented
-and tested. It is not a claim that the product decision is validated; that
-requires someone repeatedly preferring this review loop to existing tools,
-which is separately tracked, not implied by a milestone checkbox.
+"Delivered" means a mechanical implementation/test gate was met. It never
+means the product bet has been validated by repeated real use.
 
-- M0 and M1 are complete for local nodes: the in-memory tree supports canonical
-  paths, symbolic links (including loop detection), read-only ordered unions,
-  and `origins` inspection; commands return typed result/error/session data.
-- M2 is substantially implemented: Yash has client-local persisted history,
-  readline up/down navigation, Ctrl-R lookup, last-token virtual-path
-  completion, `PROMPT`, `-c`, and `--json` result output. Completion and JSON
-  CLI ergonomics remain deliberately modest.
-- M3 is complete: loopback `yafsd`/`yash`, per-connection sessions, a usable
-  `yash --local` development mode, versioned/bounded protocol frames,
-  checksummed sync-before-apply operations, recovery, snapshots, and an
-  exclusive data-directory lock are covered by integration tests. `yafsd`
-  manages foreground and detached lifecycle through its data directory.
-- M4 and M4.5 are complete for the read-only fixture: `.yafsmeta` is strict
-  YAML with unknown-field rejection; validate, activate, refresh, and unmount
-  are explicit. A bounded snapshot is durably recorded before publication;
-  direct reads, links, unions, provenance, recovery, and unmount use that one
-  resolver path. Provider writes, grants, and external providers remain
-  follow-up work. Command substitution is implemented as a deferred nested-
-  command AST, including inside double quotes; pipes remain later work.
-- M5 is mechanically complete: the GitHub provider, named network/secret
-  grants, daemon-scheduled and explicit refresh, and `capture`/`restore`
-  source bindings are implemented and were exercised against a real
-  GitHub Enterprise Cloud repository, including real authentication failure
-  modes.
-- M6/M6.2/M6.3 are complete: the agent runtime (durable acceptance, streaming
-  runs, cancellation, restart interruption), the compositional provider/
-  plugin registry, and canonical `plugins`/`plugin` configuration vocabulary
-  are implemented and regression-tested. In-VFS plugin configuration
-  (`.yafsmeta` + `plugin validate|activate|refresh`) has been removed
-  outright, not just superseded; `yafs.plugins.yaml` is the sole way to grant
-  a capability.
-- M6.4 (durable outbound actions) is **implemented**: `slack send` and the
-  inbound bridge's replies both accept into a durable per-action outbox
-  (`outbox/<id>/{message.md,status.json}`) before the ctl write is
-  acknowledged, transition `queued → running → succeeded|failed`, and are
-  swept to `unknown` (not retried, not dropped) on restart if a post was
-  in flight — matching the same accept-then-transition durability pattern
-  as `AgentRunStore`, but with `unknown` instead of `interrupted` on
-  recovery, since a half-sent Slack post may already have landed. See
-  `SlackOutboxStore`/`SlackOutboxStatus`/`SlackOutboxRecovery` and
-  `test/e2e/SlackOutboxRecovery.test.ts` for the exercised recovery paths.
-- M7.0 (a bounded, explicit-invocation, single-persona local conversation,
-  plus a one-way Slack bridge into it) is **complete** — full M7 (durable
-  multi-speaker semantics plus a deliberate orchestration decision) is not
-  yet begun; see the M7.0 checkpoint below and the ADR's "M7 decision"
-  section for what shipped versus the original channel design.
-- M6.5 (bounded agent evidence tools) is **implemented**: a tool-enabled
-  persona's requests go through LM Studio's native `/api/v1/chat` +
-  `integrations` mechanism (LM Studio drives its own tool loop; Yafs never
-  parses `tool_calls` itself) against `AgentToolServer`, a persistent MCP
-  HTTP listener `yafsd` starts itself — one URL per mount/persona, no
-  manual LM Studio-side registration — enforcing an operation allowlist,
-  root scoping, and byte/call/deadline budgets in code, scoped per MCP
-  session. See the M6.5 checkpoint below. **Its live-validation gate is now
-  met**: a real LM Studio persona, not a fake one, used the loop end to end
-  against a live GitHub PR collection and returned an accurate,
-  evidence-cited recommendation — see "Review radar proof — achieved"
-  below. M6.6 (runtime-overlay/registry consolidation), M6.65 (GitHub
-  provider depth: recent commits, plus an on-demand CI-fetch design), and
-  M6.7 (scheduled review digest, the reviewer's recommended "second flow")
-  are all named and scoped, not yet built.
-- `yafs-mcp` is a local stdio client of `yafsd`, not a provider or a second VFS
-  implementation, and its surface is **bounded local operations, not purely
-  read-only** — alongside the L0/L1 workspace operations (`yafs.list`/
-  `yafs.read`/`yafs.inspect`/`yafs.query`/`yafs.tree`/`yafs.find`/`yafs.test`/
-  `yafs.diff`/`yafs.grep`) it also exposes `yafs.capture`/`yafs.restore`,
-  which are durable local mutations, reasonable for a trusted local operator
-  but deliberately excluded from `AgentToolServer`'s agent-facing allowlist.
-  Arbitrary shell execution, MCP writes beyond capture/restore, and public
-  access are deliberately absent from both.
+| Area | Delivered evidence | Still deliberately open |
+| --- | --- | --- |
+| M0–M3 | Composable local VFS, Yash, loopback service, recovery, and daemon lifecycle. | Remote identity and service exposure. |
+| M4–M5 | Snapshot-backed provider projection, provenance, GitHub collection, explicit refresh, and capture/restore. | Provider writes and general dynamic views. |
+| M6.1–M6.5 | Cache, plugin configuration boundary, agent runs, Slack outbox, and bounded LM Studio MCP tools. | Provider-neutral action envelope and faceted task resolver. |
+| M6.65 | Recent GitHub commits and combined CI status. | On-demand non-snapshot content beyond the scoped git-source experiment. |
+| M7.0 | Supervised single-persona conversation and one-way Slack routing. | Durable multi-speaker semantics and orchestration. |
+| MCP | Trusted local operator adapter plus restricted agent tool surface. | Public MCP, arbitrary shell execution, and broad MCP writes. |
+
+M6.9's git source path is a prototype under active validation, not settled
+delivery evidence. Its shell, MCP, recovery, and secret-boundary behavior must
+agree before it is promoted to the shared substrate.
+
+## Delivery history
+
+The sections below preserve implementation checkpoints and rejected designs.
+They are historical evidence, not a second source of product or architectural
+truth; stable rules should be condensed into the ADR decision index over time.
 
 ### M0 — Foundation: composable in-memory filesystem
 
@@ -1134,7 +1096,50 @@ content; and a restart can rebuild the same view from durable manifests and
 payloads with network disabled. This is a scalability/correctness change, not
 a license to make provider reads lazy during ordinary pathname resolution.
 
-### M6.7 — Scheduled review digest *(second hand-built automation)*
+**Added weight, per reviewer guidance:** this is no longer purely
+scalability cleanup. M6.8's durable "case" objects (materialized worktree,
+captured CI log, transcript, report) want the same content-addressed,
+immutable-input treatment Nix gives a store object — reproducible and
+auditable, not "whatever was on disk when it ran." M6.8's *manual*
+prototype doesn't block on this (a git SHA is already content-addressed),
+but generalizing case storage into a durable, replayable system does.
+
+**Plugin-registry fragmentation, grounded (not speculative anymore) —
+pulled forward, building now:** a concrete inventory of every real
+cross-plugin coupling in the codebase today found: `commands()`/
+`actions()`/`exposures()` are already registration-driven (good — every
+plugin implements the method, aggregation is automatic) but
+`createDriver()` is not (different signature per plugin, `GitHubPlugin`
+has none at all, and 3 of 6 running background drivers bypass the `Plugin`
+abstraction entirely, hand-constructed in `BackgroundDrivers.ts`); and
+`AgentCitationLookup.ts` hardcodes `kind === "github-pr"` plus
+Slack-specific mrkdwn formatting inline, with no generic "citable
+resource" interface, coupling three plugins in one function. Both are
+being fixed now — standardize `createDriver()` on `Plugin`, registration-
+driven like `commands()`; extract a small `kind`-keyed citation-renderer
+registry, contributed per-plugin. **Explicit scope discipline:** this is
+fixing two demonstrated problems using an already-proven pattern, not a
+campaign for architectural purity — the rest of M6.6 (content-addressed
+blobs, snapshot/overlay separation) stays gated as below. Code quality
+here is valued for iterability, not as an end in itself; don't let this
+turn into re-factoring plugins that aren't causing real friction.
+
+### M6.7 — Scheduled review digest *(second hand-built automation; not yet built)*
+
+**Status correction:** a generic `scheduler` plugin (timer-driven
+`runProgram`, gated by a coarse allow-list) was built this session as an
+**L2 scheduler spike** — see
+[LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md)'s scheduler-driver entry for
+the concrete list of what makes it a spike, not a durable feature (no
+persisted tick state, no source pinning, no overlap/coalesce policy, no
+path-root scope, no durable run record). It is **not** M6.7: it has no
+working-hours window, no safe-to-merge prompt/bar, no durable dedup, and
+no outbox delivery, and it is not wired into the live daemon as a running
+mount. M6.7 remains the first *intended* durable scheduled flow, still
+unbuilt; do not treat the spike as having satisfied it, and do not layer
+more autonomous functionality on the spike until its own status (park it
+as a dev convenience, or promote it with the gaps above closed) is
+decided.
 
 Checkpoint: after the review-radar proof, the reviewer's own stated
 sequencing is the plan, verbatim: *"build one deliberately narrow second
@@ -1176,6 +1181,39 @@ built bespoke, on purpose, so the eventual comparison is honest.
   already proved, is not a durable general workflow system. M6.6 is a
   prerequisite for generalizing *after* this and the Slack bridge are
   compared, not for building this.
+
+**Correction to the sequencing above, decided after a grounded plugin-
+interop inventory (not a reversal of the underlying discipline):** "wait
+for two trigger/action pairs before generalizing" was calibrated for *one*
+specific risk — designing a general workflow/event **language** from a
+single example. It was not evidence that plugin **registration** patterns
+were premature to fix; a concrete inventory (see M6.6 above) found two
+real, already-messy cross-plugin couplings and one registration pattern
+(`commands()`/`actions()`) that already works but isn't applied
+consistently. On that narrower question, the evidence bar was already met.
+So: the scheduler is being built as its own plugin, using the
+now-standardized `createDriver()` registration, rather than one more
+bespoke hand-wired driver — but a general **scripting/event language**
+(L2, a manifest `scheduled:` block) is still gated on comparing this flow
+against the Slack bridge, exactly as originally scoped. Building the
+plugin shape now and deferring the language is not a contradiction; they
+were always two different generalization questions with two different
+evidence bars.
+
+**Follow-up Q&A on a posted digest — verified not yet supported, not
+assumed:** a human replying in a Slack thread under a digest message
+would not currently route back to the persona at all.
+`SlackApiClient.history()` calls `conversations.history`, which returns
+only top-level channel messages — Slack's thread replies require the
+separate `conversations.replies` endpoint, which nothing in
+`SlackInboundPoller`/`SlackInboundPollerRoute` calls. A digest that can't
+take a follow-up question is materially less useful than one that can;
+this needs real design work (thread-aware polling, at minimum), not an
+assumption that today's inbound path already covers it. It also sharpens
+why M6.8-shaped repo access matters beyond CI-failure explanation: a
+follow-up like "why is this PR risky" or "where else is this called" needs
+the same real grep-across-the-codebase capability, not just diagnosis of
+a red commit.
 - **Exit criterion:** ship it, let it run for real, then compare its
   driver against `SlackInboundPoller`'s. Same dispatch-then-post shape?
   Same need for durable dedup? That comparison — not speculation — is
@@ -1183,7 +1221,7 @@ built bespoke, on purpose, so the eventual comparison is honest.
   design, and is the evidence L2's own "second decision, earned only by
   repeated use" principle is waiting on.
 
-### M6.65 — GitHub provider depth: recent commits and an on-demand CI-fetch design *(before M6.7)*
+### M6.65 — GitHub provider depth: recent commits and an on-demand CI-fetch design *(Phase 1 implemented; Phase 2 superseded by M6.8)*
 
 Promoted from a "later, not designed" note to a scoped milestone because
 live validation surfaced a concrete gap it directly addresses: sampling 30
@@ -1204,6 +1242,17 @@ collection resource, same shape as `pulls/`, no new fetch primitive
 needed. Exit evidence: a live mount publishes `commits/` alongside
 `pulls/` and a reviewer persona prompt can cite a specific recent commit's
 CI status the same way it already cites a PR.
+
+**`commits/HEAD` — added afterward, for scripts, not personas.** A script
+(see [LANGUAGE-ROADMAP.md](LANGUAGE-ROADMAP.md)'s `if`/`test -c`) has no
+loop to search `commits/` for "the current one," and L2 deliberately has
+no loops. GitHub's commits list is newest-first by default (verified
+live, not assumed). Rather than a real VFS symlink — the shared
+snapshot-write pipeline (`SnapshotWrite.ts`) only ever plain-writes an
+entry's content today, and extending it would mean touching every
+provider for one pointer — `commits/HEAD/metadata.json` is a plain-file
+duplicate of the newest commit's own entry. Verified live: it matches
+the real newest commit independently confirmed via a direct API call.
 
 **Phase 2 — on-demand, single-resource provider fetch: design only, not
 implemented this milestone.** Let a persona ask a provider to fetch one
@@ -1236,6 +1285,14 @@ same way mount activation already is. Scope this for real once M6.7 (or
 whatever next needs it) makes the "we want to check something specific,
 not the whole collection" shape concrete rather than hypothetical.
 
+**Resolved by M6.8, not as originally framed here:** the "how does a
+persona express fetch this one thing" question turned out to be the
+wrong question. M6.8 below fetches a failing job's log as host-side
+orchestration outside the bounded persona MCP tool set entirely, not as
+a new agent-facing verb — so this primitive is not needed as scoped
+above. Left in place as the record of what was considered and why it
+didn't end up being the shape that shipped.
+
 **GitHub-specific direction, not a new provider yet:** enrich the existing
 repository projection before adding unrelated integrations. A bounded refresh
 can publish PR metadata, changed-file summaries, head-SHA check results, and a
@@ -1245,6 +1302,373 @@ a short-lived redirect and they can be large, so they must be fetched only by
 an explicitly authorized, bounded hydrate/capture action that produces a
 durable artifact tied to repository, job, and observed revision. `cat` must
 never become an ambient network call merely because a log-shaped path exists.
+
+### M6.8 — Investigation activity: an explained CI failure "case" *(pre-M9 runtime-bridge spike; design gate, then a manual prototype)*
+
+Motivated by the same live gap M6.65 named (no CI visibility) plus a direct
+test of what an *explanation* of a red commit would actually need. A plain
+mechanical alert ("master is red") was judged not interesting enough on its
+own; the raw CI log alone was judged not interesting enough either, since it
+can't relate a failure to the code that caused it. What's actually wanted is
+a real explanation grounded in the repository, produced by delegating to a
+frontier model with its own tools against a real checkout — not by rebuilding
+code exploration inside yafs's own bounded MCP tool set.
+
+**Category correction, per reviewer guidance:** this is not "more GitHub
+depth." Every prior milestone in this document is a bounded read (or a
+durable, audited local write) inside yafs's own VFS. This is the first place
+yafs would spawn a host process with real filesystem access outside that
+boundary — the same territory M9 ("Runtime bridge") already names as a
+decision gate. Treat this milestone as a pre-M9 spike that happens to keep
+the M6.8 label, not as GitHub-provider work, even though it will keep living
+next to M6.65 in this document for now.
+
+**The durable object is a case, not a "review" or a generic "workflow run."**
+Concrete, inspectable, and it doesn't prematurely commit to a workflow-engine
+shape. A case's contract, per reviewer guidance:
+
+```text
+case inputs (commit SHA, CI job/log digest, prompt policy)
+  → materialized disposable worktree
+  → bounded analysis runner
+  → immutable report + transcript + exit/status
+  → optional human-approved Slack delivery
+```
+
+**Validated live before scoping this further** (not assumed):
+- `claude` (Claude Code CLI, for `claude -p`) is installed and runnable on
+  the host that runs `yafsd`.
+- A failing check run's `details_url` embeds the Actions run and job ID
+  directly (`/actions/runs/<runId>/job/<jobId>`) — no extra lookup beyond
+  what a refresh already fetches for `ciStatus`. `GET
+  /actions/jobs/<jobId>/logs` 303-redirects to a real, fetchable plain-text
+  log (one sample: 128KB / 1331 lines).
+- Master failures are not all the same shape. Sampling the 12 tracked
+  commits, 8 showed `ciStatus: "failure"` — most were the same
+  infrastructure cascade (a `codeload.github.com` 429 during action
+  download, failing every job at "Set up job" with no code involved at
+  all), but at least one was a genuine RSpec failure ("Test (Group 10)",
+  "Run Specs" step) with a clean, structured failure block and an exact
+  file:line pointer
+  (`./spec/lib/lighthouse/benefits_documents/update_documents_status_service_spec.rb:117`).
+  Both shapes are real and need different handling — an alert that treats
+  every red commit as a code problem will be wrong most of the time in
+  this sample. A second known-red commit (`b3174bbce`) is available as a
+  further test case.
+- RSpec's own output has a fixed, greppable `Failures:` ...
+  `Top N slowest examples` boundary. Extracting the relevant failure text
+  from a log this well-structured doesn't need a model call at all.
+
+**Shape (case pipeline):**
+1. **Detect** — pairs with M6.7's scheduled driver (or a manual trigger,
+   for prototyping): read `commits/HEAD`'s `ciStatus`.
+2. **Fetch** — pull the specific failing job's log on demand, as host-side
+   orchestration, not a new agent-facing MCP verb. This is what resolves
+   the "how does a persona express fetch this one thing" question the
+   on-demand-fetch note above left open: it doesn't need an answer, because
+   this flow never routes through the bounded persona tool set at all.
+3. **Narrow** — extract the relevant failure text. Prefer mechanical,
+   structural extraction for recognized log shapes (RSpec's `Failures:`
+   block, first); fall back to a small local model (e.g. the `gpt-oss`
+   class already running the reviewer persona) to summarize only for
+   unstructured failure types. Don't reach for a model where a deterministic
+   extraction already works.
+4. **Isolate** — check out the exact failing commit SHA into a yafs-managed,
+   disposable worktree, *not* the operator's own local clone (a real one
+   already exists at `/Users/joe/Work/veterans-affairs/vets-api` and is
+   deliberately not reused — it has its own branch/WIP state that must not
+   be disturbed or read from stale). Per the Nix lineage below, a *durable*
+   case eventually wants this worktree and its captured log identified by
+   content, not "whatever is currently checked out" — but a git SHA is
+   already content-addressed, so the manual prototype doesn't need M6.6 to
+   exist first; durable, replayable case storage does.
+5. **Explain** — invoke a frontier-model CLI (`claude -p` or equivalent)
+   with `cwd` set to that worktree and the narrowed failure as its prompt,
+   via a deliberately small new capability (`host.investigate-repository`,
+   not general `host.exec`), so it explores using its own tools against real
+   repository content. Deliberately not a yafs-VFS-side grep-able repo
+   mount, and not the read-triggered/lazy-population directory primitive
+   floated in the same discussion — both are real, separately interesting
+   ideas, kept out of scope here rather than entangled with this milestone.
+6. **Capture** — the case's immutable report + full transcript + exit/status,
+   durably, before any delivery decision is made.
+7. **Deliver** — optional, human-approved (initially) relay of the report
+   through the existing durable Slack outbox (M6.4), same delivery
+   guarantee as every other reply.
+
+**`host.investigate-repository` hardening requirements, not yet built:**
+- a fresh, bounded, disposable directory per case;
+- no inherited arbitrary environment or ambient GitHub token;
+- explicit network policy;
+- command/model allowlist, timeout, output and disk budgets;
+- durable `accepted → running → unknown|succeeded|failed` states — the same
+  shape `AgentRunStore` already uses for persona runs, applied to a new kind
+  of actor;
+- no automatic retry after an uncertain external action (matching
+  `SlackOutboxRecovery`'s existing `unknown`-on-restart precedent, not
+  re-inventing it);
+- human approval before external publication, initially — automatic Slack
+  delivery is a later decision, not a default.
+
+**Sequencing, per reviewer guidance — do not skip steps by merging them:**
+1. Design gate (this entry), then a **manual prototype**: run fetch → narrow
+   → isolate → explain → capture against several known failures
+   (`2b5b4e10`, `b3174bbce`, more as found) — no timer, no Slack automation,
+   no generic runner framework.
+2. **Score the output, not the plumbing**, per case: was the diagnosis
+   grounded in the exact SHA/log? Did it identify a plausible root cause
+   versus merely restating the failure? Would a developer have saved time or
+   taken an action? How much model time/cost did it consume?
+3. Only after that: M6.7 ships as the **second, deliberately separate**
+   hand-built trigger (a boring scheduled digest with durable dedup and
+   outbox delivery). **Do not merge M6.7 and M6.8 into one autonomous "CI
+   analyst" system yet** — the entire point of building a second trigger is
+   comparing two trigger/action paths honestly, which a merge would destroy.
+4. M6.6 (snapshot/runtime-overlay separation, content-addressed provider
+   payloads, plugin-registration consolidation) gates *generalizing* past
+   this point, once the case experiments validate real demand — not the
+   manual prototype itself.
+5. L2 stays last, and stays orchestration of local reviewable procedures —
+   not an event engine, not a way to smuggle host execution into shell
+   syntax.
+
+**Open design questions, not resolved here (per reviewer guidance):**
+- What exact authority does an investigation activity have, and what is
+  *intentionally impossible* for it to do?
+- What makes an explanation good enough to surface: evidence citations,
+  alternatives considered, confidence, and a recorded human outcome?
+- What does an operator return to tomorrow — a Slack message, or a
+  browsable durable case that makes the message trustworthy? (Leans toward
+  needing the latter, but not decided.)
+- Which successful procedures end up repeatable enough to deserve an L2
+  script and, much later, a `/commons` publication?
+
+**Exit evidence:** several real, manually-triggered cases each produce a
+`claude`-authored report that cites real repository content (not a
+paraphrase of the log alone), scored per case per the criteria above — not
+whether the pipeline merely runs without error. Automation (M6.7 wiring) is
+a separate, later decision gated on this evidence, not a foregone conclusion.
+
+### M6.9 — A repository mount that never durably writes, using normal filesystem commands *(prototype under validation; `host.git-read` experiment in the `github` plugin)*
+
+**Operator walkthrough:** [GIT-SOURCE-SETUP.md](GIT-SOURCE-SETUP.md) —
+configuring `host.git-read`, verifying it from the host/VFS/an agent
+persona, and a troubleshooting table for the errors this is actually
+likely to produce.
+
+**Not "GitHub depth" and not "a CI diagnostic tool" — a dependency several
+bigger ideas are blocked on.** M6.8 deliberately kept "a yafs-VFS-side
+grep-able repo mount" and "the read-triggered/lazy-population directory
+primitive" out of scope as real, separately interesting ideas. This entry
+is about that gap, scoped around what it would unblock, not around the
+narrow case that first motivated finding it: Commons (a reviewed
+procedure claiming "here's how the feature-flag system works" is
+unverifiable and rots without real code to check it against), a derived
+task workspace (composing GitHub + Slack + notes into a `/labs` unit is
+thin if the actual changed code isn't part of it), and `/world` itself
+being a navigable representation of the engineering system rather than a
+PR-metadata viewer. CI investigation (M6.8) is the first validated
+consumer, not the reason this matters.
+
+**History of this entry, kept rather than deleted, because the reasoning
+matters:** the first version proposed a generic `ContentBacking` hook, a
+read-side sibling to `CtlDispatch`, wired into `cat`/`grep`/`tree`/`ls` for
+any mount. Review found that broke real invariants: a `cat` that silently
+reifies content into the VFS on first touch turns a command usable in
+read-only `$()` substitutions (`ReadOnlySource.ts` explicitly asserts no
+side effects there) into a hidden durable mutation, and a host clone with
+a moving `HEAD` could let `tree`/`grep`/`cat` in one script observe three
+different repository states with no signal anything was inconsistent. A
+second version proposed avoiding that by giving up filesystem semantics
+entirely — typed operations (`repo tree REPO@SHA`, `repo grep`, `repo
+read`, `repo capture`) instead of `cat`/`grep`/`ls`. Reconsidered again: a
+third property of the codebase, `docs/PRODUCT-SPEC.md`'s "Capture stays
+secondary" (live exploration is the default; durable `capture` is a
+separate, explicit act, using the `TraceCapture.ts`/`yafs.capture`
+primitive that already exists), resolves the mutation problem directly —
+**if reading a git-mount path never durably writes anything at all, ever,
+there is no hidden mutation to worry about, and normal `cat`/`grep`/`tree`
+stay honest.** That's the design below. The remaining, real, deliberately
+accepted trade-off: `cat`/`grep` on a git mount *do* still mean resolution
+sometimes calls a live host backing instead of a pure VFS lookup — that
+invariant is knowingly given up, not solved, in exchange for the
+ergonomics. It's scoped to be visible, not silent (see `resourceShape`
+below).
+
+**The design:**
+- **`ls`/`tree`/`find` need no special-casing at all.** `git ls-tree` gives
+  the complete real path list for ~14k files in ~163ms with zero blob
+  content — cheap enough to publish as an ordinary eager snapshot, one
+  entry per path, with placeholder-empty content. Normal VFS resolution
+  already handles the rest; no interception layer needed for these three
+  commands.
+- **`cat` and `grep` are the only two commands that need to know a path is
+  git-backed**, and only for those two: `cat` on such a path fetches
+  `git show <pinned-SHA>:<path>` live and returns it — it never writes
+  the fetched bytes into the VFS/journal, so it stays genuinely read-only
+  even inside a `$()` substitution. `grep` never walks VFS-resident
+  content for these paths at all; it shells straight to `git grep`
+  against the host mirror and returns real matches. Neither one is a
+  generic pluggable hook available to every mount type — this is
+  deliberately narrow, checked only for the git provider, not a new
+  extension point other plugins can also register against.
+- **Revision pinning reuses the field every mount already has.** A
+  `PreparedMountRecord.revision` already exists for every provider; a git
+  mount's `revision` is the fetched commit SHA, advanced only by refresh
+  (interval-based or `plugins refresh`), exactly like GitHub/Slack
+  content freshness works today. Between refreshes, `cat`/`grep`/`tree`
+  in one script all see the same pinned SHA — no moving-`HEAD`
+  incoherence.
+- **Durable preservation stays an explicit, separate act.** Reading never
+  writes; if something needs to outlive the mount (survive a PR falling
+  out of query scope, ground a Commons procedure), the existing `capture`
+  primitive does that job, the same as it already does for every other
+  mount's content — not a new concept invented for this one.
+- Implemented over a private shallow mirror on the host, gated by a
+  narrowly-scoped `host.git-read` capability and a sanitized environment
+  — no repository code executes, no operator checkout is reused, no agent
+  gets arbitrary `git` or host exec.
+- **Recovery must not silently refetch.** If the mount's own record says a
+  view is pinned at commit `abc123`, a restart must verify the local
+  mirror actually still has that object present before serving reads
+  against it — not transparently re-fetch (possibly a different `abc123`
+  if the remote ref moved and was force-pushed, or simply unavailable if
+  the mirror directory is gone) and pretend nothing changed. Missing or
+  unverified backing means the mount is explicitly unavailable/failed
+  (reusing the existing `MountState` shape), never a silent re-pin. Same
+  durable-content-before-reference discipline M6.6 already names for
+  content-addressed blob payloads, applied to a content-addressed git
+  object instead.
+
+**Adjacent, explicitly separate scope: on-demand Actions run/log
+inspection.** A follow-up question a repo mount alone doesn't answer:
+inspecting a specific GitHub Actions run/job's log, read-only, on demand
+— not eagerly fetched for every commit (M6.65 Phase 2's already-named
+cost problem), and not the same fetch mechanism as the repo mirror (logs
+come from GitHub's API via a short-lived redirect, not from `git`). M6.8's
+`host.investigate-repository` already fetches one job's log as host-side
+orchestration for its own one-shot case pipeline; this is the more general
+version — a read-only, on-demand log-fetch capability an agent or human
+could reach for directly, not bundled inside the case pipeline. Not
+designed further here; scope it for real once a task actually needs it,
+matching M6.8's own "don't design past what's needed" discipline.
+
+**Validated live against a real 14,562-file repository, not assumed**
+(`/Users/joe/Work/veterans-affairs/vets-api`'s local checkout, read-only —
+per M6.8's own note, this working copy has its own branch/WIP state and is
+never written to or reused as a working directory):
+- `git ls-tree -r --name-only HEAD` (the full path listing, no blob
+  content): ~163ms.
+- `git show HEAD:<path>` (one file's on-demand content): ~15ms.
+- `git grep` across the whole repo, a broad pattern (4,825 matches): ~0.25s.
+  No index or cache needed for interactive use at this scale.
+- The repo's real host is an internal enterprise GitHub (`va.ghe.com`),
+  not public github.com — a fresh clone needs the same token/auth the
+  `github` plugin already holds, not a new credential.
+
+**Deliberately not included here:** write-back to the real repo (out of
+scope — this is a read primitive); general host `exec` (that's M9's
+territory); multi-repo federation (a real next step once this exists for
+one repo, not designed here); a generic backing/interception mechanism
+other plugins could also register against (explicitly narrower than that
+— git-specific, not a new extension point).
+
+**Not gated on M6.6.** M6.6 (runtime-overlay/registry consolidation) is a
+prerequisite for *general* dynamic/runtime composition across many
+concurrent writers and plugin/persona combinations — this bounded
+experiment, one plugin, two commands special-cased, doesn't touch that
+surface and shouldn't wait on it.
+
+**Not fake-validated by the derived-workspace probe.** The task-lab
+composition idea (`/labs/<task>/{context,notes,evidence,world}/`,
+composing GitHub/Slack/prior-run context into a task-scoped workspace) is
+worth doing on its own and does not need repository content to start.
+Pull real repo content into a lab only once a specific real task
+demonstrably needs source beyond a PR diff — not as a way to claim this
+entry validated itself.
+
+**Sequencing — design gate, then a manual prototype, not a framework:**
+prototype the mirror-maintenance driver and the `cat`/`grep` special-casing
+standalone against a real mirror first, not wired into every mount's
+command dispatch. Validate on two real tasks — code-context PR review and
+CI-failure explanation — before deciding whether this becomes a new `git`
+plugin, a `GitHubPlugin` extension, or something else; that's a real open
+question, not decided by this entry.
+
+**Exit evidence:** `ls`/`tree`/`find`/`cat`/`grep` all work against a real,
+revision-pinned mirror using ordinary syntax, no read ever causes a VFS
+mutation or an uncontrolled network call, and two different real tasks use
+it productively — not just M6.8's CI case again.
+
+### M6.10 — Operator polish: introspection, docs, and terminal legibility *(design gate)*
+
+Named "tie our shoes" by the operator, deliberately before any further
+capability work: the surface area has grown faster than its own legibility
+has. Five concrete, separately-scoped pieces, not one big refactor:
+
+1. **`man`/richer `help`.** Today's `help` is a flat synopsis list
+   (`WorkspaceLiteracyArgs.ts`'s `helpText()`). A `man COMMAND` giving a
+   real description, examples, and related commands — the same
+   discoverability problem `yafs.start_here` solved for mounts, applied to
+   commands themselves.
+2. **A `/proc`-like view of what's actually running.** There is currently
+   no way to ask "what scheduled tasks/background drivers are active right
+   now" from inside the VFS itself — only `mounts`/`plugins status` (mount
+   state, not runtime activity) and grepping `daemon.log`. Not full POSIX
+   process management (explicitly out of scope, matches this project's
+   own M9 "Runtime bridge" caution about host authority) — a bounded,
+   read-only reflection of active scheduler timers, background drivers,
+   and in-flight agent runs, in the Plan 9 spirit named for it: a
+   namespace *is* the interface, not a separate status command per
+   subsystem.
+3. **Migrate finished milestones out of `FEATURE-ROADMAP.md` into
+   `ADR.md`.** Named directly: a lot of this document now reads as
+   "talking about" a decision (the back-and-forth, the rejected designs,
+   the reviewer exchanges) rather than "documenting" the decision itself.
+   That history is valuable and shouldn't be deleted, but a milestone
+   that's actually *done* (M6.4, M6.5, `yafs.start_here`) belongs as a
+   settled architectural record in ADR.md, with FEATURE-ROADMAP.md kept for
+   what's still in motion. M6.9 remains here until its published validation
+   gates are satisfied.
+4. **Terminal output cleanup.** Now that `src/Logging.ts` exists and the
+   real diagnostic-logging migration is done (this session), revisit
+   Yash's own interactive output (`src/yash/output.ts` and friends,
+   deliberately exempted from that migration as direct CLI UI, not
+   logging) for clarity/consistency on its own terms.
+5. **A second command-coverage pass.** Audit for missing baseline
+   commands/flags once the above make gaps easier to see rather than
+   guessing at what's missing now.
+
+**Deliberately not decided here:** the exact `/proc` path/shape, whether
+`man` pages live as data files or generated from command metadata, and
+which specific milestones move to ADR.md first. This entry exists so the
+work is named and scoped, not left as an unscheduled aside.
+
+## Strategic capability probes — deliberately not a delivery queue
+
+The appliance should not become a thin GitHub/Slack wrapper simply because
+those are the first providers. These are bounded probes for the larger thesis:
+can people and agents operate across a coherent, legible world more effectively
+than across disconnected API-specific tools? They are not promises to emulate
+whole products. Select one only when a concrete task supplies its acceptance
+evidence, and do not start a second probe merely because its noun sounds like
+infrastructure.
+
+| Probe | Smallest honest slice | What it would prove before expansion |
+| --- | --- | --- |
+| Incident source | A revisioned, read-only collection of grouped current errors under `/world/incidents`, with source, time window, count, and sample evidence. | An agent can correlate a real prevalent error with a revision-pinned repository view and produce a useful, cited diagnosis. |
+| Faceted task lab | A scoped task namespace combining selected `/world` roots with private notes/runs. | The same path and authority model works for Yash, MCP, and a future UI; unions compose content without being mistaken for access control. |
+| Service facade | One real consumer uses a deliberately documented cache or object-store protocol subset. | Yafs can be a useful local appliance behind an existing client without pretending to provide Redis/S3 semantics it has not implemented. |
+| Controller resource | One low-authority desired/observed resource, such as a managed local worker. | Path-addressed desired state plus an explicit controller is clearer and safer than a hidden host-process side effect. |
+| Commons procedure | One human-reviewed, tested procedure distilled from repeated successful work. | Reuse improves a later task enough to justify a local function bundle; federation remains out of scope. |
+| Operator UI | A local viewer over the existing operation/action descriptors. | Legibility improves an operator's ability to inspect mounts, task views, runs, outbox, and scheduler state without creating a second control plane. |
+
+The incident + repository pairing is particularly promising: it tests a real
+cross-provider question ("what code/revision plausibly explains this current
+failure?") rather than merely adding another data browser. Remediation must
+remain a separate typed, reviewed action: propose a patch/task/PR through a
+bounded executor or an external coding agent; never grant an incident reader
+ambient repository-write or host-execution authority.
 
 ## M5 design gate
 

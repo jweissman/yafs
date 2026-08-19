@@ -4,9 +4,12 @@ import {
   WorkspaceOperation,
 } from "../operations/WorkspaceOperation";
 import { normalize } from "../core/PathResolver";
+import { log } from "../Logging";
 import { McpClient } from "./types";
 import { scopedStartHere } from "./ScopedStartHere";
 import { pathsOf, Scopable } from "./ScopedMcpPaths";
+
+const scopedLog = log.getSubLogger({ name: "agent.tool.scope" });
 
 export interface ScopedMcpConfig {
   roots: string[];
@@ -74,14 +77,10 @@ export class ScopedMcpClient implements McpClient {
   }
 
   private logged(message: string): Error {
-    console.error(`agent tool call rejected: ${message}`);
+    scopedLog.error({ reason: message }, "agent tool call rejected");
     return new Error(message);
   }
 
-  // Compares normalized segment arrays, not raw prefix strings — a raw
-  // string comparison would let a path containing ".." (e.g.
-  // "/root/pr-482/../secrets") slip past the check on the unresolved
-  // text while resolving outside the root once the VFS normalizes it.
   private underRoot(path: string): boolean {
     const segments = normalize(path);
     return this.config.roots.some((root) => startsWith(segments, root));

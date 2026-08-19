@@ -1,8 +1,5 @@
 import { PreparedMountRecord } from "../../mounts/types";
 
-// LM Studio threads a tool-enabled conversation server-side via
-// previous_response_id, so unlike AgentChatHistory this durable record
-// holds one opaque LM Studio response id, not the turns themselves.
 export function threadPath(personaName: string, chatId: string): string {
   return `${personaName}/chats/${chatId}/lmstudio-response-id.txt`;
 }

@@ -10,7 +10,7 @@ import { DispatchCtl } from "./SlackInboundRouting";
 import {
   InboundConfig,
   inboundConfig,
-  log,
+  logPollFailure,
   logBaseline,
   logPoll,
 } from "./SlackInboundPollerSupport";
@@ -47,7 +47,7 @@ export class SlackInboundPoller {
   private async tick() {
     for (const record of this.mounts.mounts()) {
       await this.tickRecord(record).catch((error: unknown) => {
-        log(record.id, error);
+        logPollFailure(record.id, error);
       });
     }
   }

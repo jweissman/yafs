@@ -48,12 +48,6 @@ export class AgentChatStore {
     }
   }
 
-  // Accept-time appends run inside the same awaited chain as the ctl
-  // response itself (see AgentDirectoryDriver.acceptRun); routing them
-  // through `enqueue` would deadlock, since `enqueue` shares the connection's
-  // single command-dispatch queue that this call is already running inside.
-  // The outer per-line dispatch already serializes accept-time appends
-  // against each other, so a direct write is safe here.
   appendChatTurnNow(ref: PersonaRef, chatId: string, message: ChatMessage) {
     return this.applyChatTurn(ref, chatId, message);
   }

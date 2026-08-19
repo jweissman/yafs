@@ -1,14 +1,38 @@
 import type Yafs from "./index";
-import { AbsolutePath } from "./core/AbsolutePath";
+import { CommandAccess } from "./commands/BuiltinCommand";
 import { Command } from "./types/Command";
+import { Program } from "./types/Program";
 import { Word } from "./lang/Word";
 import { yafsContext } from "./YafsContext";
 import { evaluateWord, evaluateWordAsync } from "./lang/evaluate";
 import { variable } from "./YafsValues";
-import { assertReadOnlyCommand } from "./commands/ReadOnlySource";
+import { runProgram as runScript } from "./YafsScriptRuntime";
+import {
+  RuntimeSnapshot,
+  substitute,
+  substituteAsync,
+} from "./YafsSubstitution";
 
 export class YafsCommandRuntime {
+  private scriptBindings?: Record<string, string>;
+
   constructor(private readonly yafs: Yafs) {}
+
+  runProgram(
+    program: Program,
+    bindings: Record<string, string>,
+    allow?: CommandAccess[],
+  ) {
+    return runScript(this, program, bindings, allow);
+  }
+
+  bindScript(
+    bindings?: Record<string, string>,
+  ): Record<string, string> | undefined {
+    const previous = this.scriptBindings;
+    this.scriptBindings = bindings;
+    return previous;
+  }
 
   handle(command: Command): string {
     const output = this.syncOutput(command);
@@ -39,20 +63,24 @@ export class YafsCommandRuntime {
 
   private arguments(command: Command) {
     const evaluators = {
-      variable: (name: string) => variable(this.yafs, name),
-      substitute: (nested: Command) => this.substitute(nested),
+      variable: (name: string) => this.resolveVariable(name),
+      substitute: (nested: Command) => substitute(this, nested),
     };
     return command.args.map((word) => evaluateWord(word, evaluators));
   }
 
   private argumentsAsync(command: Command) {
     const evaluators = {
-      variable: (name: string) => variable(this.yafs, name),
-      substitute: (nested: Command) => this.substituteAsync(nested),
+      variable: (name: string) => this.resolveVariable(name),
+      substitute: (nested: Command) => substituteAsync(this, nested),
     };
     return Promise.all(
       command.args.map((word: Word) => evaluateWordAsync(word, evaluators)),
     );
+  }
+
+  private resolveVariable(name: string): string {
+    return this.scriptBindings?.[name] ?? variable(this.yafs, name);
   }
 
   private redirect(target: string, output: string): string {
@@ -64,37 +92,14 @@ export class YafsCommandRuntime {
     return "";
   }
 
-  private substitute(command: Command): string {
-    assertReadOnlyCommand(command);
-    const state = this.state();
-    try {
-      return this.handle(command).replace(/\n+$/, "");
-    } finally {
-      this.restore(state);
-    }
-  }
-
-  private async substituteAsync(command: Command): Promise<string> {
-    assertReadOnlyCommand(command);
-    const state = this.state();
-    try {
-      return (await this.handleAsync(command)).replace(/\n+$/, "");
-    } finally {
-      this.restore(state);
-    }
-  }
-
-  private state() {
+  snapshot(): RuntimeSnapshot {
     return {
       cwd: this.yafs.shell.pwd,
       operationState: this.yafs.operationQueue.count(),
     };
   }
 
-  private restore(state: {
-    cwd: AbsolutePath;
-    operationState: { operations: number; effects: number };
-  }) {
+  restore(state: RuntimeSnapshot) {
     this.yafs.shell.enter(state.cwd);
     this.yafs.operationQueue.restore(state.operationState);
   }

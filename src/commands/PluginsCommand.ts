@@ -4,9 +4,7 @@ export class PluginsCommand {
   readonly name = "plugins";
   readonly synopsis =
     "plugins [describe [NAME]|status|plan|apply [--prune]|refresh ID]";
-  // apply/refresh mutate; access is per-command, not per-subcommand, so the
-  // whole command must stay non-'read' — matching how `mount` already
-  // treats `validate`.
+
   readonly access = "control";
 
   constructor() {}

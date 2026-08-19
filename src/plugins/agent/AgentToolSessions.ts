@@ -16,7 +16,6 @@ interface Session {
 export class AgentToolSessions {
   private readonly sessions = new Map<string, Session>();
 
-  // Bun instruments an implicit field-initializing constructor as uncovered.
   constructor() {}
 
   find(id: string | undefined): McpTransport | undefined {

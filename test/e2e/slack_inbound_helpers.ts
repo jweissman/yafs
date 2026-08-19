@@ -54,10 +54,6 @@ export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// The poller's first tick per mount only establishes a baseline cursor; it
-// never routes anything from that tick's fetch window. Tests that inject a
-// message right after `plugins apply` must wait past that first tick, or
-// their "new" message would be swept into the baseline and never routed.
 export function establishedBaseline() {
   return sleep(60);
 }

@@ -32,10 +32,6 @@ export interface PersonaTarget {
   personaName: string;
 }
 
-// agentPersonaPath already proves a mount containing this persona exists
-// (both pathReference and namedPersonaPath validate against mountFor/
-// personas before returning), so the second mountFor lookup here is
-// guaranteed to find the same record, not a fresh existence check.
 export function resolvePersonaTarget(
   mounts: MountManager,
   reference: string,

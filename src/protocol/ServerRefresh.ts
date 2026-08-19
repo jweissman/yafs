@@ -3,6 +3,9 @@ import { MountRefreshScheduler } from "../mounts/MountRefreshScheduler";
 import { MountManager } from "../mounts/MountManager";
 import { Wiring } from "../mounts/Plugin";
 import { PreparedMountRecord } from "../mounts/types";
+import { log } from "../Logging";
+
+const refreshLog = log.getSubLogger({ name: "server.refresh" });
 
 export interface ServerRefreshTiming {
   now?: () => number;
@@ -35,7 +38,7 @@ export class ServerRefresh {
 
   start() {
     this.timer = setInterval(
-      () => void this.due().catch(console.error),
+      () => void this.due().catch(logTickFailure),
       this.intervalMs,
     );
   }
@@ -55,7 +58,10 @@ export class ServerRefresh {
     try {
       await this.refreshOnce(record);
     } catch (error) {
-      console.error(`Scheduled refresh failed for mount ${record.id}:`, error);
+      refreshLog.error(
+        { mountId: record.id, error: errorMessage(error) },
+        "Scheduled refresh failed",
+      );
     }
   }
   private async refreshOnce(record: PreparedMountRecord) {
@@ -65,4 +71,12 @@ export class ServerRefresh {
     ]);
     this.mounts.refresh(prepared, "system");
   }
+}
+
+function logTickFailure(error: unknown) {
+  refreshLog.error({ error: errorMessage(error) }, "Refresh tick failed");
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

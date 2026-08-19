@@ -12,11 +12,6 @@ import {
 import { yafsKey } from "../../src/plugins/agent/LmStudioMcpJson";
 import { parseJson } from "../json";
 
-// AgentTools.test.ts only covers a persona that has `tools:` from its very
-// first activation. This covers the case the user actually hit live: a
-// persona already active WITHOUT tools, then `tools:` added to the manifest
-// and `plugins apply` run again — does the refresh actually pick it up and
-// start attaching the plugin integration?
 test("adding tools: to an already-active persona and re-applying enables MCP on the next request", async () => {
   const calls: LmStudioTurnRequest[] = [];
   const client = fakeToolClient(calls);
@@ -30,9 +25,6 @@ test("adding tools: to an already-active persona and re-applying enables MCP on 
     { toolClientFor: () => client },
   );
 
-  // YafsServer.start() already reconciles the config at boot (server.ts's
-  // `await s.reconcile()`), so the mount is already active by the time a
-  // client connects — this first apply is expected to report no changes.
   const applyWithoutTools = parseJson(await yash.exec("plugins apply"));
   expect(applyWithoutTools).toEqual([]);
 

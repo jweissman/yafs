@@ -2,10 +2,6 @@ import { AbsolutePath } from "../core/AbsolutePath";
 import { CommandContext } from "../commands/CommandContext";
 import { safeList, child } from "./WorkspaceGlobSupport";
 
-// "**" matches zero-or-more segments: bounded so a broad "**" can't walk
-// an unbounded tree -- matches the same bounded-not-unbounded principle
-// as WorkspaceWalker elsewhere in this operation, rather than a hard
-// error on a pathologically broad glob.
 const DOUBLE_STAR_LIMIT = 2000;
 
 export function doubleStarMatches(

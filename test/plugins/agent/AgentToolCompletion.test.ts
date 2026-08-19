@@ -2,11 +2,6 @@ import { expect, test } from "bun:test";
 
 import { systemPromptFor } from "../../../src/plugins/agent/AgentToolCompletion";
 
-// Regression test for a real live failure: a tool-enabled persona asked to
-// triage a PR queue it had real read/list access to replied "I haven't
-// pulled the list of open PRs yet... give me the PR URLs" instead of just
-// looking — the model had tools but no idea what path to point them at.
-// `tools.roots` was always known to yafs; it just never reached the model.
 test("systemPromptFor appends the persona's tool roots as a starting-point hint", () => {
   const call = callWith({
     prompt: "You are a terse reviewer.",

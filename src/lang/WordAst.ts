@@ -4,8 +4,6 @@ import { Expression } from "../types/Expression";
 import { Word } from "./Word";
 
 export const wordAst = {
-  // Ohm calls each action positionally, one parameter per grammar term —
-  // arity is fixed by the ShellEscape rule, not refactorable code shape.
   // eslint-disable-next-line max-params
   ShellEscape(
     _dollar: AstNode,
@@ -48,7 +46,7 @@ export const wordAst = {
   path_root(_slash: AstNode) {
     return { kind: "literal", value: "/" };
   },
-  // Same as ShellEscape above: arity is fixed by the `path -- segments` rule.
+
   // eslint-disable-next-line max-params
   path_segments(
     this: AstNode,

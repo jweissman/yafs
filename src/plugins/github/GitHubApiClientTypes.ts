@@ -5,14 +5,7 @@ export type Fetch = (
 export interface Search {
   items: { number: number; title: string; updated_at: string }[];
 }
-// All of these come back on the same per-PR GET already made for
-// head.sha -- no extra request needed to capture them, just fields that
-// were being read and discarded. mergeable_state in particular is the
-// cheapest available proxy for "is this actually ready" (blocked/dirty/
-// unstable/clean) short of the real per-check CI log, which needs a
-// genuinely different, on-demand fetch architecture (see
-// FEATURE-ROADMAP.md's "Later: on-demand, single-resource provider
-// fetch") -- this doesn't replace that, it's what's free in the meantime.
+
 export interface PullFields {
   head: { sha: string };
   user: { login: string } | null;
@@ -33,6 +26,21 @@ export interface PullDetails extends PullFields {
   title: string;
   updated_at: string;
 }
+export interface CommitListItem {
+  sha: string;
+  commit: { author: { name: string; date: string } | null; message: string };
+  author: { login: string } | null;
+  html_url: string;
+}
+export interface CheckRun {
+  status: string;
+  conclusion: string | null;
+}
+export interface CheckRunsResponse {
+  total_count: number;
+  check_runs: CheckRun[];
+}
+export type CiStatus = "success" | "failure" | "pending" | "none";
 export interface PullSummary {
   number: number;
   title: string;

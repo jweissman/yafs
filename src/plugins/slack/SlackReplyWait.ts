@@ -1,5 +1,8 @@
 import { MountManager } from "../../mounts/MountManager";
+import { log } from "../../Logging";
 import { PersonaTarget } from "../agent/AgentPersonaLookup";
+
+const replyLog = log.getSubLogger({ name: "slack.reply" });
 
 export interface RunLookup {
   mounts: MountManager;
@@ -79,11 +82,6 @@ function entry(lookup: RunLookup, path: string) {
   return found?.[1];
 }
 
-// unref: a pending reply-wait is a detached background watcher (see
-// SlackInboundRouting's `void reply(...)`), not something daemon shutdown
-// should wait on. Without this, a ref'd timer keeps the process alive for
-// up to the reply timeout, so `yafsd stop` clears its state file (and
-// reports success) while the OS process is still running underneath it.
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms).unref());
 }
@@ -91,10 +89,11 @@ function sleep(ms: number) {
 function logAbandoned(lookup: RunLookup, timeoutMs: number) {
   const { personaName } = lookup.target;
   const path = `${personaName}/runs/${lookup.runId}/response.md`;
-  console.error(
-    `Slack reply abandoned: ${personaName} run ${lookup.runId} did not ` +
-      `reach a terminal state within ${timeoutMs}ms. If it finishes later, ` +
-      `it will not auto-post — check \`cat ${path}\` and post it yourself ` +
-      "with `slack send` if it's there.",
-  );
+  const fields = { personaName, runId: lookup.runId, timeoutMs, path };
+  replyLog.error(fields, ABANDONED_MESSAGE);
 }
+
+const ABANDONED_MESSAGE =
+  "Slack reply abandoned: run did not reach a terminal state in time; " +
+  "if it finishes later it will not auto-post — check the response " +
+  "path and post it yourself with `slack send` if it's there";

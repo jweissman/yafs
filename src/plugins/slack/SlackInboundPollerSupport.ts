@@ -1,8 +1,11 @@
 import { PreparedMountRecord, SlackConfig } from "../../mounts/types";
+import { log as appLog } from "../../Logging";
 import { RouteOptions, routeMessage } from "./SlackInboundRouting";
 import { SlackMessage } from "./SlackApiClient";
 
 export type InboundConfig = SlackConfig & { persona: string };
+
+const slackLog = appLog.getSubLogger({ name: "slack.inbound" });
 
 export async function routeAll(
   options: RouteOptions,
@@ -28,14 +31,17 @@ export function channelChatId(mountId: string, channel: string): string {
   return `slack-${mountId}-${channel}`;
 }
 
-export function log(mountId: string, error: unknown) {
-  console.error(`Slack inbound poll failed for mount ${mountId}:`, error);
+export function logPollFailure(mountId: string, error: unknown) {
+  slackLog.error(
+    { mountId, error: errorMessage(error) },
+    "Slack inbound poll failed",
+  );
 }
 
 export function logBaseline(mountId: string, fetchedCount: number) {
-  console.log(
-    `Slack poll: mount ${mountId} established baseline (${fetchedCount} ` +
-      "message(s) in history, none routed retroactively)",
+  slackLog.info(
+    { mountId, fetchedCount },
+    "Slack poll established baseline, none routed retroactively",
   );
 }
 
@@ -44,8 +50,9 @@ export function logPoll(
   fetchedCount: number,
   freshCount: number,
 ) {
-  console.log(
-    `Slack poll: mount ${mountId} fetched ${fetchedCount}, ` +
-      `routing ${freshCount}`,
-  );
+  slackLog.info({ mountId, fetchedCount, freshCount }, "Slack poll");
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
